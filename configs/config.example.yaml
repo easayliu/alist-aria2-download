@@ -1,0 +1,15 @@
+server:
+  port: "8080"
+  mode: "debug"
+
+aria2:
+  rpc_url: "http://localhost:6800/jsonrpc"
+  token: ""
+  download_dir: "/downloads"
+
+alist:
+  base_url: "http://localhost:5244"  # Alist服务器地址
+  username: "your_username"          # Alist用户名
+  password: "your_password"          # Alist密码
+  token: ""                          # 登录后获取的token（自动获取）
+  default_path: "/"                  # 默认访问的目录路径，例如: "/movies" 或 "/downloads"
