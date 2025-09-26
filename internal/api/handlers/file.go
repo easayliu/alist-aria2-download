@@ -28,20 +28,20 @@ type GetYesterdayFilesRequest struct {
 // @Router /files/yesterday [get]
 func GetYesterdayFiles(c *gin.Context) {
 	var req GetYesterdayFilesRequest
-	
+
 	// 绑定查询参数
 	if err := c.ShouldBindQuery(&req); err != nil {
 		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
 		return
 	}
-	
+
 	// 加载配置
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to load config")
 		return
 	}
-	
+
 	// 设置默认路径
 	if req.Path == "" {
 		req.Path = cfg.Alist.DefaultPath
@@ -49,29 +49,29 @@ func GetYesterdayFiles(c *gin.Context) {
 			req.Path = "/"
 		}
 	}
-	
+
 	// 创建Alist客户端
 	alistClient := alist.NewClient(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password)
-	
+
 	// 创建文件服务
 	fileService := services.NewFileService(alistClient)
-	
+
 	// 获取昨天的文件
 	yesterdayFiles, err := fileService.GetYesterdayFiles(req.Path)
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get yesterday files: "+err.Error())
 		return
 	}
-	
+
 	// 统计信息
 	var totalSize int64
 	var tvCount, movieCount, otherCount int
 	internalURLs := make([]string, 0, len(yesterdayFiles))
-	
+
 	for _, file := range yesterdayFiles {
 		totalSize += file.Size
 		internalURLs = append(internalURLs, file.InternalURL)
-		
+
 		// 统计媒体类型
 		switch file.MediaType {
 		case "tv":
@@ -82,7 +82,7 @@ func GetYesterdayFiles(c *gin.Context) {
 			otherCount++
 		}
 	}
-	
+
 	// 返回成功响应
 	utils.Success(c, gin.H{
 		"files":         yesterdayFiles,
@@ -119,33 +119,33 @@ type DownloadPathRequest struct {
 // @Router /files/download [post]
 func DownloadFilesFromPath(c *gin.Context) {
 	var req DownloadPathRequest
-	
+
 	// 绑定请求参数
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
 		return
 	}
-	
+
 	// 加载配置
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to load config")
 		return
 	}
-	
+
 	// 创建Alist客户端
 	alistClient := alist.NewClient(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password)
-	
+
 	// 创建文件服务
 	fileService := services.NewFileService(alistClient)
-	
+
 	// 获取指定路径的文件
 	files, err := fileService.GetFilesFromPath(req.Path, req.Recursive)
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get files: "+err.Error())
 		return
 	}
-	
+
 	if len(files) == 0 {
 		utils.Success(c, gin.H{
 			"message": "No files found in the specified path",
@@ -154,7 +154,7 @@ func DownloadFilesFromPath(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	// 统计媒体类型
 	var tvCount, movieCount, otherCount int
 	for _, file := range files {
@@ -167,7 +167,7 @@ func DownloadFilesFromPath(c *gin.Context) {
 			otherCount++
 		}
 	}
-	
+
 	// 如果是预览模式，只返回路径信息，不进行下载
 	if req.Preview {
 		previewResults := make([]map[string]interface{}, 0, len(files))
@@ -182,7 +182,7 @@ func DownloadFilesFromPath(c *gin.Context) {
 				"internal_url":  file.InternalURL,
 			})
 		}
-		
+
 		utils.Success(c, gin.H{
 			"message":     "Preview mode - no downloads initiated",
 			"mode":        "preview",
@@ -198,46 +198,46 @@ func DownloadFilesFromPath(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	// 创建Aria2客户端
 	aria2Client := aria2.NewClient(cfg.Aria2.RpcURL, cfg.Aria2.Token)
-	
+
 	// 批量添加下载任务
 	var successCount, failCount int
 	downloadResults := make([]map[string]interface{}, 0, len(files))
-	
+
 	for _, file := range files {
 		// 设置下载选项
 		options := map[string]interface{}{
 			"dir": file.DownloadPath,
 			"out": file.Name,
 		}
-		
+
 		// 添加下载任务（使用内部URL）
 		gid, err := aria2Client.AddURI(file.InternalURL, options)
 		if err != nil {
 			failCount++
 			downloadResults = append(downloadResults, map[string]interface{}{
-				"file":       file.Name,
-				"path":       file.Path,
-				"media_type": file.MediaType,
+				"file":          file.Name,
+				"path":          file.Path,
+				"media_type":    file.MediaType,
 				"download_path": file.DownloadPath,
-				"status":     "failed",
-				"error":      err.Error(),
+				"status":        "failed",
+				"error":         err.Error(),
 			})
 		} else {
 			successCount++
 			downloadResults = append(downloadResults, map[string]interface{}{
-				"file":       file.Name,
-				"path":       file.Path,
-				"media_type": file.MediaType,
+				"file":          file.Name,
+				"path":          file.Path,
+				"media_type":    file.MediaType,
 				"download_path": file.DownloadPath,
-				"status":     "success",
-				"gid":        gid,
+				"status":        "success",
+				"gid":           gid,
 			})
 		}
 	}
-	
+
 	// 返回结果
 	utils.Success(c, gin.H{
 		"message":       "Download tasks created",
@@ -262,6 +262,112 @@ type DownloadYesterdayFilesRequest struct {
 	Preview bool   `form:"preview" json:"preview"` // 预览模式
 }
 
+// FileListRequest 列出文件请求参数
+type FileListRequest struct {
+	Path      string `json:"path"` // 路径，为空时使用默认路径
+	Page      int    `json:"page"`
+	PerPage   int    `json:"per_page"`
+	VideoOnly bool   `json:"video_only"` // 是否只显示视频文件
+}
+
+// ListFilesHandler 列出指定路径的文件
+// @Summary 列出指定路径的文件
+// @Description 获取指定路径下的文件列表，支持分页和视频文件过滤
+// @Tags 文件管理
+// @Accept json
+// @Produce json
+// @Param request body FileListRequest true "列出文件请求"
+// @Success 200 {object} map[string]interface{} "文件列表"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /files/list [post]
+func ListFilesHandler(c *gin.Context) {
+	var req FileListRequest
+
+	// 绑定请求参数
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
+		return
+	}
+
+	// 加载配置
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to load config")
+		return
+	}
+
+	// 设置默认值
+	if req.Path == "" {
+		req.Path = cfg.Alist.DefaultPath
+		if req.Path == "" {
+			req.Path = "/"
+		}
+	}
+	if req.Page == 0 {
+		req.Page = 1
+	}
+	if req.PerPage == 0 {
+		req.PerPage = 100
+	}
+
+	// 创建Alist客户端
+	alistClient := alist.NewClient(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password)
+
+	// 获取文件列表
+	fileList, err := alistClient.ListFiles(req.Path, req.Page, req.PerPage)
+	if err != nil {
+		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to list files: "+err.Error())
+		return
+	}
+
+	// 如果需要过滤视频文件
+	if req.VideoOnly {
+		fileService := services.NewFileService(alistClient)
+		filteredContent := make([]alist.FileItem, 0)
+
+		for _, file := range fileList.Data.Content {
+			// 如果是目录或者是视频文件，则包含
+			if file.IsDir || fileService.IsVideoFile(file.Name) {
+				filteredContent = append(filteredContent, file)
+			}
+		}
+
+		fileList.Data.Content = filteredContent
+	}
+
+	// 统计信息
+	videoCount := 0
+	dirCount := 0
+	otherCount := 0
+
+	fileService := services.NewFileService(alistClient)
+	for _, file := range fileList.Data.Content {
+		if file.IsDir {
+			dirCount++
+		} else if fileService.IsVideoFile(file.Name) {
+			videoCount++
+		} else {
+			otherCount++
+		}
+	}
+
+	// 返回结果
+	utils.Success(c, gin.H{
+		"path":       req.Path,
+		"page":       req.Page,
+		"per_page":   req.PerPage,
+		"total":      len(fileList.Data.Content),
+		"video_only": req.VideoOnly,
+		"files":      fileList.Data.Content,
+		"stats": gin.H{
+			"videos":      videoCount,
+			"directories": dirCount,
+			"others":      otherCount,
+		},
+	})
+}
+
 // DownloadYesterdayFiles 批量下载昨天的文件
 // @Summary 批量下载昨天文件
 // @Description 将昨天修改的文件批量添加到Aria2下载队列，使用内部URL，支持预览模式
@@ -275,20 +381,20 @@ type DownloadYesterdayFilesRequest struct {
 // @Router /files/yesterday/download [post]
 func DownloadYesterdayFiles(c *gin.Context) {
 	var req DownloadYesterdayFilesRequest
-	
+
 	// 绑定查询参数
 	if err := c.ShouldBindQuery(&req); err != nil {
 		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
 		return
 	}
-	
+
 	// 加载配置
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to load config")
 		return
 	}
-	
+
 	// 设置默认路径
 	if req.Path == "" {
 		req.Path = cfg.Alist.DefaultPath
@@ -296,20 +402,20 @@ func DownloadYesterdayFiles(c *gin.Context) {
 			req.Path = "/"
 		}
 	}
-	
+
 	// 创建Alist客户端
 	alistClient := alist.NewClient(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password)
-	
+
 	// 创建文件服务
 	fileService := services.NewFileService(alistClient)
-	
+
 	// 获取昨天的文件
 	yesterdayFiles, err := fileService.GetYesterdayFiles(req.Path)
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get yesterday files: "+err.Error())
 		return
 	}
-	
+
 	if len(yesterdayFiles) == 0 {
 		utils.Success(c, gin.H{
 			"message": "No files found for yesterday",
@@ -317,7 +423,7 @@ func DownloadYesterdayFiles(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	// 统计媒体类型
 	var tvCount, movieCount, otherCount int
 	for _, file := range yesterdayFiles {
@@ -330,7 +436,7 @@ func DownloadYesterdayFiles(c *gin.Context) {
 			otherCount++
 		}
 	}
-	
+
 	// 如果是预览模式，只返回路径信息
 	if req.Preview {
 		previewResults := make([]map[string]interface{}, 0, len(yesterdayFiles))
@@ -346,7 +452,7 @@ func DownloadYesterdayFiles(c *gin.Context) {
 				"modified":      file.Modified,
 			})
 		}
-		
+
 		utils.Success(c, gin.H{
 			"message":     "Preview mode - no downloads initiated",
 			"mode":        "preview",
@@ -362,21 +468,21 @@ func DownloadYesterdayFiles(c *gin.Context) {
 		})
 		return
 	}
-	
+
 	// 创建Aria2客户端
 	aria2Client := aria2.NewClient(cfg.Aria2.RpcURL, cfg.Aria2.Token)
-	
+
 	// 批量添加下载任务
 	var successCount, failCount int
 	downloadResults := make([]map[string]interface{}, 0, len(yesterdayFiles))
-	
+
 	for _, file := range yesterdayFiles {
 		// 设置下载选项，使用文件服务判断的下载路径
 		options := map[string]interface{}{
 			"dir": file.DownloadPath,
 			"out": file.Name,
 		}
-		
+
 		// 添加下载任务（使用内部URL）
 		gid, err := aria2Client.AddURI(file.InternalURL, options)
 		if err != nil {
@@ -400,7 +506,7 @@ func DownloadYesterdayFiles(c *gin.Context) {
 			})
 		}
 	}
-	
+
 	// 返回结果
 	utils.Success(c, gin.H{
 		"message":       "Batch download tasks created",

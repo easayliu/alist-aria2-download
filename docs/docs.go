@@ -435,6 +435,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/files/list": {
+            "post": {
+                "description": "获取指定路径下的文件列表，支持分页和视频文件过滤",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "文件管理"
+                ],
+                "summary": "列出指定路径的文件",
+                "parameters": [
+                    {
+                        "description": "列出文件请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.FileListRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "文件列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/files/yesterday": {
             "get": {
                 "description": "批量获取昨天修改的文件信息，并将raw_url中的fcalist-public替换为fcalist-internal",
@@ -541,9 +590,452 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/tasks": {
+            "get": {
+                "description": "获取所有定时任务的列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "获取定时任务列表",
+                "responses": {
+                    "200": {
+                        "description": "任务列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "创建一个新的定时任务，按照cron表达式定期执行",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "创建定时任务",
+                "parameters": [
+                    {
+                        "description": "创建任务请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.CreateTaskRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务创建成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/{id}": {
+            "get": {
+                "description": "根据任务ID获取定时任务的详细信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "获取定时任务详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务详情",
+                        "schema": {
+                            "$ref": "#/definitions/entities.ScheduledTask"
+                        }
+                    },
+                    "404": {
+                        "description": "任务不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "更新指定ID的定时任务信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "更新定时任务",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "更新任务请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.UpdateTaskRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务更新成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "任务不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "删除指定ID的定时任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "删除定时任务",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务删除成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "任务不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/{id}/preview": {
+            "get": {
+                "description": "预览定时任务将要下载的文件，不实际执行下载",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "预览定时任务",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "预览结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "任务不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/{id}/run": {
+            "post": {
+                "description": "立即执行指定ID的定时任务，不等待下一个调度时间",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "立即执行定时任务",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "执行选项",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.RunTaskRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务已开始执行或预览结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "任务不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/{id}/toggle": {
+            "post": {
+                "description": "切换定时任务的启用状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "启用或禁用定时任务",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "是否启用",
+                        "name": "enabled",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "状态更新成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "任务不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "entities.ScheduledTask": {
+            "type": "object",
+            "properties": {
+                "auto_preview": {
+                    "description": "是否预览模式",
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "description": "创建时间",
+                    "type": "string"
+                },
+                "created_by": {
+                    "description": "创建者Telegram ID",
+                    "type": "integer"
+                },
+                "cron": {
+                    "description": "cron表达式",
+                    "type": "string"
+                },
+                "enabled": {
+                    "description": "是否启用",
+                    "type": "boolean"
+                },
+                "hours_ago": {
+                    "description": "下载多少小时内的文件",
+                    "type": "integer"
+                },
+                "id": {
+                    "description": "任务ID",
+                    "type": "string"
+                },
+                "last_run_at": {
+                    "description": "最后运行时间",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "任务名称",
+                    "type": "string"
+                },
+                "next_run_at": {
+                    "description": "下次运行时间",
+                    "type": "string"
+                },
+                "path": {
+                    "description": "下载路径",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "description": "更新时间",
+                    "type": "string"
+                },
+                "video_only": {
+                    "description": "是否只下载视频",
+                    "type": "boolean"
+                }
+            }
+        },
         "handlers.CreateDownloadRequest": {
             "type": "object",
             "required": [
@@ -565,6 +1057,50 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.CreateTaskRequest": {
+            "type": "object",
+            "required": [
+                "cron_expr",
+                "hours_ago",
+                "name",
+                "path"
+            ],
+            "properties": {
+                "auto_preview": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "created_by": {
+                    "type": "integer",
+                    "example": 63401853
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "example": "0 2 * * *"
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "hours_ago": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "example": 24
+                },
+                "name": {
+                    "type": "string",
+                    "example": "每日同步"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/data/来自：分享"
+                },
+                "video_only": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
         "handlers.DownloadPathRequest": {
             "type": "object",
             "required": [
@@ -580,6 +1116,68 @@ const docTemplate = `{
                 },
                 "recursive": {
                     "type": "boolean"
+                }
+            }
+        },
+        "handlers.FileListRequest": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer"
+                },
+                "path": {
+                    "description": "路径，为空时使用默认路径",
+                    "type": "string"
+                },
+                "per_page": {
+                    "type": "integer"
+                },
+                "video_only": {
+                    "description": "是否只显示视频文件",
+                    "type": "boolean"
+                }
+            }
+        },
+        "handlers.RunTaskRequest": {
+            "type": "object",
+            "properties": {
+                "preview": {
+                    "description": "是否仅预览，不实际下载",
+                    "type": "boolean",
+                    "example": false
+                }
+            }
+        },
+        "handlers.UpdateTaskRequest": {
+            "type": "object",
+            "properties": {
+                "auto_preview": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "example": "0 2 * * *"
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "hours_ago": {
+                    "type": "integer",
+                    "example": 24
+                },
+                "name": {
+                    "type": "string",
+                    "example": "每日同步"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/data/来自：分享"
+                },
+                "video_only": {
+                    "type": "boolean",
+                    "example": true
                 }
             }
         }

@@ -1,5 +1,47 @@
 basePath: /api/v1
 definitions:
+  entities.ScheduledTask:
+    properties:
+      auto_preview:
+        description: 是否预览模式
+        type: boolean
+      created_at:
+        description: 创建时间
+        type: string
+      created_by:
+        description: 创建者Telegram ID
+        type: integer
+      cron:
+        description: cron表达式
+        type: string
+      enabled:
+        description: 是否启用
+        type: boolean
+      hours_ago:
+        description: 下载多少小时内的文件
+        type: integer
+      id:
+        description: 任务ID
+        type: string
+      last_run_at:
+        description: 最后运行时间
+        type: string
+      name:
+        description: 任务名称
+        type: string
+      next_run_at:
+        description: 下次运行时间
+        type: string
+      path:
+        description: 下载路径
+        type: string
+      updated_at:
+        description: 更新时间
+        type: string
+      video_only:
+        description: 是否只下载视频
+        type: boolean
+    type: object
   handlers.CreateDownloadRequest:
     properties:
       dir:
@@ -14,6 +56,39 @@ definitions:
     required:
     - url
     type: object
+  handlers.CreateTaskRequest:
+    properties:
+      auto_preview:
+        example: false
+        type: boolean
+      created_by:
+        example: 63401853
+        type: integer
+      cron_expr:
+        example: 0 2 * * *
+        type: string
+      enabled:
+        example: true
+        type: boolean
+      hours_ago:
+        example: 24
+        minimum: 1
+        type: integer
+      name:
+        example: 每日同步
+        type: string
+      path:
+        example: /data/来自：分享
+        type: string
+      video_only:
+        example: true
+        type: boolean
+    required:
+    - cron_expr
+    - hours_ago
+    - name
+    - path
+    type: object
   handlers.DownloadPathRequest:
     properties:
       path:
@@ -25,6 +100,50 @@ definitions:
         type: boolean
     required:
     - path
+    type: object
+  handlers.FileListRequest:
+    properties:
+      page:
+        type: integer
+      path:
+        description: 路径，为空时使用默认路径
+        type: string
+      per_page:
+        type: integer
+      video_only:
+        description: 是否只显示视频文件
+        type: boolean
+    type: object
+  handlers.RunTaskRequest:
+    properties:
+      preview:
+        description: 是否仅预览，不实际下载
+        example: false
+        type: boolean
+    type: object
+  handlers.UpdateTaskRequest:
+    properties:
+      auto_preview:
+        example: false
+        type: boolean
+      cron_expr:
+        example: 0 2 * * *
+        type: string
+      enabled:
+        example: true
+        type: boolean
+      hours_ago:
+        example: 24
+        type: integer
+      name:
+        example: 每日同步
+        type: string
+      path:
+        example: /data/来自：分享
+        type: string
+      video_only:
+        example: true
+        type: boolean
     type: object
 host: localhost:8081
 info:
@@ -318,6 +437,39 @@ paths:
       summary: 从指定路径下载文件
       tags:
       - 文件管理
+  /files/list:
+    post:
+      consumes:
+      - application/json
+      description: 获取指定路径下的文件列表，支持分页和视频文件过滤
+      parameters:
+      - description: 列出文件请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.FileListRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 文件列表
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 列出指定路径的文件
+      tags:
+      - 文件管理
   /files/yesterday:
     get:
       consumes:
@@ -389,6 +541,269 @@ paths:
       summary: 健康检查
       tags:
       - 健康检查
+  /tasks:
+    get:
+      consumes:
+      - application/json
+      description: 获取所有定时任务的列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务列表
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取定时任务列表
+      tags:
+      - 定时任务
+    post:
+      consumes:
+      - application/json
+      description: 创建一个新的定时任务，按照cron表达式定期执行
+      parameters:
+      - description: 创建任务请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务创建成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 创建定时任务
+      tags:
+      - 定时任务
+  /tasks/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 删除指定ID的定时任务
+      parameters:
+      - description: 任务ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务删除成功
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 任务不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 删除定时任务
+      tags:
+      - 定时任务
+    get:
+      consumes:
+      - application/json
+      description: 根据任务ID获取定时任务的详细信息
+      parameters:
+      - description: 任务ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务详情
+          schema:
+            $ref: '#/definitions/entities.ScheduledTask'
+        "404":
+          description: 任务不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 获取定时任务详情
+      tags:
+      - 定时任务
+    put:
+      consumes:
+      - application/json
+      description: 更新指定ID的定时任务信息
+      parameters:
+      - description: 任务ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 更新任务请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务更新成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 任务不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 更新定时任务
+      tags:
+      - 定时任务
+  /tasks/{id}/preview:
+    get:
+      consumes:
+      - application/json
+      description: 预览定时任务将要下载的文件，不实际执行下载
+      parameters:
+      - description: 任务ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 预览结果
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 任务不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 预览定时任务
+      tags:
+      - 定时任务
+  /tasks/{id}/run:
+    post:
+      consumes:
+      - application/json
+      description: 立即执行指定ID的定时任务，不等待下一个调度时间
+      parameters:
+      - description: 任务ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 执行选项
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/handlers.RunTaskRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务已开始执行或预览结果
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 任务不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 立即执行定时任务
+      tags:
+      - 定时任务
+  /tasks/{id}/toggle:
+    post:
+      consumes:
+      - application/json
+      description: 切换定时任务的启用状态
+      parameters:
+      - description: 任务ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 是否启用
+        in: query
+        name: enabled
+        required: true
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 状态更新成功
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 任务不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 启用或禁用定时任务
+      tags:
+      - 定时任务
 schemes:
 - http
 - https

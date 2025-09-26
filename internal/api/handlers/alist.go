@@ -32,7 +32,7 @@ type ListFilesRequest struct {
 // @Router /alist/files [get]
 func ListFiles(c *gin.Context) {
 	var req ListFilesRequest
-	
+
 	// 绑定查询参数
 	if err := c.ShouldBindQuery(&req); err != nil {
 		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
@@ -63,7 +63,7 @@ func ListFiles(c *gin.Context) {
 
 	// 创建Alist客户端
 	client := alist.NewClient(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password)
-	
+
 	// 获取文件列表
 	fileList, err := client.ListFiles(req.Path, req.Page, req.PerPage)
 	if err != nil {
@@ -76,7 +76,7 @@ func ListFiles(c *gin.Context) {
 	for _, file := range fileList.Data.Content {
 		// 解析时间
 		modTime, _ := time.Parse(time.RFC3339, file.Modified)
-		
+
 		simplifiedFiles = append(simplifiedFiles, alist.SimplifiedFileItem{
 			Name:     file.Name,
 			Path:     file.Path,
@@ -116,7 +116,7 @@ type GetFileInfoRequest struct {
 // @Router /alist/file [get]
 func GetFileInfo(c *gin.Context) {
 	var req GetFileInfoRequest
-	
+
 	// 绑定查询参数
 	if err := c.ShouldBindQuery(&req); err != nil {
 		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
@@ -132,7 +132,7 @@ func GetFileInfo(c *gin.Context) {
 
 	// 创建Alist客户端
 	client := alist.NewClient(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password)
-	
+
 	// 获取文件信息
 	fileInfo, err := client.GetFileInfo(req.Path)
 	if err != nil {
@@ -146,17 +146,17 @@ func GetFileInfo(c *gin.Context) {
 
 	// 返回成功响应
 	utils.Success(c, gin.H{
-		"name":      fileInfo.Data.Name,
-		"path":      req.Path,
-		"size":      fileInfo.Data.Size,
-		"is_dir":    fileInfo.Data.IsDir,
-		"modified":  modTime,
-		"created":   createTime,
-		"sign":      fileInfo.Data.Sign,
-		"thumb":     fileInfo.Data.Thumb,
-		"type":      fileInfo.Data.Type,
-		"raw_url":   fileInfo.Data.RawURL,
-		"provider":  fileInfo.Data.Provider,
+		"name":     fileInfo.Data.Name,
+		"path":     req.Path,
+		"size":     fileInfo.Data.Size,
+		"is_dir":   fileInfo.Data.IsDir,
+		"modified": modTime,
+		"created":  createTime,
+		"sign":     fileInfo.Data.Sign,
+		"thumb":    fileInfo.Data.Thumb,
+		"type":     fileInfo.Data.Type,
+		"raw_url":  fileInfo.Data.RawURL,
+		"provider": fileInfo.Data.Provider,
 	})
 }
 
@@ -176,7 +176,7 @@ func AlistLogin(c *gin.Context) {
 	}
 
 	client := alist.NewClient(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password)
-	
+
 	if err := client.Login(); err != nil {
 		utils.ErrorWithStatus(c, http.StatusUnauthorized, 401, "Failed to login to Alist: "+err.Error())
 		return

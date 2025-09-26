@@ -31,47 +31,47 @@ type CreateDownloadRequest struct {
 // @Router /downloads [post]
 func CreateDownload(c *gin.Context) {
 	var req CreateDownloadRequest
-	
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request: "+err.Error())
 		return
 	}
-	
+
 	// 加载配置
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to load config")
 		return
 	}
-	
+
 	// 创建Aria2客户端
 	aria2Client := aria2.NewClient(cfg.Aria2.RpcURL, cfg.Aria2.Token)
-	
+
 	// 设置下载选项
 	options := req.Options
 	if options == nil {
 		options = make(map[string]interface{})
 	}
-	
+
 	// 设置下载目录
 	if req.Dir != "" {
 		options["dir"] = req.Dir
 	} else if cfg.Aria2.DownloadDir != "" {
 		options["dir"] = cfg.Aria2.DownloadDir
 	}
-	
+
 	// 设置文件名
 	if req.Filename != "" {
 		options["out"] = req.Filename
 	}
-	
+
 	// 添加下载任务
 	gid, err := aria2Client.AddURI(req.URL, options)
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to create download: "+err.Error())
 		return
 	}
-	
+
 	utils.Success(c, gin.H{
 		"gid":     gid,
 		"message": "Download created successfully",
@@ -94,37 +94,37 @@ func ListDownloads(c *gin.Context) {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to load config")
 		return
 	}
-	
+
 	// 创建Aria2客户端
 	aria2Client := aria2.NewClient(cfg.Aria2.RpcURL, cfg.Aria2.Token)
-	
+
 	// 获取活动下载
 	active, err := aria2Client.GetActive()
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get active downloads: "+err.Error())
 		return
 	}
-	
+
 	// 获取等待下载
 	waiting, err := aria2Client.GetWaiting(0, 100)
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get waiting downloads: "+err.Error())
 		return
 	}
-	
+
 	// 获取已停止下载
 	stopped, err := aria2Client.GetStopped(0, 100)
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get stopped downloads: "+err.Error())
 		return
 	}
-	
+
 	// 获取全局统计
 	globalStat, err := aria2Client.GetGlobalStat()
 	if err != nil {
 		globalStat = make(map[string]interface{})
 	}
-	
+
 	utils.Success(c, gin.H{
 		"active":      active,
 		"waiting":     waiting,
@@ -144,34 +144,34 @@ func ListDownloads(c *gin.Context) {
 // @Router /downloads/{id} [get]
 func GetDownload(c *gin.Context) {
 	gid := c.Param("id")
-	
+
 	// 加载配置
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to load config")
 		return
 	}
-	
+
 	// 创建Aria2客户端
 	aria2Client := aria2.NewClient(cfg.Aria2.RpcURL, cfg.Aria2.Token)
-	
+
 	// 获取下载状态
 	status, err := aria2Client.GetStatus(gid)
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get download status: "+err.Error())
 		return
 	}
-	
+
 	// 转换数据
 	totalLength, _ := strconv.ParseInt(status.TotalLength, 10, 64)
 	completedLength, _ := strconv.ParseInt(status.CompletedLength, 10, 64)
 	downloadSpeed, _ := strconv.ParseInt(status.DownloadSpeed, 10, 64)
-	
+
 	var progress float64
 	if totalLength > 0 {
 		progress = float64(completedLength) / float64(totalLength) * 100
 	}
-	
+
 	utils.Success(c, gin.H{
 		"gid":              status.GID,
 		"status":           status.Status,
@@ -196,23 +196,23 @@ func GetDownload(c *gin.Context) {
 // @Router /downloads/{id} [delete]
 func DeleteDownload(c *gin.Context) {
 	gid := c.Param("id")
-	
+
 	// 加载配置
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to load config")
 		return
 	}
-	
+
 	// 创建Aria2客户端
 	aria2Client := aria2.NewClient(cfg.Aria2.RpcURL, cfg.Aria2.Token)
-	
+
 	// 删除下载
 	if err := aria2Client.Remove(gid); err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to delete download: "+err.Error())
 		return
 	}
-	
+
 	utils.Success(c, gin.H{
 		"message": "Download " + gid + " deleted successfully",
 	})
@@ -229,23 +229,23 @@ func DeleteDownload(c *gin.Context) {
 // @Router /downloads/{id}/pause [post]
 func PauseDownload(c *gin.Context) {
 	gid := c.Param("id")
-	
+
 	// 加载配置
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to load config")
 		return
 	}
-	
+
 	// 创建Aria2客户端
 	aria2Client := aria2.NewClient(cfg.Aria2.RpcURL, cfg.Aria2.Token)
-	
+
 	// 暂停下载
 	if err := aria2Client.Pause(gid); err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to pause download: "+err.Error())
 		return
 	}
-	
+
 	utils.Success(c, gin.H{
 		"message": "Download " + gid + " paused successfully",
 	})
@@ -262,23 +262,23 @@ func PauseDownload(c *gin.Context) {
 // @Router /downloads/{id}/resume [post]
 func ResumeDownload(c *gin.Context) {
 	gid := c.Param("id")
-	
+
 	// 加载配置
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to load config")
 		return
 	}
-	
+
 	// 创建Aria2客户端
 	aria2Client := aria2.NewClient(cfg.Aria2.RpcURL, cfg.Aria2.Token)
-	
+
 	// 恢复下载
 	if err := aria2Client.Resume(gid); err != nil {
 		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to resume download: "+err.Error())
 		return
 	}
-	
+
 	utils.Success(c, gin.H{
 		"message": "Download " + gid + " resumed successfully",
 	})

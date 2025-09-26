@@ -13,3 +13,44 @@ alist:
   password: "your_password"          # Alist密码
   token: ""                          # 登录后获取的token（自动获取）
   default_path: "/"                  # 默认访问的目录路径，例如: "/movies" 或 "/downloads"
+
+telegram:
+  enabled: false                     # 启用Telegram集成
+  bot_token: "your_bot_token"        # Telegram Bot Token，从@BotFather获取
+  chat_ids:                          # 接收通知的聊天ID列表
+    - 123456789                      # 可以是个人聊天ID或群组ID
+    - -987654321                     # 群组ID通常是负数
+  admin_ids:                         # 有权限使用Bot命令的用户ID列表（为空则所有人都可使用）
+    - 123456789                      # 管理员用户ID
+  webhook:
+    enabled: false                   # 使用Webhook模式而不是轮询模式
+    url: "https://your-domain.com/telegram/webhook"  # Webhook URL
+    port: "8082"                     # Webhook端口（如果与主服务端口不同）
+
+# 下载配置
+download:
+  video_only: true                   # 是否只下载视频文件
+  video_extensions: ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', '3gp', 'ts', 'm2ts', 'mts', 'vob', 'divx', 'xvid', 'rmvb', 'rm', 'asf']
+  exclude_extensions: ['txt', 'nfo', 'srt', 'ass', 'ssa', 'sup', 'idx', 'sub', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff']
+  min_file_size_mb: 50               # 最小文件大小(MB)，0为不限制
+  max_file_size_mb: 0                # 最大文件大小(MB)，0为不限制
+
+# 定时任务配置
+scheduler:
+  enabled: false                     # 是否启用定时任务
+  tasks:
+    - name: "下载昨天视频"            # 任务名称
+      enabled: true                  # 是否启用此任务
+      cron: "0 2 * * *"              # cron表达式：每天凌晨2点执行
+      path: "/movies"                # 要扫描的路径
+      hours_ago: 24                  # 下载多少小时内的文件（24=昨天）
+      video_only: true               # 是否只下载视频
+      auto_preview: false            # 是否预览模式（不实际下载）
+    
+    - name: "下载最近3天文件"         # 任务名称
+      enabled: false                 # 是否启用此任务
+      cron: "0 */6 * * *"           # cron表达式：每6小时执行一次
+      path: "/downloads"             # 要扫描的路径
+      hours_ago: 72                  # 下载72小时内的文件（3天）
+      video_only: false              # 下载所有文件
+      auto_preview: true             # 预览模式

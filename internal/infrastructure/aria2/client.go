@@ -121,7 +121,7 @@ func (c *Client) callRPC(method string, params []interface{}) (*RPCResponse, err
 // AddURI 添加下载任务
 func (c *Client) AddURI(uri string, options map[string]interface{}) (string, error) {
 	params := []interface{}{[]string{uri}}
-	
+
 	if options != nil {
 		params = append(params, options)
 	}
@@ -142,7 +142,7 @@ func (c *Client) AddURI(uri string, options map[string]interface{}) (string, err
 // AddURIs 批量添加下载任务
 func (c *Client) AddURIs(uris []string, options map[string]interface{}) ([]string, error) {
 	var gids []string
-	
+
 	for _, uri := range uris {
 		gid, err := c.AddURI(uri, options)
 		if err != nil {
@@ -152,14 +152,14 @@ func (c *Client) AddURIs(uris []string, options map[string]interface{}) ([]strin
 			gids = append(gids, gid)
 		}
 	}
-	
+
 	return gids, nil
 }
 
 // GetStatus 获取下载状态
 func (c *Client) GetStatus(gid string) (*StatusResult, error) {
 	params := []interface{}{gid}
-	
+
 	resp, err := c.callRPC("aria2.tellStatus", params)
 	if err != nil {
 		return nil, err
