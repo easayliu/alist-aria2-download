@@ -114,6 +114,33 @@ definitions:
         description: 是否只显示视频文件
         type: boolean
     type: object
+  handlers.ManualDownloadRequest:
+    properties:
+      end_time:
+        description: 结束时间（可选，ISO 8601格式）
+        example: "2023-12-02T00:00:00Z"
+        type: string
+      hours_ago:
+        description: 最近多少小时内的文件（可选，默认24小时）
+        example: 24
+        type: integer
+      path:
+        description: 搜索路径（可选，为空时使用配置的默认路径）
+        example: /downloads
+        type: string
+      preview:
+        description: 是否预览模式
+        example: false
+        type: boolean
+      start_time:
+        description: 开始时间（可选，ISO 8601格式）
+        example: "2023-12-01T00:00:00Z"
+        type: string
+      video_only:
+        description: 是否只下载视频文件
+        example: false
+        type: boolean
+    type: object
   handlers.RunTaskRequest:
     properties:
       preview:
@@ -468,6 +495,39 @@ paths:
             additionalProperties: true
             type: object
       summary: 列出指定路径的文件
+      tags:
+      - 文件管理
+  /files/manual-download:
+    post:
+      consumes:
+      - application/json
+      description: 手动执行指定时间范围内的文件下载，支持预览模式
+      parameters:
+      - description: 下载参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ManualDownloadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 下载结果
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 手动执行文件下载
       tags:
       - 文件管理
   /files/yesterday:

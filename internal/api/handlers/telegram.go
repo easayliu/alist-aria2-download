@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -261,8 +262,17 @@ func (h *TelegramHandler) handleHelp(chatID int64) {
 		"使用下方键盘按钮进行常用操作\n\n" +
 		"<b>文件操作命令:</b>\n" +
 		"/list [path] - 列出指定路径的文件\n" +
-		"/download &lt;url&gt; - 开始下载任务\n" +
 		"/cancel &lt;id&gt; - 取消下载任务\n\n" +
+		"<b>下载命令（支持多种格式）:</b>\n" +
+		"• <code>/download</code> - 默认下载最近24小时的视频文件\n" +
+		"• <code>/download 48</code> - 下载最近48小时的视频文件\n" +
+		"• <code>/download 2025-09-01 2025-09-26</code> - 下载指定日期范围的文件\n" +
+		"• <code>/download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z</code> - 下载精确时间范围的文件\n" +
+		"• <code>/download https://example.com/file.zip</code> - 下载指定URL文件\n\n" +
+		"<b>时间格式说明:</b>\n" +
+		"• 小时数：1-8760（最大一年）\n" +
+		"• 日期格式：YYYY-MM-DD\n" +
+		"• 时间格式：ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)\n\n" +
 		"<b>定时任务命令:</b>\n" +
 		"/tasks - 查看我的定时任务\n" +
 		"/quicktask &lt;类型&gt; [路径] - 快捷创建任务\n" +
@@ -312,30 +322,40 @@ func (h *TelegramHandler) handleStatus(chatID int64) {
 
 func (h *TelegramHandler) handleDownload(chatID int64, command string) {
 	parts := strings.Fields(command)
-	if len(parts) < 2 {
-		h.sendMessage(chatID, "请提供下载链接\n示例: /download https://example.com/file.zip")
+	
+	// 如果没有参数，执行默认的手动下载（24小时）
+	if len(parts) == 1 {
+		h.handleManualDownload(chatID, []string{})
 		return
 	}
+	
+	// 检查第一个参数是否为URL（以http开头）
+	if strings.HasPrefix(parts[1], "http") {
+		// 原有的URL下载逻辑
+		url := parts[1]
 
-	url := parts[1]
+		// 创建下载任务
+		download, err := h.downloadService.CreateDownload(url, "", "", nil)
+		if err != nil {
+			h.sendMessage(chatID, "创建下载任务失败: "+err.Error())
+			return
+		}
 
-	// 创建下载任务
-	download, err := h.downloadService.CreateDownload(url, "", "", nil)
-	if err != nil {
-		h.sendMessage(chatID, "创建下载任务失败: "+err.Error())
-		return
+		// 发送确认消息
+		escapedURL := h.escapeHTML(url)
+		escapedID := h.escapeHTML(download.ID)
+		escapedFilename := h.escapeHTML(download.Filename)
+		message := fmt.Sprintf("<b>下载任务已创建</b>\n\nURL: <code>%s</code>\nGID: <code>%s</code>\n文件名: <code>%s</code>",
+			escapedURL, escapedID, escapedFilename)
+		h.sendMessageHTML(chatID, message)
+
+		// 发送通知
+		h.notificationService.NotifyDownloadStarted(download)
+	} else {
+		// 处理时间参数的手动下载
+		timeArgs := parts[1:]
+		h.handleManualDownload(chatID, timeArgs)
 	}
-
-	// 发送确认消息
-	escapedURL := h.escapeHTML(url)
-	escapedID := h.escapeHTML(download.ID)
-	escapedFilename := h.escapeHTML(download.Filename)
-	message := fmt.Sprintf("<b>下载任务已创建</b>\n\nURL: <code>%s</code>\nGID: <code>%s</code>\n文件名: <code>%s</code>",
-		escapedURL, escapedID, escapedFilename)
-	h.sendMessageHTML(chatID, message)
-
-	// 发送通知
-	h.notificationService.NotifyDownloadStarted(download)
 }
 
 func (h *TelegramHandler) handleList(chatID int64, command string) {
@@ -1851,6 +1871,232 @@ func (h *TelegramHandler) handleAlistFiles(chatID int64) {
 	}
 	if otherCount > 0 {
 		message += fmt.Sprintf("其他: %d\n", otherCount)
+	}
+
+	h.sendMessageHTML(chatID, message)
+}
+
+// TimeParseResult 时间解析结果
+type TimeParseResult struct {
+	StartTime   time.Time
+	EndTime     time.Time
+	Description string
+}
+
+// parseTimeArguments 解析时间参数
+// 支持的格式：
+// 1. 数字 - 小时数（如：48）
+// 2. 日期范围 - 两个日期（如：2025-09-01 2025-09-26）
+// 3. 时间范围 - 两个时间戳（如：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z）
+func (h *TelegramHandler) parseTimeArguments(args []string) (*TimeParseResult, error) {
+	now := time.Now()
+	
+	if len(args) == 0 {
+		// 默认24小时
+		return &TimeParseResult{
+			StartTime:   now.Add(-24 * time.Hour),
+			EndTime:     now,
+			Description: "最近24小时",
+		}, nil
+	}
+	
+	if len(args) == 1 {
+		// 尝试解析为小时数
+		if hours, err := strconv.Atoi(args[0]); err == nil {
+			if hours <= 0 {
+				return nil, fmt.Errorf("小时数必须大于0")
+			}
+			if hours > 8760 { // 一年的小时数
+				return nil, fmt.Errorf("小时数不能超过8760（一年）")
+			}
+			return &TimeParseResult{
+				StartTime:   now.Add(-time.Duration(hours) * time.Hour),
+				EndTime:     now,
+				Description: fmt.Sprintf("最近%d小时", hours),
+			}, nil
+		}
+		
+		return nil, fmt.Errorf("无效的时间格式，应为小时数（如：48）")
+	}
+	
+	if len(args) == 2 {
+		startStr, endStr := args[0], args[1]
+		
+		// 尝试解析为完整的时间戳（ISO 8601格式）
+		startTime, err1 := time.Parse(time.RFC3339, startStr)
+		endTime, err2 := time.Parse(time.RFC3339, endStr)
+		
+		if err1 == nil && err2 == nil {
+			if startTime.After(endTime) {
+				return nil, fmt.Errorf("开始时间不能晚于结束时间")
+			}
+			return &TimeParseResult{
+				StartTime:   startTime,
+				EndTime:     endTime,
+				Description: fmt.Sprintf("从 %s 到 %s", startTime.Format("2006-01-02 15:04"), endTime.Format("2006-01-02 15:04")),
+			}, nil
+		}
+		
+		// 尝试解析为日期格式（YYYY-MM-DD）
+		dateRegex := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+		if dateRegex.MatchString(startStr) && dateRegex.MatchString(endStr) {
+			startTime, err1 := time.Parse("2006-01-02", startStr)
+			endTime, err2 := time.Parse("2006-01-02", endStr)
+			
+			if err1 == nil && err2 == nil {
+				if startTime.After(endTime) {
+					return nil, fmt.Errorf("开始日期不能晚于结束日期")
+				}
+				// 结束时间设为当天的23:59:59
+				endTime = endTime.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+				return &TimeParseResult{
+					StartTime:   startTime,
+					EndTime:     endTime,
+					Description: fmt.Sprintf("从 %s 到 %s", startTime.Format("2006-01-02"), endTime.Format("2006-01-02")),
+				}, nil
+			}
+		}
+		
+		return nil, fmt.Errorf("无效的时间格式，支持的格式：\n• 日期范围：2025-09-01 2025-09-26\n• 时间范围：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
+	}
+	
+	return nil, fmt.Errorf("参数过多，支持的格式：\n• /download\n• /download 48\n• /download 2025-09-01 2025-09-26\n• /download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
+}
+
+// handleManualDownload 处理手动下载功能，支持时间范围参数
+func (h *TelegramHandler) handleManualDownload(chatID int64, timeArgs []string) {
+	// 解析时间参数
+	timeResult, err := h.parseTimeArguments(timeArgs)
+	if err != nil {
+		message := fmt.Sprintf("<b>时间参数错误</b>\n\n%s\n\n<b>支持的格式：</b>\n• /download - 默认24小时\n• /download 48 - 指定小时数\n• /download 2025-09-01 2025-09-26 - 指定日期范围\n• /download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z - 指定精确时间范围", err.Error())
+		h.sendMessageHTML(chatID, message)
+		return
+	}
+
+	// 发送处理中消息
+	processingMsg := fmt.Sprintf("<b>正在处理手动下载任务</b>\n\n时间范围: %s", timeResult.Description)
+	h.sendMessageHTML(chatID, processingMsg)
+
+	// 构建API请求
+	baseURL := fmt.Sprintf("http://localhost:%s", h.config.Server.Port)
+	apiURL := baseURL + "/api/v1/files/manual-download"
+
+	// 构建请求体
+	requestBody := map[string]interface{}{
+		"path":       "", // 使用默认路径
+		"video_only": true, // 默认只下载视频文件
+		"preview":    false, // 直接下载，不预览
+		"start_time": timeResult.StartTime.Format(time.RFC3339),
+		"end_time":   timeResult.EndTime.Format(time.RFC3339),
+	}
+
+	// 如果配置中有默认路径，使用它
+	if h.config.Alist.DefaultPath != "" {
+		requestBody["path"] = h.config.Alist.DefaultPath
+	}
+
+	// 序列化请求体
+	jsonData, err := json.Marshal(requestBody)
+	if err != nil {
+		h.sendMessage(chatID, "构建请求失败: "+err.Error())
+		return
+	}
+
+	// 创建HTTP请求
+	client := &http.Client{Timeout: 300 * time.Second} // 5分钟超时
+	req, err := http.NewRequest("POST", apiURL, strings.NewReader(string(jsonData)))
+	if err != nil {
+		h.sendMessage(chatID, "创建请求失败: "+err.Error())
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	// 发送请求
+	resp, err := client.Do(req)
+	if err != nil {
+		h.sendMessage(chatID, "请求失败: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	// 读取响应
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		h.sendMessage(chatID, "读取响应失败: "+err.Error())
+		return
+	}
+
+	// 解析响应
+	var result struct {
+		Code    int    `json:"code"`
+		Message string `json:"message"`
+		Data    struct {
+			Path         string `json:"path"`
+			StartTime    string `json:"start_time"`
+			EndTime      string `json:"end_time"`
+			TotalFiles   int    `json:"total_files"`
+			TotalSize    int64  `json:"total_size"`
+			SuccessCount int    `json:"success_count"`
+			FailCount    int    `json:"fail_count"`
+			MediaStats   struct {
+				TV    int `json:"tv"`
+				Movie int `json:"movie"`
+				Other int `json:"other"`
+			} `json:"media_stats"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		h.sendMessage(chatID, "解析响应失败: "+err.Error())
+		return
+	}
+
+	// 检查API响应状态
+	if result.Code != 0 {
+		h.sendMessage(chatID, "API错误: "+result.Message)
+		return
+	}
+
+	// 构建结果消息
+	data := result.Data
+	if data.TotalFiles == 0 {
+		message := fmt.Sprintf("<b>手动下载完成</b>\n\n时间范围: %s\n\n<b>结果:</b> 未找到符合条件的文件", timeResult.Description)
+		h.sendMessageHTML(chatID, message)
+		return
+	}
+
+	// 格式化文件大小
+	totalSizeStr := h.formatFileSize(data.TotalSize)
+
+	// 构建成功消息
+	message := fmt.Sprintf(
+		"<b>手动下载任务已创建</b>\n\n"+
+			"<b>时间范围:</b> %s\n"+
+			"<b>路径:</b> <code>%s</code>\n\n"+
+			"<b>文件统计:</b>\n"+
+			"• 总文件: %d 个\n"+
+			"• 总大小: %s\n"+
+			"• 电影: %d 个\n"+
+			"• 剧集: %d 个\n"+
+			"• 其他: %d 个\n\n"+
+			"<b>下载结果:</b>\n"+
+			"• 成功: %d\n"+
+			"• 失败: %d",
+		timeResult.Description,
+		h.escapeHTML(data.Path),
+		data.TotalFiles,
+		totalSizeStr,
+		data.MediaStats.Movie,
+		data.MediaStats.TV,
+		data.MediaStats.Other,
+		data.SuccessCount,
+		data.FailCount,
+	)
+
+	// 如果有失败的任务，添加提示
+	if data.FailCount > 0 {
+		message += fmt.Sprintf("\n\n⚠️ 有 %d 个文件下载失败，请检查日志获取详细信息", data.FailCount)
 	}
 
 	h.sendMessageHTML(chatID, message)

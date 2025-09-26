@@ -482,6 +482,55 @@
                 }
             }
         },
+        "/files/manual-download": {
+            "post": {
+                "description": "手动执行指定时间范围内的文件下载，支持预览模式",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "文件管理"
+                ],
+                "summary": "手动执行文件下载",
+                "parameters": [
+                    {
+                        "description": "下载参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ManualDownloadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "下载结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/files/yesterday": {
             "get": {
                 "description": "批量获取昨天修改的文件信息，并将raw_url中的fcalist-public替换为fcalist-internal",
@@ -1133,6 +1182,41 @@
                 "video_only": {
                     "description": "是否只显示视频文件",
                     "type": "boolean"
+                }
+            }
+        },
+        "handlers.ManualDownloadRequest": {
+            "type": "object",
+            "properties": {
+                "end_time": {
+                    "description": "结束时间（可选，ISO 8601格式）",
+                    "type": "string",
+                    "example": "2023-12-02T00:00:00Z"
+                },
+                "hours_ago": {
+                    "description": "最近多少小时内的文件（可选，默认24小时）",
+                    "type": "integer",
+                    "example": 24
+                },
+                "path": {
+                    "description": "搜索路径（可选，为空时使用配置的默认路径）",
+                    "type": "string",
+                    "example": "/downloads"
+                },
+                "preview": {
+                    "description": "是否预览模式",
+                    "type": "boolean",
+                    "example": false
+                },
+                "start_time": {
+                    "description": "开始时间（可选，ISO 8601格式）",
+                    "type": "string",
+                    "example": "2023-12-01T00:00:00Z"
+                },
+                "video_only": {
+                    "description": "是否只下载视频文件",
+                    "type": "boolean",
+                    "example": false
                 }
             }
         },

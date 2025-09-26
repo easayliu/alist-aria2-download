@@ -74,6 +74,7 @@ func SetupRoutes(cfg *config.Config, notificationService *services.NotificationS
 			files.POST("/yesterday/download", handlers.DownloadYesterdayFiles)
 			files.POST("/download", handlers.DownloadFilesFromPath)
 			files.POST("/list", handlers.ListFilesHandler)
+			files.POST("/manual-download", handlers.ManualDownloadFiles)
 		}
 
 		// 定时任务相关路由

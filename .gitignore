@@ -44,3 +44,20 @@ downloads/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Build output files
+alist-aria2-download
+alist-aria2-download-*
+!alist-aria2-download-*.go
+
+# Archive files
+*.tar.gz
+*.tar
+*.zip
+*.7z
+*.rar
+
+# Release directories
+*-release/
+release/
+dist/
