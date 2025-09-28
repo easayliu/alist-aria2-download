@@ -30,6 +30,7 @@ type AlistConfig struct {
 	Username    string `mapstructure:"username"`
 	Password    string `mapstructure:"password"`
 	DefaultPath string `mapstructure:"default_path"`
+	QPS         int    `mapstructure:"qps"` // 每秒请求数限制，默认50
 }
 
 type TelegramConfig struct {
@@ -82,6 +83,7 @@ func LoadConfig() (*Config, error) {
 	viper.SetDefault("aria2.download_dir", "/downloads")
 	viper.SetDefault("alist.base_url", "http://localhost:5244")
 	viper.SetDefault("alist.default_path", "/")
+	viper.SetDefault("alist.qps", 50)
 	viper.SetDefault("telegram.enabled", false)
 	viper.SetDefault("telegram.webhook.enabled", false)
 	viper.SetDefault("telegram.webhook.port", "8082")

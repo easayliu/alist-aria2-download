@@ -46,7 +46,7 @@ func main() {
 	notificationService := services.NewNotificationService(cfg)
 
 	// 初始化Alist客户端和文件服务
-	alistClient := alist.NewClient(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password)
+	alistClient := alist.NewClientWithQPS(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password, cfg.Alist.QPS)
 	fileService := services.NewFileService(alistClient)
 
 	// 初始化路由

@@ -193,6 +193,14 @@ func TestDetermineMediaTypeAndPath(t *testing.T) {
 			description: "包含综艺特征词如纯享版应识别为TV",
 		},
 		{
+			name:        "tvs分类目录不应进入剧名",
+			fullPath:    "/data/来自：分享/tvs/向往的生活 第八季/S08.2025.2160p.WEB-DL.H265.AAC/向往的生活 第八季.EP01.mp4",
+			fileName:    "向往的生活 第八季.EP01.mp4",
+			wantType:    MediaTypeTV,
+			wantPath:    "/downloads/tvs/向往的生活/S08",
+			description: "分类目录名tvs不应作为剧名，并应正确提取季度信息",
+		},
+		{
 			name:        "日期格式综艺节目",
 			fullPath:    "/data/variety/某节目/20240101.本期嘉宾.mp4",
 			fileName:    "20240101.本期嘉宾.mp4",

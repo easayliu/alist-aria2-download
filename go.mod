@@ -1,6 +1,8 @@
 module github.com/easayliu/alist-aria2-download
 
-go 1.21
+go 1.24.0
+
+toolchain go1.24.3
 
 require (
 	github.com/gin-gonic/gin v1.9.1
@@ -11,6 +13,7 @@ require (
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.0
 	github.com/swaggo/swag v1.16.2
+	golang.org/x/time v0.13.0
 )
 
 require (

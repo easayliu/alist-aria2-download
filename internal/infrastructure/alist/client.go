@@ -2,20 +2,24 @@ package alist
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/easayliu/alist-aria2-download/internal/infrastructure/ratelimit"
 )
 
 // Client Alist客户端
 type Client struct {
-	BaseURL    string
-	Username   string
-	Password   string
-	Token      string
-	httpClient *http.Client
+	BaseURL     string
+	Username    string
+	Password    string
+	Token       string
+	httpClient  *http.Client
+	rateLimiter *ratelimit.RateLimiter
 }
 
 // LoginRequest 登录请求结构
@@ -42,11 +46,52 @@ func NewClient(baseURL, username, password string) *Client {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		rateLimiter: ratelimit.NewRateLimiter(50), // 默认QPS为50
 	}
+}
+
+// NewClientWithQPS 创建带QPS限制的Alist客户端
+func NewClientWithQPS(baseURL, username, password string, qps int) *Client {
+	return &Client{
+		BaseURL:  baseURL,
+		Username: username,
+		Password: password,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		rateLimiter: ratelimit.NewRateLimiter(qps),
+	}
+}
+
+// SetQPS 设置QPS限制
+func (c *Client) SetQPS(qps int) {
+	if c.rateLimiter != nil {
+		c.rateLimiter.SetQPS(qps)
+	}
+}
+
+// GetQPS 获取当前QPS限制
+func (c *Client) GetQPS() int {
+	if c.rateLimiter != nil {
+		return c.rateLimiter.GetQPS()
+	}
+	return 0
 }
 
 // Login 调用/api/auth/login获取token
 func (c *Client) Login() error {
+	return c.LoginWithContext(context.Background())
+}
+
+// LoginWithContext 调用/api/auth/login获取token（带上下文）
+func (c *Client) LoginWithContext(ctx context.Context) error {
+	// 等待速率限制
+	if c.rateLimiter != nil {
+		if err := c.rateLimiter.Wait(ctx); err != nil {
+			return fmt.Errorf("rate limit exceeded during login: %w", err)
+		}
+	}
+
 	loginReq := LoginRequest{
 		Username: c.Username,
 		Password: c.Password,
@@ -57,7 +102,7 @@ func (c *Client) Login() error {
 		return fmt.Errorf("failed to marshal login request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", c.BaseURL+"/api/auth/login", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+"/api/auth/login", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -90,6 +135,18 @@ func (c *Client) Login() error {
 
 // makeRequest 发起带认证的HTTP请求
 func (c *Client) makeRequest(method, endpoint string, body interface{}) (*http.Response, error) {
+	return c.makeRequestWithContext(context.Background(), method, endpoint, body)
+}
+
+// makeRequestWithContext 发起带认证的HTTP请求（带上下文）
+func (c *Client) makeRequestWithContext(ctx context.Context, method, endpoint string, body interface{}) (*http.Response, error) {
+	// 等待速率限制
+	if c.rateLimiter != nil {
+		if err := c.rateLimiter.Wait(ctx); err != nil {
+			return nil, fmt.Errorf("rate limit exceeded: %w", err)
+		}
+	}
+
 	var reqBody io.Reader
 	if body != nil {
 		jsonData, err := json.Marshal(body)
@@ -99,7 +156,7 @@ func (c *Client) makeRequest(method, endpoint string, body interface{}) (*http.R
 		reqBody = bytes.NewBuffer(jsonData)
 	}
 
-	req, err := http.NewRequest(method, c.BaseURL+endpoint, reqBody)
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+endpoint, reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -126,6 +183,7 @@ func (c *Client) ListFiles(path string, page, perPage int) (*FileListResponse, e
 		Path:    path,
 		Page:    page,
 		PerPage: perPage,
+		Refresh: true,
 	}
 
 	// 发送请求
