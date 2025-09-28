@@ -216,6 +216,14 @@ func TestDetermineMediaTypeAndPath(t *testing.T) {
 			wantPath:    "/downloads/tvs/向往的生活/S06",
 			description: "知名综艺应被识别",
 		},
+		{
+			name:        "毛骗第二季文件名中包含S02E08",
+			fullPath:    "/data/来自：分享/毛骗 全1-3季/毛骗 第二季 (2011)/Moral.Peanuts.S02E08.2011.1080p.WEB-DL.x265.10bit.AC3.mkv",
+			fileName:    "Moral.Peanuts.S02E08.2011.1080p.WEB-DL.x265.10bit.AC3.mkv",
+			wantType:    MediaTypeTV,
+			wantPath:    "/downloads/tvs/毛骗/S02",
+			description: "应从文件名S02E08格式中提取季度信息并标准化剧名",
+		},
 	}
 
 	for _, tt := range tests {

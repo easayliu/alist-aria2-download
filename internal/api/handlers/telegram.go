@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
@@ -36,6 +37,11 @@ type TelegramHandler struct {
 	cancel              context.CancelFunc
 	manualMutex         sync.Mutex
 	manualContexts      map[string]*manualDownloadContext
+	// 路径缓存相关
+	pathMutex           sync.RWMutex
+	pathCache           map[string]string // token -> path
+	pathReverseCache    map[string]string // path -> token
+	pathTokenCounter    int
 }
 
 func NewTelegramHandler(cfg *config.Config, notificationService *services.NotificationService, fileService *services.FileService, schedulerService *services.SchedulerService) *TelegramHandler {
@@ -56,6 +62,9 @@ func NewTelegramHandler(cfg *config.Config, notificationService *services.Notifi
 		ctx:                 ctx,
 		cancel:              cancel,
 		manualContexts:      make(map[string]*manualDownloadContext),
+		pathCache:           make(map[string]string),
+		pathReverseCache:    make(map[string]string),
+		pathTokenCounter:    1,
 	}
 }
 
@@ -346,6 +355,21 @@ func (h *TelegramHandler) handleDownload(chatID int64, command string) {
 		return
 	}
 
+	// 检查第一个参数是否为文件路径（以/开头）
+	if strings.HasPrefix(parts[1], "/") {
+		filePath := parts[1]
+		
+		// 判断是文件还是目录
+		if strings.HasSuffix(filePath, "/") || h.isDirectoryPath(filePath) {
+			// 目录下载
+			h.handleDownloadDirectoryByPath(chatID, filePath)
+		} else {
+			// 文件下载
+			h.handleDownloadFileByPath(chatID, filePath)
+		}
+		return
+	}
+
 	// 处理时间参数的手动下载
 	preview := true
 	timeArgs := parts[1:]
@@ -628,62 +652,137 @@ func (h *TelegramHandler) handleCallbackQuery(update *tgbotapi.Update) {
 	// 先回应回调查询
 	h.telegramClient.AnswerCallbackQuery(callback.ID, "")
 
+	// 处理文件浏览相关的回调
+	if strings.HasPrefix(data, "browse_dir:") {
+		parts := strings.Split(data, ":")
+		if len(parts) >= 3 {
+			encodedPath := parts[1]
+			path := h.decodeFilePath(encodedPath)
+			page, _ := strconv.Atoi(parts[2])
+			if page < 1 {
+				page = 1
+			}
+			// 调试日志
+			logger.Info("点击目录", "encodedPath", encodedPath, "decodedPath", path, "page", page)
+			h.handleBrowseFilesWithEdit(chatID, path, page, callback.Message.MessageID)
+		}
+		return
+	}
+	
+	if strings.HasPrefix(data, "browse_page:") {
+		parts := strings.Split(data, ":")
+		if len(parts) >= 3 {
+			path := h.decodeFilePath(parts[1])
+			page, _ := strconv.Atoi(parts[2])
+			if page < 1 {
+				page = 1
+			}
+			h.handleBrowseFilesWithEdit(chatID, path, page, callback.Message.MessageID)
+		}
+		return
+	}
+	
+	if strings.HasPrefix(data, "browse_refresh:") {
+		parts := strings.Split(data, ":")
+		if len(parts) >= 3 {
+			path := h.decodeFilePath(parts[1])
+			page, _ := strconv.Atoi(parts[2])
+			if page < 1 {
+				page = 1
+			}
+			h.handleBrowseFilesWithEdit(chatID, path, page, callback.Message.MessageID)
+		}
+		return
+	}
+	
+	if strings.HasPrefix(data, "file_menu:") {
+		filePath := h.decodeFilePath(strings.TrimPrefix(data, "file_menu:"))
+		h.handleFileMenuWithEdit(chatID, filePath, callback.Message.MessageID)
+		return
+	}
+	
+	if strings.HasPrefix(data, "file_download:") {
+		filePath := h.decodeFilePath(strings.TrimPrefix(data, "file_download:"))
+		h.handleFileDownload(chatID, filePath)
+		return
+	}
+	
+	if strings.HasPrefix(data, "file_info:") {
+		filePath := h.decodeFilePath(strings.TrimPrefix(data, "file_info:"))
+		h.handleFileInfoWithEdit(chatID, filePath, callback.Message.MessageID)
+		return
+	}
+	
+	if strings.HasPrefix(data, "file_link:") {
+		filePath := h.decodeFilePath(strings.TrimPrefix(data, "file_link:"))
+		h.handleFileLinkWithEdit(chatID, filePath, callback.Message.MessageID)
+		return
+	}
+	
+	if strings.HasPrefix(data, "download_dir:") {
+		dirPath := h.decodeFilePath(strings.TrimPrefix(data, "download_dir:"))
+		h.handleDownloadDirectory(chatID, dirPath)
+		return
+	}
+
 	switch data {
 	case "cmd_help":
-		h.handleHelp(chatID)
+		h.handleHelpWithEdit(chatID, callback.Message.MessageID)
 	case "cmd_status":
-		h.handleStatus(chatID)
+		h.handleStatusWithEdit(chatID, callback.Message.MessageID)
 	case "cmd_manage":
-		h.handleManage(chatID)
+		h.handleManageWithEdit(chatID, callback.Message.MessageID)
 	case "menu_download":
-		h.handleDownloadMenu(chatID)
+		h.handleDownloadMenuWithEdit(chatID, callback.Message.MessageID)
 	case "menu_files":
-		h.handleFilesMenu(chatID)
+		h.handleFilesMenuWithEdit(chatID, callback.Message.MessageID)
 	case "menu_system":
-		h.handleSystemMenu(chatID)
+		h.handleSystemMenuWithEdit(chatID, callback.Message.MessageID)
 	case "menu_status":
-		h.handleStatusMenu(chatID)
+		h.handleStatusMenuWithEdit(chatID, callback.Message.MessageID)
 	case "show_yesterday_options", "api_yesterday_files", "api_yesterday_files_preview", "api_yesterday_download":
 		// 昨日文件功能已移除，跳转到定时任务
-		h.handleTasks(chatID, 0)
+		h.handleTasksWithEdit(chatID, userID, callback.Message.MessageID)
+	case "cmd_tasks":
+		h.handleTasksWithEdit(chatID, userID, callback.Message.MessageID)
 	case "api_download_status":
-		h.handleDownloadStatusAPI(chatID)
+		h.handleDownloadStatusAPIWithEdit(chatID, callback.Message.MessageID)
 	case "api_alist_login":
-		h.handleAlistLogin(chatID)
+		h.handleAlistLoginWithEdit(chatID, callback.Message.MessageID)
 	case "api_health_check":
-		h.handleHealthCheck(chatID)
+		h.handleHealthCheckWithEdit(chatID, callback.Message.MessageID)
 	case "back_main":
-		h.handleStart(chatID)
+		h.handleStartWithEdit(chatID, callback.Message.MessageID)
 	// 下载管理功能
 	case "download_list":
-		h.handleDownloadStatusAPI(chatID)
+		h.handleDownloadStatusAPIWithEdit(chatID, callback.Message.MessageID)
 	case "download_create":
-		h.handleDownloadCreate(chatID)
+		h.handleDownloadCreateWithEdit(chatID, callback.Message.MessageID)
 	case "download_control":
-		h.handleDownloadControl(chatID)
+		h.handleDownloadControlWithEdit(chatID, callback.Message.MessageID)
 	case "download_delete":
-		h.handleDownloadDelete(chatID)
+		h.handleDownloadDeleteWithEdit(chatID, callback.Message.MessageID)
 	// 文件浏览功能
 	case "files_browse":
-		h.handleFilesBrowse(chatID)
+		h.handleFilesBrowseWithEdit(chatID, callback.Message.MessageID)
 	case "files_search":
-		h.handleFilesSearch(chatID)
+		h.handleFilesSearchWithEdit(chatID, callback.Message.MessageID)
 	case "files_info":
-		h.handleFilesInfo(chatID)
+		h.handleFilesInfoWithEdit(chatID, callback.Message.MessageID)
 	case "files_download":
-		h.handleFilesDownload(chatID)
+		h.handleFilesDownloadWithEdit(chatID, callback.Message.MessageID)
 	case "api_alist_files":
-		h.handleAlistFiles(chatID)
+		h.handleAlistFilesWithEdit(chatID, callback.Message.MessageID)
 	// 系统管理功能
 	case "system_info":
-		h.handleSystemInfo(chatID)
+		h.handleSystemInfoWithEdit(chatID, callback.Message.MessageID)
 	// 状态监控功能
 	case "status_realtime":
-		h.handleStatusRealtime(chatID)
+		h.handleStatusRealtimeWithEdit(chatID, callback.Message.MessageID)
 	case "status_storage":
-		h.handleStatusStorage(chatID)
+		h.handleStatusStorageWithEdit(chatID, callback.Message.MessageID)
 	case "status_history":
-		h.handleStatusHistory(chatID)
+		h.handleStatusHistoryWithEdit(chatID, callback.Message.MessageID)
 	default:
 		h.sendMessage(chatID, "未知操作")
 	}
@@ -863,6 +962,27 @@ func (h *TelegramHandler) sendMessageWithKeyboard(chatID int64, text, parseMode 
 	}
 }
 
+// editMessageWithKeyboard 编辑消息并设置键盘
+func (h *TelegramHandler) editMessageWithKeyboard(chatID int64, messageID int, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) {
+	if h.telegramClient != nil && h.telegramClient.GetBot() != nil {
+		// 编辑消息文本
+		editMsg := tgbotapi.NewEditMessageText(chatID, messageID, text)
+		editMsg.ParseMode = parseMode
+		if _, err := h.telegramClient.GetBot().Send(editMsg); err != nil {
+			logger.Error("Failed to edit telegram message text:", err)
+			return
+		}
+		
+		// 编辑消息键盘
+		if keyboard != nil {
+			editKeyboard := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, *keyboard)
+			if _, err := h.telegramClient.GetBot().Send(editKeyboard); err != nil {
+				logger.Error("Failed to edit telegram message keyboard:", err)
+			}
+		}
+	}
+}
+
 func (h *TelegramHandler) escapeHTML(text string) string {
 	// 转义HTML特殊字符
 	replacer := strings.NewReplacer(
@@ -945,17 +1065,12 @@ func (h *TelegramHandler) handleDownloadDelete(chatID int64) {
 
 // 文件浏览功能处理
 func (h *TelegramHandler) handleFilesBrowse(chatID int64) {
-	message := "<b>浏览Alist目录</b>\n\n" +
-		"<b>目录浏览功能:</b>\n" +
-		"• 查看根目录文件列表\n" +
-		"• 导航到子目录\n" +
-		"• 查看文件详细信息\n\n" +
-		"正在获取根目录文件列表..."
-
-	h.sendMessageHTML(chatID, message)
-
-	// 获取Alist根目录文件
-	h.handleAlistFiles(chatID)
+	// 使用默认路径或根目录开始浏览
+	defaultPath := h.config.Alist.DefaultPath
+	if defaultPath == "" {
+		defaultPath = "/"
+	}
+	h.handleBrowseFiles(chatID, defaultPath, 1)
 }
 
 func (h *TelegramHandler) handleFilesSearch(chatID int64) {
@@ -1911,61 +2026,7 @@ func (h *TelegramHandler) handleHealthCheck(chatID int64) {
 
 // handleAlistFiles 处理获取Alist文件列表
 func (h *TelegramHandler) handleAlistFiles(chatID int64) {
-	h.sendMessage(chatID, "正在获取文件列表...")
-
-	// 使用配置的默认路径
-	path := h.config.Alist.DefaultPath
-	if path == "" {
-		path = "/"
-	}
-
-	// 获取文件列表
-	files, err := h.fileService.ListFilesSimple(path, 1, 20)
-	if err != nil {
-		h.sendMessage(chatID, fmt.Sprintf("获取文件列表失败: %v", err))
-		return
-	}
-
-	// 构建消息
-	message := fmt.Sprintf("<b>文件列表 (%s):</b>\n\n", h.escapeHTML(path))
-
-	videoCount := 0
-	dirCount := 0
-	otherCount := 0
-
-	for _, file := range files {
-		if file.IsDir {
-			dirCount++
-			message += fmt.Sprintf("[D] %s/\n", h.escapeHTML(file.Name))
-		} else if h.fileService.IsVideoFile(file.Name) {
-			videoCount++
-			sizeStr := h.formatFileSize(file.Size)
-			message += fmt.Sprintf("[V] %s (%s)\n", h.escapeHTML(file.Name), sizeStr)
-		} else {
-			otherCount++
-			sizeStr := h.formatFileSize(file.Size)
-			message += fmt.Sprintf("[F] %s (%s)\n", h.escapeHTML(file.Name), sizeStr)
-		}
-
-		if len(message) > 3500 {
-			message += "\n... 更多文件未显示"
-			break
-		}
-	}
-
-	// 添加统计
-	message += fmt.Sprintf("\n<b>统计:</b>\n")
-	if dirCount > 0 {
-		message += fmt.Sprintf("目录: %d\n", dirCount)
-	}
-	if videoCount > 0 {
-		message += fmt.Sprintf("视频: %d\n", videoCount)
-	}
-	if otherCount > 0 {
-		message += fmt.Sprintf("其他: %d\n", otherCount)
-	}
-
-	h.sendMessageHTML(chatID, message)
+	h.handleBrowseFiles(chatID, h.config.Alist.DefaultPath, 1)
 }
 
 // TimeParseResult 时间解析结果
@@ -2488,4 +2549,1517 @@ func (h *TelegramHandler) splitMessage(text string, maxLength int) []string {
 	}
 	
 	return messages
+}
+
+// handleBrowseFiles 处理文件浏览（支持分页和交互）
+func (h *TelegramHandler) handleBrowseFiles(chatID int64, path string, page int) {
+	h.handleBrowseFilesWithEdit(chatID, path, page, 0) // 0 表示发送新消息
+}
+
+// handleBrowseFilesWithEdit 处理文件浏览（支持编辑消息）
+func (h *TelegramHandler) handleBrowseFilesWithEdit(chatID int64, path string, page int, messageID int) {
+	if path == "" {
+		path = "/"
+	}
+	if page < 1 {
+		page = 1
+	}
+	
+	// 调试日志
+	logger.Info("浏览文件", "path", path, "page", page, "messageID", messageID)
+
+	// 只在发送新消息时显示提示
+	if messageID == 0 {
+		h.sendMessage(chatID, "正在获取文件列表...")
+	}
+
+	// 获取文件列表 (每页显示8个文件，为按钮布局留出空间)
+	files, err := h.fileService.ListFilesSimple(path, page, 8)
+	if err != nil {
+		h.sendMessage(chatID, fmt.Sprintf("获取文件列表失败: %v", err))
+		return
+	}
+
+	if len(files) == 0 {
+		h.sendMessage(chatID, "当前目录为空")
+		return
+	}
+
+	// 构建消息
+	message := fmt.Sprintf("<b>文件浏览器</b>\n\n")
+	message += fmt.Sprintf("<b>当前路径:</b> <code>%s</code>\n", h.escapeHTML(path))
+	message += fmt.Sprintf("<b>第 %d 页</b>\n\n", page)
+
+	// 构建内联键盘
+	var keyboard [][]tgbotapi.InlineKeyboardButton
+
+	for _, file := range files {
+		var prefix string
+		var callbackData string
+		
+		if file.IsDir {
+			prefix = "📁"
+			// 目录点击：进入子目录
+			// 构建完整路径
+			var fullPath string
+			if file.Path != "" {
+				fullPath = file.Path
+			} else {
+				if path == "/" {
+					fullPath = "/" + file.Name
+				} else {
+					fullPath = path + "/" + file.Name
+				}
+			}
+			callbackData = fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(fullPath), 1)
+		} else if h.fileService.IsVideoFile(file.Name) {
+			prefix = "🎬"
+			// 视频文件点击：显示操作菜单
+			// 构建完整路径
+			var fullPath string
+			if file.Path != "" {
+				fullPath = file.Path
+			} else {
+				if path == "/" {
+					fullPath = "/" + file.Name
+				} else {
+					fullPath = path + "/" + file.Name
+				}
+			}
+			callbackData = fmt.Sprintf("file_menu:%s", h.encodeFilePath(fullPath))
+		} else {
+			prefix = "📄"
+			// 其他文件点击：显示操作菜单
+			// 构建完整路径
+			var fullPath string
+			if file.Path != "" {
+				fullPath = file.Path
+			} else {
+				if path == "/" {
+					fullPath = "/" + file.Name
+				} else {
+					fullPath = path + "/" + file.Name
+				}
+			}
+			callbackData = fmt.Sprintf("file_menu:%s", h.encodeFilePath(fullPath))
+		}
+
+		fileName := file.Name
+		// 为文件列表中的快捷下载按钮预留空间，缩短显示长度
+		maxLen := 22
+		if !file.IsDir {
+			maxLen = 18 // 文件行需要预留下载按钮空间
+		}
+		if len(fileName) > maxLen {
+			fileName = fileName[:maxLen-3] + "..."
+		}
+
+		button := tgbotapi.NewInlineKeyboardButtonData(
+			fmt.Sprintf("%s %s", prefix, fileName), 
+			callbackData,
+		)
+		
+		// 为文件（非目录）添加快捷下载按钮
+		if !file.IsDir {
+			// 文件行：文件名按钮 + 快捷下载按钮
+			var fullPath string
+			if file.Path != "" {
+				fullPath = file.Path
+			} else {
+				if path == "/" {
+					fullPath = "/" + file.Name
+				} else {
+					fullPath = path + "/" + file.Name
+				}
+			}
+			
+			downloadButton := tgbotapi.NewInlineKeyboardButtonData(
+				"📥",
+				fmt.Sprintf("file_download:%s", h.encodeFilePath(fullPath)),
+			)
+			
+			keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button, downloadButton})
+		} else {
+			// 目录行：只有目录按钮，占满整行
+			keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})
+		}
+	}
+
+	// 添加导航按钮
+	navButtons := []tgbotapi.InlineKeyboardButton{}
+	
+	// 上一页按钮
+	if page > 1 {
+		navButtons = append(navButtons, tgbotapi.NewInlineKeyboardButtonData(
+			"< 上一页", 
+			fmt.Sprintf("browse_page:%s:%d", h.encodeFilePath(path), page-1),
+		))
+	}
+	
+	// 下一页按钮 (如果当前页满了，可能还有下一页)
+	if len(files) == 8 {
+		navButtons = append(navButtons, tgbotapi.NewInlineKeyboardButtonData(
+			"下一页 >", 
+			fmt.Sprintf("browse_page:%s:%d", h.encodeFilePath(path), page+1),
+		))
+	}
+	
+	if len(navButtons) > 0 {
+		keyboard = append(keyboard, navButtons)
+	}
+
+	// 添加功能按钮 - 第一行：下载和刷新
+	actionRow1 := []tgbotapi.InlineKeyboardButton{
+		tgbotapi.NewInlineKeyboardButtonData("📥 下载目录", fmt.Sprintf("download_dir:%s", h.encodeFilePath(path))),
+		tgbotapi.NewInlineKeyboardButtonData("🔄 刷新", fmt.Sprintf("browse_refresh:%s:%d", h.encodeFilePath(path), page)),
+	}
+	keyboard = append(keyboard, actionRow1)
+	
+	// 添加导航按钮 - 第二行：上级目录和主菜单
+	actionRow2 := []tgbotapi.InlineKeyboardButton{}
+	
+	// 返回上级目录按钮
+	if path != "/" {
+		parentPath := h.getParentPath(path)
+		actionRow2 = append(actionRow2, tgbotapi.NewInlineKeyboardButtonData(
+			"⬆️ 上级目录", 
+			fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(parentPath), 1),
+		))
+	}
+	
+	// 返回主菜单按钮
+	actionRow2 = append(actionRow2, tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"))
+	
+	if len(actionRow2) > 0 {
+		keyboard = append(keyboard, actionRow2)
+	}
+
+	inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(keyboard...)
+	
+	if messageID > 0 {
+		// 编辑现有消息
+		h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &inlineKeyboard)
+	} else {
+		// 发送新消息
+		h.sendMessageWithKeyboard(chatID, message, "HTML", &inlineKeyboard)
+	}
+}
+
+// encodeFilePath 编码文件路径用于callback data（使用缓存机制避免64字节限制）
+func (h *TelegramHandler) encodeFilePath(path string) string {
+	h.pathMutex.Lock()
+	defer h.pathMutex.Unlock()
+	
+	// 检查是否已有缓存
+	if token, exists := h.pathReverseCache[path]; exists {
+		return token
+	}
+	
+	// 创建新的短token
+	h.pathTokenCounter++
+	token := fmt.Sprintf("p%d", h.pathTokenCounter)
+	
+	// 存储到缓存
+	h.pathCache[token] = path
+	h.pathReverseCache[path] = token
+	
+	// 清理过期缓存（保持缓存大小合理）
+	if len(h.pathCache) > 1000 {
+		h.cleanupPathCache()
+	}
+	
+	return token
+}
+
+// decodeFilePath 解码文件路径
+func (h *TelegramHandler) decodeFilePath(encoded string) string {
+	h.pathMutex.RLock()
+	defer h.pathMutex.RUnlock()
+	
+	if path, exists := h.pathCache[encoded]; exists {
+		return path
+	}
+	
+	logger.Warn("路径token未找到:", "token", encoded)
+	return "/" // 未找到时返回根目录
+}
+
+// cleanupPathCache 清理路径缓存（保留最近的500个）
+func (h *TelegramHandler) cleanupPathCache() {
+	// 这是一个简单的清理策略，实际应用中可以使用LRU等更复杂的策略
+	if len(h.pathCache) <= 500 {
+		return
+	}
+	
+	// 清空缓存，重新开始（简单但有效）
+	h.pathCache = make(map[string]string)
+	h.pathReverseCache = make(map[string]string)
+	h.pathTokenCounter = 1
+	
+	logger.Info("路径缓存已清理")
+}
+
+// isDirectoryPath 判断路径是否为目录
+func (h *TelegramHandler) isDirectoryPath(path string) bool {
+	// 尝试获取文件列表来判断是否为目录
+	files, err := h.fileService.ListFilesSimple(path, 1, 1)
+	return err == nil && len(files) >= 0
+}
+
+// handleDownloadFileByPath 通过路径下载单个文件
+func (h *TelegramHandler) handleDownloadFileByPath(chatID int64, filePath string) {
+	h.sendMessage(chatID, "📥 正在通过/downloads命令创建文件下载任务...")
+
+	// 使用文件服务获取文件信息
+	parentDir := filepath.Dir(filePath)
+	fileName := filepath.Base(filePath)
+	
+	files, err := h.fileService.ListFilesSimple(parentDir, 1, 1000)
+	if err != nil {
+		h.sendMessage(chatID, fmt.Sprintf("❌ 获取文件信息失败: %v", err))
+		return
+	}
+
+	// 查找目标文件
+	var targetFile *alist.FileItem
+	for _, file := range files {
+		if file.Name == fileName {
+			targetFile = &file
+			break
+		}
+	}
+
+	if targetFile == nil {
+		h.sendMessage(chatID, "❌ 文件未找到")
+		return
+	}
+
+	// 使用文件服务的智能分类功能
+	fileInfo, err := h.fileService.GetFilesFromPath(parentDir, false)
+	if err != nil {
+		h.sendMessage(chatID, fmt.Sprintf("❌ 获取文件详细信息失败: %v", err))
+		return
+	}
+
+	// 找到对应的文件信息
+	var targetFileInfo *services.FileInfo
+	for _, info := range fileInfo {
+		if info.Name == fileName {
+			targetFileInfo = &info
+			break
+		}
+	}
+
+	if targetFileInfo == nil {
+		h.sendMessage(chatID, "❌ 获取文件分类信息失败")
+		return
+	}
+
+	// 创建下载任务
+	download, err := h.downloadService.CreateDownload(targetFileInfo.InternalURL, targetFileInfo.Name, targetFileInfo.DownloadPath, nil)
+	if err != nil {
+		h.sendMessage(chatID, fmt.Sprintf("❌ 创建下载任务失败: %v", err))
+		return
+	}
+
+	// 发送成功消息
+	message := fmt.Sprintf(
+		"✅ <b>文件下载任务已创建</b>\n\n"+
+			"<b>文件:</b> <code>%s</code>\n"+
+			"<b>路径:</b> <code>%s</code>\n"+
+			"<b>下载路径:</b> <code>%s</code>\n"+
+			"<b>任务ID:</b> <code>%s</code>\n"+
+			"<b>大小:</b> %s",
+		h.escapeHTML(targetFileInfo.Name),
+		h.escapeHTML(filePath),
+		h.escapeHTML(targetFileInfo.DownloadPath),
+		h.escapeHTML(download.ID),
+		h.formatFileSize(targetFileInfo.Size))
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📥 下载管理", "download_list"),
+			tgbotapi.NewInlineKeyboardButtonData("📁 返回目录", fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(parentDir), 1)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"),
+		),
+	)
+
+	h.sendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+}
+
+// handleDownloadDirectoryByPath 通过路径下载目录
+func (h *TelegramHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string) {
+	h.sendMessage(chatID, "📂 正在通过/downloads命令创建目录下载任务...")
+
+	// 使用文件服务获取目录中的所有文件
+	files, err := h.fileService.GetFilesFromPath(dirPath, true)
+	if err != nil {
+		h.sendMessage(chatID, fmt.Sprintf("❌ 扫描目录失败: %v", err))
+		return
+	}
+
+	if len(files) == 0 {
+		h.sendMessage(chatID, "📁 目录为空，没有可下载的文件")
+		return
+	}
+
+	// 过滤出视频文件
+	var videoFiles []services.FileInfo
+	for _, file := range files {
+		if h.fileService.IsVideoFile(file.Name) {
+			videoFiles = append(videoFiles, file)
+		}
+	}
+
+	if len(videoFiles) == 0 {
+		h.sendMessage(chatID, "🎬 目录中没有找到视频文件")
+		return
+	}
+
+	// 创建下载任务
+	successCount := 0
+	failedCount := 0
+	var failedFiles []string
+
+	for _, file := range videoFiles {
+		download, err := h.downloadService.CreateDownload(file.InternalURL, file.Name, file.DownloadPath, nil)
+		if err != nil {
+			failedCount++
+			failedFiles = append(failedFiles, file.Name)
+			logger.Error("通过/downloads命令创建下载任务失败", "file", file.Name, "error", err)
+			continue
+		}
+		
+		successCount++
+		logger.Info("通过/downloads命令创建下载任务成功", "file", file.Name, "gid", download.ID)
+	}
+
+	// 发送结果消息
+	resultMessage := fmt.Sprintf(
+		"📊 <b>目录下载任务创建完成</b>\n\n"+
+			"<b>目录:</b> <code>%s</code>\n"+
+			"<b>扫描文件:</b> %d 个\n"+
+			"<b>视频文件:</b> %d 个\n"+
+			"<b>成功创建:</b> %d 个任务\n"+
+			"<b>失败:</b> %d 个任务\n\n",
+		h.escapeHTML(dirPath),
+		len(files),
+		len(videoFiles),
+		successCount,
+		failedCount)
+
+	if failedCount > 0 && len(failedFiles) <= 3 {
+		resultMessage += "<b>失败的文件:</b>\n"
+		for _, fileName := range failedFiles {
+			resultMessage += fmt.Sprintf("• <code>%s</code>\n", h.escapeHTML(fileName))
+		}
+	} else if failedCount > 3 {
+		resultMessage += fmt.Sprintf("<b>有 %d 个文件下载失败</b>\n", failedCount)
+	}
+
+	if successCount > 0 {
+		resultMessage += "\n✅ 所有任务已使用自动路径分类功能\n📥 可通过「下载管理」查看任务状态"
+	}
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📥 下载管理", "download_list"),
+			tgbotapi.NewInlineKeyboardButtonData("📁 返回目录", fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(dirPath), 1)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"),
+		),
+	)
+
+	h.sendMessageWithKeyboard(chatID, resultMessage, "HTML", &keyboard)
+}
+
+// getParentPath 获取父目录路径
+func (h *TelegramHandler) getParentPath(path string) string {
+	if path == "/" {
+		return "/"
+	}
+	parts := strings.Split(path, "/")
+	if len(parts) <= 2 {
+		return "/"
+	}
+	return strings.Join(parts[:len(parts)-1], "/")
+}
+
+// handleFileMenu 处理文件操作菜单
+func (h *TelegramHandler) handleFileMenu(chatID int64, filePath string) {
+	// 获取文件信息
+	fileName := filepath.Base(filePath)
+	fileExt := strings.ToLower(filepath.Ext(fileName))
+	
+	// 根据文件类型选择图标
+	var fileIcon string
+	if h.fileService.IsVideoFile(fileName) {
+		fileIcon = "🎬"
+	} else {
+		fileIcon = "📄"
+	}
+	
+	message := fmt.Sprintf("%s <b>文件操作</b>\n\n", fileIcon)
+	message += fmt.Sprintf("<b>文件:</b> <code>%s</code>\n", h.escapeHTML(fileName))
+	message += fmt.Sprintf("<b>路径:</b> <code>%s</code>\n", h.escapeHTML(filepath.Dir(filePath)))
+	if fileExt != "" {
+		message += fmt.Sprintf("<b>类型:</b> <code>%s</code>\n", strings.ToUpper(fileExt[1:]))
+	}
+	message += "\n请选择操作："
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📥 立即下载", fmt.Sprintf("file_download:%s", h.encodeFilePath(filePath))),
+			tgbotapi.NewInlineKeyboardButtonData("ℹ️ 文件信息", fmt.Sprintf("file_info:%s", h.encodeFilePath(filePath))),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🔗 获取链接", fmt.Sprintf("file_link:%s", h.encodeFilePath(filePath))),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📁 返回目录", fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(h.getParentPath(filePath)), 1)),
+			tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"),
+		),
+	)
+
+	h.sendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+}
+
+// handleFileDownload 处理文件下载（使用/downloads命令机制）
+func (h *TelegramHandler) handleFileDownload(chatID int64, filePath string) {
+	// 直接调用新的基于/downloads命令的文件下载处理函数
+	h.handleDownloadFileByPath(chatID, filePath)
+}
+
+// handleDownloadDirectory 处理目录下载（使用/downloads命令机制）
+func (h *TelegramHandler) handleDownloadDirectory(chatID int64, dirPath string) {
+	// 直接调用新的基于/downloads命令的目录下载处理函数
+	h.handleDownloadDirectoryByPath(chatID, dirPath)
+}
+
+// handleFileInfo 处理文件信息查看
+func (h *TelegramHandler) handleFileInfo(chatID int64, filePath string) {
+	h.sendMessage(chatID, "正在获取文件信息...")
+
+	// 获取文件信息
+	fileInfo, err := h.fileService.ListFilesSimple(filepath.Dir(filePath), 1, 1000)
+	if err != nil {
+		h.sendMessage(chatID, fmt.Sprintf("获取文件信息失败: %v", err))
+		return
+	}
+
+	// 查找对应的文件
+	var targetFile *alist.FileItem
+	fileName := filepath.Base(filePath)
+	for _, file := range fileInfo {
+		if file.Name == fileName {
+			targetFile = &file
+			break
+		}
+	}
+
+	if targetFile == nil {
+		h.sendMessage(chatID, "文件未找到")
+		return
+	}
+
+	// 解析修改时间
+	modTime, _ := time.Parse(time.RFC3339, targetFile.Modified)
+
+	// 构建信息消息
+	message := fmt.Sprintf("<b>文件信息</b>\n\n"+
+		"<b>名称:</b> <code>%s</code>\n"+
+		"<b>路径:</b> <code>%s</code>\n"+
+		"<b>大小:</b> %s\n"+
+		"<b>修改时间:</b> %s\n"+
+		"<b>类型:</b> %s",
+		h.escapeHTML(targetFile.Name),
+		h.escapeHTML(filePath),
+		h.formatFileSize(targetFile.Size),
+		modTime.Format("2006-01-02 15:04:05"),
+		func() string {
+			if h.fileService.IsVideoFile(targetFile.Name) {
+				return "视频文件"
+			}
+			return "其他文件"
+		}())
+
+	// 添加返回按钮
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回", fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(filepath.Dir(filePath)), 1)),
+		),
+	)
+
+	h.sendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+}
+
+// handleFileLink 处理获取文件链接
+func (h *TelegramHandler) handleFileLink(chatID int64, filePath string) {
+	h.sendMessage(chatID, "正在获取文件链接...")
+
+	// 获取文件下载链接
+	downloadURL := h.fileService.GetFileDownloadURL(filepath.Dir(filePath), filepath.Base(filePath))
+
+	// 构建消息
+	message := fmt.Sprintf("<b>文件链接</b>\n\n"+
+		"<b>文件:</b> <code>%s</code>\n\n"+
+		"<b>下载链接:</b>\n<code>%s</code>",
+		h.escapeHTML(filepath.Base(filePath)),
+		h.escapeHTML(downloadURL))
+
+	// 添加返回按钮
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回", fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(filepath.Dir(filePath)), 1)),
+		),
+	)
+
+	h.sendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+}
+
+// handleFileLinkWithEdit 处理获取文件链接（支持消息编辑）
+func (h *TelegramHandler) handleFileLinkWithEdit(chatID int64, filePath string, messageID int) {
+	// 获取文件下载链接
+	downloadURL := h.fileService.GetFileDownloadURL(filepath.Dir(filePath), filepath.Base(filePath))
+
+	// 构建消息
+	message := fmt.Sprintf("<b>文件链接</b>\n\n"+
+		"<b>文件:</b> <code>%s</code>\n\n"+
+		"<b>下载链接:</b>\n<code>%s</code>",
+		h.escapeHTML(filepath.Base(filePath)),
+		h.escapeHTML(downloadURL))
+
+	// 添加返回按钮
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回", fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(filepath.Dir(filePath)), 1)),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// ===== 主菜单和子菜单的编辑版本函数 =====
+
+// handleStartWithEdit 处理开始命令（支持消息编辑）
+func (h *TelegramHandler) handleStartWithEdit(chatID int64, messageID int) {
+	message := "<b>欢迎使用 Alist-Aria2 下载管理器</b>\n\n" +
+		"<b>功能模块:</b>\n" +
+		"• 下载管理 - 创建、监控、控制下载任务\n" +
+		"• 文件浏览 - 浏览和搜索Alist文件\n" +
+		"• 系统管理 - 登录、健康检查、设置\n" +
+		"• 状态监控 - 实时状态和下载统计\n\n" +
+		"选择功能模块开始使用："
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("下载管理", "menu_download"),
+			tgbotapi.NewInlineKeyboardButtonData("文件浏览", "menu_files"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("系统管理", "menu_system"),
+			tgbotapi.NewInlineKeyboardButtonData("状态监控", "menu_status"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("帮助说明", "cmd_help"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleHelpWithEdit 处理帮助命令（支持消息编辑）
+func (h *TelegramHandler) handleHelpWithEdit(chatID int64, messageID int) {
+	message := "<b>使用帮助</b>\n\n" +
+		"<b>快捷按钮:</b>\n" +
+		"使用下方键盘按钮进行常用操作\n\n" +
+		"<b>文件操作命令:</b>\n" +
+		"/list [path] - 列出指定路径的文件\n" +
+		"/cancel &lt;id&gt; - 取消下载任务\n\n" +
+		"<b>下载命令（支持多种格式）:</b>\n" +
+		"• <code>/download</code> - 预览最近24小时的视频文件（使用 <code>/download confirm</code> 开始下载）\n" +
+		"• <code>/download 48</code> - 预览最近48小时的视频文件（使用 <code>/download confirm 48</code> 下载）\n" +
+		"• <code>/download 2025-09-01 2025-09-26</code> - 预览指定日期范围的文件\n" +
+		"• <code>/download confirm 2025-09-01 2025-09-26</code> - 下载指定日期范围的文件\n" +
+		"• <code>/download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z</code> - 预览精确时间范围（加 <code>confirm</code> 下载）\n" +
+		"• <code>/download https://example.com/file.zip</code> - 直接下载指定URL文件\n\n" +
+		"<b>时间格式说明:</b>\n" +
+		"• 小时数：1-8760（最大一年）\n" +
+		"• 日期格式：YYYY-MM-DD\n" +
+		"• 时间格式：ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)\n" +
+		"• 底部按钮「预览文件」可快速选择 1/3/6 小时\n\n" +
+		"<b>定时任务命令:</b>\n" +
+		"/tasks - 查看我的定时任务\n" +
+		"/quicktask &lt;类型&gt; [路径] - 快捷创建任务\n" +
+		"/addtask - 自定义任务（查看详细帮助）\n" +
+		"/runtask &lt;id&gt; - 立即运行任务\n" +
+		"/deltask &lt;id&gt; - 删除任务\n\n" +
+		"<b>快捷任务类型:</b>\n" +
+		"• <code>daily</code> - 每日下载（24小时内文件）\n" +
+		"• <code>recent</code> - 频繁同步（2小时内文件）\n" +
+		"• <code>weekly</code> - 每周汇总（7天内文件）\n" +
+		"• <code>realtime</code> - 实时同步（1小时内文件）"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("系统状态", "cmd_status"),
+			tgbotapi.NewInlineKeyboardButtonData("管理面板", "cmd_manage"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleStatusWithEdit 处理状态命令（支持消息编辑）
+func (h *TelegramHandler) handleStatusWithEdit(chatID int64, messageID int) {
+	status, err := h.downloadService.GetSystemStatus()
+	if err != nil {
+		message := "获取系统状态失败: " + err.Error()
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+			),
+		)
+		h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+		return
+	}
+
+	aria2Info := status["aria2"].(map[string]interface{})
+	telegramInfo := status["telegram"].(map[string]interface{})
+	serverInfo := status["server"].(map[string]interface{})
+
+	message := fmt.Sprintf("<b>系统状态</b>\n\n"+
+		"<b>Telegram Bot:</b> %s\n"+
+		"<b>Aria2:</b> %s (版本: %s)\n"+
+		"<b>服务器:</b> 运行中 (端口: %s, 模式: %s)",
+		telegramInfo["status"],
+		aria2Info["status"],
+		aria2Info["version"],
+		serverInfo["port"],
+		serverInfo["mode"])
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("刷新状态", "cmd_status"),
+			tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleManageWithEdit 处理管理面板（支持消息编辑）
+func (h *TelegramHandler) handleManageWithEdit(chatID int64, messageID int) {
+	message := "<b>管理面板</b>\n\n请选择要执行的操作："
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("定时任务", "cmd_tasks"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("查看下载状态", "api_download_status"),
+			tgbotapi.NewInlineKeyboardButtonData("连接Alist", "api_alist_login"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("系统健康检查", "api_health_check"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// ===== 下载管理菜单的编辑版本函数 =====
+
+// handleDownloadMenuWithEdit 处理下载管理菜单（支持消息编辑）
+func (h *TelegramHandler) handleDownloadMenuWithEdit(chatID int64, messageID int) {
+	message := "<b>下载管理中心</b>\n\n" +
+		"<b>可用功能:</b>\n" +
+		"• 查看所有下载任务\n" +
+		"• 创建新的下载任务\n" +
+		"• 暂停/恢复下载\n" +
+		"• 删除下载任务\n" +
+		"• 昨日文件快速下载\n\n" +
+		"选择操作："
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("下载列表", "download_list"),
+			tgbotapi.NewInlineKeyboardButtonData("创建下载", "download_create"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("暂停/恢复", "download_control"),
+			tgbotapi.NewInlineKeyboardButtonData("删除任务", "download_delete"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("定时任务", "cmd_tasks"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleDownloadCreateWithEdit 处理创建下载（支持消息编辑）
+func (h *TelegramHandler) handleDownloadCreateWithEdit(chatID int64, messageID int) {
+	message := "<b>创建新下载任务</b>\n\n" +
+		"<b>使用方法:</b>\n" +
+		"1. 直接发送文件URL\n" +
+		"2. 或点击快速创建按钮\n\n" +
+		"<b>支持的下载方式:</b>\n" +
+		"• HTTP/HTTPS 直链下载\n" +
+		"• 磁力链接下载\n" +
+		"• BT种子下载\n\n" +
+		"<b>请发送下载链接或选择快速操作:</b>"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("定时任务", "cmd_tasks"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回下载管理", "menu_download"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleDownloadControlWithEdit 处理下载控制（支持消息编辑）
+func (h *TelegramHandler) handleDownloadControlWithEdit(chatID int64, messageID int) {
+	// 先获取下载列表数据
+	downloads, err := h.downloadService.ListDownloads()
+	if err != nil {
+		message := "获取下载状态失败: " + err.Error()
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("返回下载管理", "menu_download"),
+			),
+		)
+		h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+		return
+	}
+
+	// 构建状态信息
+	var activeCount, waitingCount, stoppedCount int
+	if activeVal, ok := downloads["active"]; ok {
+		if active, ok := activeVal.([]aria2.StatusResult); ok {
+			activeCount = len(active)
+		}
+	}
+	if waitingVal, ok := downloads["waiting"]; ok {
+		if waiting, ok := waitingVal.([]aria2.StatusResult); ok {
+			waitingCount = len(waiting)
+		}
+	}
+	if stoppedVal, ok := downloads["stopped"]; ok {
+		if stopped, ok := stoppedVal.([]aria2.StatusResult); ok {
+			stoppedCount = len(stopped)
+		}
+	}
+
+	message := fmt.Sprintf("<b>下载控制面板</b>\n\n"+
+		"<b>当前状态:</b>\n"+
+		"• 活动中: %d\n"+
+		"• 等待中: %d\n"+
+		"• 已停止: %d\n\n"+
+		"<b>操作说明:</b>\n"+
+		"• 使用 /cancel &lt;GID&gt; 取消下载\n"+
+		"• GID 是下载任务的唯一标识符\n"+
+		"• 可以从下载列表中获取 GID",
+		activeCount, waitingCount, stoppedCount)
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("查看下载列表", "download_list"),
+			tgbotapi.NewInlineKeyboardButtonData("刷新状态", "download_control"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回下载管理", "menu_download"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleDownloadDeleteWithEdit 处理删除下载（支持消息编辑）
+func (h *TelegramHandler) handleDownloadDeleteWithEdit(chatID int64, messageID int) {
+	message := "<b>删除下载任务</b>\n\n" +
+		"<b>注意:</b> 删除操作将无法撤销\n\n" +
+		"<b>操作说明:</b>\n" +
+		"• 使用 /cancel &lt;GID&gt; 删除指定任务\n" +
+		"• 先查看下载列表获取任务 GID\n" +
+		"• 支持删除已完成和失败的任务"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("查看下载列表", "download_list"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回下载管理", "menu_download"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleDownloadStatusAPIWithEdit 处理下载状态API（支持消息编辑）
+func (h *TelegramHandler) handleDownloadStatusAPIWithEdit(chatID int64, messageID int) {
+	downloads, err := h.downloadService.ListDownloads()
+	if err != nil {
+		message := "获取下载状态失败: " + err.Error()
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("重试", "api_download_status"),
+				tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+			),
+		)
+		h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+		return
+	}
+
+	// 安全的类型断言，处理 []aria2.StatusResult 类型
+	var activeCount, waitingCount, stoppedCount int
+
+	// 处理active下载
+	if activeVal, ok := downloads["active"]; ok {
+		if active, ok := activeVal.([]aria2.StatusResult); ok {
+			activeCount = len(active)
+		}
+	}
+
+	// 处理waiting下载
+	if waitingVal, ok := downloads["waiting"]; ok {
+		if waiting, ok := waitingVal.([]aria2.StatusResult); ok {
+			waitingCount = len(waiting)
+		}
+	}
+
+	// 处理stopped下载
+	if stoppedVal, ok := downloads["stopped"]; ok {
+		if stopped, ok := stoppedVal.([]aria2.StatusResult); ok {
+			stoppedCount = len(stopped)
+		}
+	}
+
+	totalCount := downloads["total_count"].(int)
+
+	message := fmt.Sprintf("<b>下载状态总览</b>\n\n"+
+		"<b>统计:</b>\n"+
+		"• 总任务数: %d\n"+
+		"• 活动中: %d\n"+
+		"• 等待中: %d\n"+
+		"• 已停止: %d\n\n",
+		totalCount, activeCount, waitingCount, stoppedCount)
+
+	// 显示活动任务
+	if activeVal, ok := downloads["active"]; ok {
+		if active, ok := activeVal.([]aria2.StatusResult); ok && len(active) > 0 {
+			message += "<b>活动任务:</b>\n"
+			for i, task := range active {
+				if i >= 3 { // 只显示前3个
+					message += fmt.Sprintf("• ... 还有 %d 个任务\n", len(active)-3)
+					break
+				}
+
+				gid := task.GID
+				if len(gid) > 8 {
+					gid = gid[:8] + "..."
+				}
+
+				// 获取文件名
+				filename := "未知文件"
+				if len(task.Files) > 0 && task.Files[0].Path != "" {
+					path := task.Files[0].Path
+					if idx := strings.LastIndex(path, "/"); idx != -1 {
+						filename = path[idx+1:]
+					} else {
+						filename = path
+					}
+					if len(filename) > 30 {
+						filename = filename[:30] + "..."
+					}
+				}
+
+				message += fmt.Sprintf("• %s - %s\n", gid, h.escapeHTML(filename))
+			}
+			message += "\n"
+		}
+	}
+
+	// 显示等待任务数量
+	if waitingVal, ok := downloads["waiting"]; ok {
+		if waiting, ok := waitingVal.([]aria2.StatusResult); ok && len(waiting) > 0 {
+			message += fmt.Sprintf("<b>等待任务:</b> %d 个\n\n", len(waiting))
+		}
+	}
+
+	// 显示停止任务数量
+	if stoppedVal, ok := downloads["stopped"]; ok {
+		if stopped, ok := stoppedVal.([]aria2.StatusResult); ok && len(stopped) > 0 {
+			message += fmt.Sprintf("<b>已停止任务:</b> %d 个\n", len(stopped))
+		}
+	}
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("刷新状态", "api_download_status"),
+			tgbotapi.NewInlineKeyboardButtonData("下载管理", "menu_download"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+
+// ===== 剩余缺失的编辑版本函数 =====
+
+// handleFileMenuWithEdit 处理文件操作菜单（支持消息编辑）
+func (h *TelegramHandler) handleFileMenuWithEdit(chatID int64, filePath string, messageID int) {
+	// 获取文件信息
+	fileName := filepath.Base(filePath)
+	fileExt := strings.ToLower(filepath.Ext(fileName))
+	
+	// 根据文件类型选择图标
+	var fileIcon string
+	if h.fileService.IsVideoFile(fileName) {
+		fileIcon = "🎬"
+	} else {
+		fileIcon = "📄"
+	}
+	
+	message := fmt.Sprintf("%s <b>文件操作</b>\n\n", fileIcon)
+	message += fmt.Sprintf("<b>文件:</b> <code>%s</code>\n", h.escapeHTML(fileName))
+	message += fmt.Sprintf("<b>路径:</b> <code>%s</code>\n", h.escapeHTML(filepath.Dir(filePath)))
+	if fileExt != "" {
+		message += fmt.Sprintf("<b>类型:</b> <code>%s</code>\n", strings.ToUpper(fileExt[1:]))
+	}
+	message += "\n请选择操作："
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📥 立即下载", fmt.Sprintf("file_download:%s", h.encodeFilePath(filePath))),
+			tgbotapi.NewInlineKeyboardButtonData("ℹ️ 文件信息", fmt.Sprintf("file_info:%s", h.encodeFilePath(filePath))),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🔗 获取链接", fmt.Sprintf("file_link:%s", h.encodeFilePath(filePath))),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📁 返回目录", fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(h.getParentPath(filePath)), 1)),
+			tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleFileInfoWithEdit 处理文件信息查看（支持消息编辑）
+func (h *TelegramHandler) handleFileInfoWithEdit(chatID int64, filePath string, messageID int) {
+	// 获取文件信息
+	fileInfo, err := h.fileService.ListFilesSimple(filepath.Dir(filePath), 1, 1000)
+	if err != nil {
+		message := "获取文件信息失败: " + err.Error()
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("返回", fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(filepath.Dir(filePath)), 1)),
+			),
+		)
+		h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+		return
+	}
+
+	// 查找对应的文件
+	var targetFile *alist.FileItem
+	fileName := filepath.Base(filePath)
+	for _, file := range fileInfo {
+		if file.Name == fileName {
+			targetFile = &file
+			break
+		}
+	}
+
+	if targetFile == nil {
+		message := "文件未找到"
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("返回", fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(filepath.Dir(filePath)), 1)),
+			),
+		)
+		h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+		return
+	}
+
+	// 解析修改时间
+	modTime, _ := time.Parse(time.RFC3339, targetFile.Modified)
+
+	// 构建信息消息
+	message := fmt.Sprintf("<b>文件信息</b>\n\n"+
+		"<b>名称:</b> <code>%s</code>\n"+
+		"<b>路径:</b> <code>%s</code>\n"+
+		"<b>大小:</b> %s\n"+
+		"<b>修改时间:</b> %s\n"+
+		"<b>类型:</b> %s",
+		h.escapeHTML(targetFile.Name),
+		h.escapeHTML(filePath),
+		h.formatFileSize(targetFile.Size),
+		modTime.Format("2006-01-02 15:04:05"),
+		func() string {
+			if h.fileService.IsVideoFile(targetFile.Name) {
+				return "视频文件"
+			}
+			return "其他文件"
+		}())
+
+	// 添加返回按钮
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回", fmt.Sprintf("browse_dir:%s:%d", h.encodeFilePath(filepath.Dir(filePath)), 1)),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// ===== 剩余的编辑版本函数 =====
+
+// handleFilesMenuWithEdit 处理文件浏览菜单（支持消息编辑）
+func (h *TelegramHandler) handleFilesMenuWithEdit(chatID int64, messageID int) {
+	message := "<b>文件浏览中心</b>\n\n" +
+		"<b>可用功能:</b>\n" +
+		"• 浏览Alist目录结构\n" +
+		"• 搜索和查找文件\n" +
+		"• 查看文件详细信息\n" +
+		"• 从指定路径下载\n" +
+		"• 批量下载操作\n\n" +
+		"选择操作："
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("浏览目录", "files_browse"),
+			tgbotapi.NewInlineKeyboardButtonData("搜索文件", "files_search"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("文件信息", "files_info"),
+			tgbotapi.NewInlineKeyboardButtonData("路径下载", "files_download"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Alist状态", "api_alist_files"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleSystemMenuWithEdit 处理系统管理菜单（支持消息编辑）
+func (h *TelegramHandler) handleSystemMenuWithEdit(chatID int64, messageID int) {
+	message := "<b>系统管理中心</b>\n\n" +
+		"<b>可用功能:</b>\n" +
+		"• Alist服务登录\n" +
+		"• 系统健康检查\n" +
+		"• 服务状态监控\n" +
+		"• 配置信息查看\n\n" +
+		"选择操作："
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("Alist登录", "api_alist_login"),
+			tgbotapi.NewInlineKeyboardButtonData("健康检查", "api_health_check"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("服务状态", "cmd_status"),
+			tgbotapi.NewInlineKeyboardButtonData("系统信息", "system_info"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleStatusMenuWithEdit 处理状态监控菜单（支持消息编辑）
+func (h *TelegramHandler) handleStatusMenuWithEdit(chatID int64, messageID int) {
+	message := "<b>状态监控中心</b>\n\n" +
+		"<b>可用功能:</b>\n" +
+		"• 实时下载状态\n" +
+		"• 系统运行状态\n" +
+		"• 存储空间监控\n" +
+		"• 历史统计数据\n\n" +
+		"选择操作："
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("实时状态", "status_realtime"),
+			tgbotapi.NewInlineKeyboardButtonData("下载统计", "api_download_status"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData(" 存储状态", "status_storage"),
+			tgbotapi.NewInlineKeyboardButtonData(" 历史数据", "status_history"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("刷新状态", "cmd_status"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleTasksWithEdit 处理查看定时任务（支持消息编辑）
+func (h *TelegramHandler) handleTasksWithEdit(chatID int64, userID int64, messageID int) {
+	if h.schedulerService == nil {
+		message := "定时任务服务未启用"
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+			),
+		)
+		h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+		return
+	}
+
+	tasks, err := h.schedulerService.GetUserTasks(userID)
+	if err != nil {
+		message := fmt.Sprintf("获取任务失败: %v", err)
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+			),
+		)
+		h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+		return
+	}
+
+	if len(tasks) == 0 {
+		message := "<b>定时任务管理</b>\n\n" +
+			"您还没有创建任何定时任务\n\n" +
+			"<b>添加任务示例:</b>\n" +
+			"<code>/addtask 下载昨日视频 0 2 * * * /movies 24 true</code>\n" +
+			"格式: /addtask 名称 cron表达式 路径 小时数 是否只视频\n\n" +
+			"<b>Cron表达式说明:</b>\n" +
+			"• <code>0 2 * * *</code> - 每天凌晨2点\n" +
+			"• <code>0 */6 * * *</code> - 每6小时\n" +
+			"• <code>0 0 * * 1</code> - 每周一凌晨"
+		
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("返回管理面板", "cmd_manage"),
+			),
+		)
+		h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+		return
+	}
+
+	message := fmt.Sprintf("<b>您的定时任务 (%d个)</b>\n\n", len(tasks))
+
+	for i, task := range tasks {
+		status := "禁用"
+		if task.Enabled {
+			status = "启用"
+		}
+
+		// 计算时间描述
+		timeDesc := fmt.Sprintf("%d小时", task.HoursAgo)
+		if task.HoursAgo == 24 {
+			timeDesc = "1天"
+		} else if task.HoursAgo == 48 {
+			timeDesc = "2天"
+		} else if task.HoursAgo == 72 {
+			timeDesc = "3天"
+		} else if task.HoursAgo == 168 {
+			timeDesc = "7天"
+		} else if task.HoursAgo == 720 {
+			timeDesc = "30天"
+		}
+
+		message += fmt.Sprintf(
+			"<b>%d. %s</b> %s\n"+
+				"   ID: <code>%s</code>\n"+
+				"   Cron: <code>%s</code>\n"+
+				"   路径: <code>%s</code>\n"+
+				"   时间范围: 最近<b>%s</b>内修改的文件\n"+
+				"   文件类型: %s\n",
+			i+1, h.escapeHTML(task.Name), status,
+			task.ID[:8], task.Cron, task.Path,
+			timeDesc,
+			func() string {
+				if task.VideoOnly {
+					return "仅视频"
+				}
+				return "所有文件"
+			}(),
+		)
+
+		if task.LastRunAt != nil {
+			message += fmt.Sprintf("   上次: %s\n", task.LastRunAt.Format("01-02 15:04"))
+		}
+		if task.NextRunAt != nil {
+			message += fmt.Sprintf("   下次: %s\n", task.NextRunAt.Format("01-02 15:04"))
+		}
+		message += "\n"
+	}
+
+	message += "<b>命令:</b>\n" +
+		"• 立即运行: <code>/runtask ID</code>\n" +
+		"• 删除任务: <code>/deltask ID</code>\n" +
+		"• 添加任务: <code>/addtask</code> 查看帮助"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("刷新任务", "cmd_tasks"),
+			tgbotapi.NewInlineKeyboardButtonData("返回管理面板", "cmd_manage"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleAlistLoginWithEdit 处理Alist登录（支持消息编辑）
+func (h *TelegramHandler) handleAlistLoginWithEdit(chatID int64, messageID int) {
+	message := "正在登录Alist..."
+	keyboard := tgbotapi.NewInlineKeyboardMarkup()
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+
+	// 创建Alist客户端
+	alistClient := alist.NewClient(
+		h.config.Alist.BaseURL,
+		h.config.Alist.Username,
+		h.config.Alist.Password,
+	)
+
+	// 执行登录
+	err := alistClient.Login()
+	
+	var finalMessage string
+	if err != nil {
+		finalMessage = fmt.Sprintf("❌ <b>Alist登录失败</b>\n\n错误: %s", h.escapeHTML(err.Error()))
+	} else {
+		finalMessage = "✅ <b>Alist登录成功</b>\n\n连接已建立，可以正常使用文件管理功能。"
+	}
+
+	finalKeyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回系统管理", "menu_system"),
+			tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, finalMessage, "HTML", &finalKeyboard)
+}
+
+// handleHealthCheckWithEdit 处理健康检查（支持消息编辑）
+func (h *TelegramHandler) handleHealthCheckWithEdit(chatID int64, messageID int) {
+	message := "<b>系统健康检查</b>\n\n"
+	message += fmt.Sprintf("服务状态: 正常\n")
+	message += fmt.Sprintf("端口: %s\n", h.config.Server.Port)
+	message += fmt.Sprintf("模式: %s\n", h.config.Server.Mode)
+	message += fmt.Sprintf("\nAlist配置:\n")
+	message += fmt.Sprintf("地址: %s\n", h.config.Alist.BaseURL)
+	message += fmt.Sprintf("默认路径: %s\n", h.config.Alist.DefaultPath)
+	message += fmt.Sprintf("\nAria2配置:\n")
+	message += fmt.Sprintf("RPC地址: %s\n", h.config.Aria2.RpcURL)
+	message += fmt.Sprintf("下载目录: %s\n", h.config.Aria2.DownloadDir)
+
+	// 添加系统运行信息
+	message += fmt.Sprintf("\n系统信息:\n")
+	message += fmt.Sprintf("运行时间: %s\n", runtime.GOOS)
+	message += fmt.Sprintf("架构: %s\n", runtime.GOARCH)
+	message += fmt.Sprintf("Go版本: %s\n", runtime.Version())
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("刷新检查", "api_health_check"),
+			tgbotapi.NewInlineKeyboardButtonData("系统状态", "cmd_status"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回系统管理", "menu_system"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleFilesBrowseWithEdit 处理文件浏览（支持消息编辑）
+func (h *TelegramHandler) handleFilesBrowseWithEdit(chatID int64, messageID int) {
+	// 使用默认路径或根目录开始浏览
+	defaultPath := h.config.Alist.DefaultPath
+	if defaultPath == "" {
+		defaultPath = "/"
+	}
+	h.handleBrowseFilesWithEdit(chatID, defaultPath, 1, messageID)
+}
+
+// handleFilesSearchWithEdit 处理文件搜索（支持消息编辑）
+func (h *TelegramHandler) handleFilesSearchWithEdit(chatID int64, messageID int) {
+	message := "<b>文件搜索功能</b>\n\n" +
+		"<b>搜索说明:</b>\n" +
+		"• 支持文件名关键词搜索\n" +
+		"• 支持路径模糊匹配\n" +
+		"• 支持文件类型过滤\n\n" +
+		"<b>请输入搜索关键词:</b>\n" +
+		"格式: /search <关键词>\n\n" +
+		"<b>快速搜索:</b>"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("搜索电影", "search_movies"),
+			tgbotapi.NewInlineKeyboardButtonData("搜索剧集", "search_tv"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回文件浏览", "menu_files"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleFilesInfoWithEdit 处理文件信息查看（支持消息编辑）
+func (h *TelegramHandler) handleFilesInfoWithEdit(chatID int64, messageID int) {
+	message := "<b>文件信息查看</b>\n\n" +
+		"<b>可查看信息:</b>\n" +
+		"• 文件基本属性\n" +
+		"• 文件大小和修改时间\n" +
+		"• 下载链接和路径\n" +
+		"• 媒体类型识别\n\n" +
+		"<b>请选择操作方式:</b>"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("浏览选择", "files_browse"),
+			tgbotapi.NewInlineKeyboardButtonData("定时任务", "cmd_tasks"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回文件浏览", "menu_files"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleFilesDownloadWithEdit 处理路径下载功能（支持消息编辑）
+func (h *TelegramHandler) handleFilesDownloadWithEdit(chatID int64, messageID int) {
+	message := "<b>路径下载功能</b>\n\n" +
+		"<b>下载选项:</b>\n" +
+		"• 指定路径批量下载\n" +
+		"• 递归下载子目录\n" +
+		"• 预览模式（不下载）\n" +
+		"• 过滤文件类型\n\n" +
+		"<b>使用格式:</b>\n" +
+		"<code>/path_download /movies/2024</code>\n\n" +
+		"<b>快速下载:</b>"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("定时任务", "cmd_tasks"),
+			tgbotapi.NewInlineKeyboardButtonData("浏览下载", "files_browse"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回文件浏览", "menu_files"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleAlistFilesWithEdit 处理获取Alist文件列表（支持消息编辑）
+func (h *TelegramHandler) handleAlistFilesWithEdit(chatID int64, messageID int) {
+	h.handleBrowseFilesWithEdit(chatID, h.config.Alist.DefaultPath, 1, messageID)
+}
+
+// handleSystemInfoWithEdit 处理系统信息（支持消息编辑）
+func (h *TelegramHandler) handleSystemInfoWithEdit(chatID int64, messageID int) {
+	message := "<b>系统信息</b>\n\n" +
+		"<b>服务状态:</b>\n" +
+		"• 服务器运行状态: 正常\n" +
+		"• Telegram Bot: 已连接\n" +
+		"• 配置加载状态: 正常\n\n" +
+		"<b>版本信息:</b>\n" +
+		"• 应用版本: v1.0.0\n" +
+		"• Go 版本: " + runtime.Version() + "\n" +
+		"• 构建时间: " + time.Now().Format("2006-01-02") + "\n\n"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("刷新信息", "system_info"),
+			tgbotapi.NewInlineKeyboardButtonData("健康检查", "api_health_check"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回系统管理", "menu_system"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleStatusRealtimeWithEdit 处理实时状态（支持消息编辑）
+func (h *TelegramHandler) handleStatusRealtimeWithEdit(chatID int64, messageID int) {
+	// 获取当前下载状态
+	h.handleDownloadStatusAPIWithEdit(chatID, messageID)
+}
+
+// handleStatusStorageWithEdit 处理存储状态监控（支持消息编辑）
+func (h *TelegramHandler) handleStatusStorageWithEdit(chatID int64, messageID int) {
+	message := "<b>存储状态监控</b>\n\n" +
+		"<b>存储信息:</b>\n" +
+		"• 下载目录: /downloads\n" +
+		"• 可用空间: 计算中...\n" +
+		"• 已用空间: 计算中...\n\n" +
+		"<b>文件统计:</b>\n" +
+		"• 总文件数: 获取中...\n" +
+		"• 今日下载: 获取中...\n\n" +
+		"详细存储信息正在计算中..."
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("刷新状态", "status_storage"),
+			tgbotapi.NewInlineKeyboardButtonData("下载统计", "api_download_status"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回状态监控", "menu_status"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+// handleStatusHistoryWithEdit 处理历史统计数据（支持消息编辑）
+func (h *TelegramHandler) handleStatusHistoryWithEdit(chatID int64, messageID int) {
+	message := "<b>历史统计数据</b>\n\n" +
+		"<b>下载历史:</b>\n" +
+		"• 昨日下载任务: 查询中...\n" +
+		"• 本周总下载: 查询中...\n" +
+		"• 本月总下载: 查询中...\n\n" +
+		"<b>文件统计:</b>\n" +
+		"• 电影文件: 统计中...\n" +
+		"• 电视剧集: 统计中...\n" +
+		"• 其他文件: 统计中...\n\n"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("定时任务", "cmd_tasks"),
+			tgbotapi.NewInlineKeyboardButtonData("当前状态", "api_download_status"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("返回状态监控", "menu_status"),
+		),
+	)
+
+	h.editMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }

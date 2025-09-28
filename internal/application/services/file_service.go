@@ -1021,13 +1021,22 @@ func (s *FileService) extractShowNameFromPath(parts []string, seasonIndex int) s
 	
 	// 如果有多个候选剧名，选择最合适的
 	if len(candidateNames) > 0 {
-		// 优先选择不包含季度信息的剧名
+		// 优先选择不包含"全"、"合集"等集合标识的剧名
+		for _, name := range candidateNames {
+			if !strings.Contains(name, "全") && !strings.Contains(name, "合集") && 
+			   !strings.Contains(name, "1-") && !strings.Contains(name, "1~") {
+				return name
+			}
+		}
+		
+		// 其次选择不包含季度信息的剧名
 		for _, name := range candidateNames {
 			if !strings.Contains(name, "第") || !strings.Contains(name, "季") {
 				return name
 			}
 		}
-		// 如果都包含季度信息，返回第一个
+		
+		// 最后返回第一个
 		return candidateNames[0]
 	}
 	
@@ -1066,10 +1075,13 @@ func (s *FileService) extractShowNameFromFullPath(fullPath string) string {
 
 // extractMainShowName 提取主要剧名（移除版本信息等）
 func (s *FileService) extractMainShowName(name string) string {
-	// 移除常见的版本和格式信息
+	// 移除常见的版本和格式信息  
 	patterns := []string{
 		" 三季合集",
 		" 合集",
+		" 全1-3季",
+		" 全1~3季", 
+		" 全集",
 		" 1080P",
 		" 1080p",
 		" 720P",
@@ -1092,11 +1104,16 @@ func (s *FileService) extractMainShowName(name string) string {
 
 	cleanName = strings.TrimSpace(cleanName)
 
-	// 去除类似"第八季"的季度后缀，保留纯剧名
-	seasonSuffixRegex := regexp.MustCompile(`(?i)\s*第[\p{Han}\d]{1,4}季$`)
+	// 去除类似"第八季"、"第二季"的季度后缀，保留纯剧名
+	seasonSuffixRegex := regexp.MustCompile(`(?i)\s*第[\p{Han}\d]{1,4}季.*$`)
 	if seasonSuffixRegex.MatchString(cleanName) {
 		cleanName = seasonSuffixRegex.ReplaceAllString(cleanName, "")
 		cleanName = strings.TrimSpace(cleanName)
+	}
+	
+	// 处理括号内的年份等信息（如"毛骗 第二季 (2011)"）
+	if idx := strings.Index(cleanName, "("); idx > 0 {
+		cleanName = strings.TrimSpace(cleanName[:idx])
 	}
 
 	// 特殊处理：标准化节目名称
