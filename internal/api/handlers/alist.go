@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
@@ -75,7 +74,7 @@ func ListFiles(c *gin.Context) {
 	var simplifiedFiles []alist.SimplifiedFileItem
 	for _, file := range fileList.Data.Content {
 		// 解析时间
-		modTime, _ := time.Parse(time.RFC3339, file.Modified)
+		modTime := utils.ParseTimeOrZero(file.Modified)
 
 		simplifiedFiles = append(simplifiedFiles, alist.SimplifiedFileItem{
 			Name:     file.Name,
@@ -141,8 +140,8 @@ func GetFileInfo(c *gin.Context) {
 	}
 
 	// 解析时间
-	modTime, _ := time.Parse(time.RFC3339, fileInfo.Data.Modified)
-	createTime, _ := time.Parse(time.RFC3339, fileInfo.Data.Created)
+	modTime := utils.ParseTimeOrZero(fileInfo.Data.Modified)
+	createTime := utils.ParseTimeOrZero(fileInfo.Data.Created)
 
 	// 返回成功响应
 	utils.Success(c, gin.H{

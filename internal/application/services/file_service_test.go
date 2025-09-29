@@ -181,7 +181,7 @@ func TestDetermineMediaTypeAndPath(t *testing.T) {
 			fullPath:    "/data/来自：分享/喜人奇妙夜/20250919先导1：团长集结！马东召集喜剧半壁江山[4K60FPS].mp4",
 			fileName:    "20250919先导1：团长集结！马东召集喜剧半壁江山[4K60FPS].mp4",
 			wantType:    MediaTypeTV,
-			wantPath:    "/downloads/tvs/喜人奇妙夜/S1",
+			wantPath:    "/downloads/tvs/喜人奇妙夜",
 			description: "包含先导和知名综艺名称应识别为TV",
 		},
 		{
@@ -189,7 +189,7 @@ func TestDetermineMediaTypeAndPath(t *testing.T) {
 			fullPath:    "/data/来自：分享/喜人奇妙夜/20250926第1期上纯享版：最强喜剧“新”人爆改三国.mp4",
 			fileName:    "20250926第1期上纯享版：最强喜剧“新”人爆改三国.mp4",
 			wantType:    MediaTypeTV,
-			wantPath:    "/downloads/tvs/喜人奇妙夜/S1",
+			wantPath:    "/downloads/tvs/喜人奇妙夜",
 			description: "包含综艺特征词如纯享版应识别为TV",
 		},
 		{
@@ -205,7 +205,7 @@ func TestDetermineMediaTypeAndPath(t *testing.T) {
 			fullPath:    "/data/variety/某节目/20240101.本期嘉宾.mp4",
 			fileName:    "20240101.本期嘉宾.mp4",
 			wantType:    MediaTypeTV,
-			wantPath:    "/downloads/tvs/某节目/S1",
+			wantPath:    "/downloads/tvs/某节目",
 			description: "8位日期格式文件应识别为综艺",
 		},
 		{

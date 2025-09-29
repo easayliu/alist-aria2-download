@@ -581,29 +581,19 @@ func ManualDownloadFiles(c *gin.Context) {
 	
 	if req.StartTime != "" && req.EndTime != "" {
 		// 使用指定的时间范围
-		startTime, err = time.Parse(time.RFC3339, req.StartTime)
+		timeRange, err := utils.ParseTimeRange(req.StartTime, req.EndTime)
 		if err != nil {
-			utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid start_time format, use ISO 8601: "+err.Error())
+			utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid time format: "+err.Error())
 			return
 		}
-		
-		endTime, err = time.Parse(time.RFC3339, req.EndTime)
-		if err != nil {
-			utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid end_time format, use ISO 8601: "+err.Error())
-			return
-		}
-		
-		if startTime.After(endTime) {
-			utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "start_time cannot be after end_time")
-			return
-		}
+		startTime, endTime = timeRange.Start, timeRange.End
 	} else {
 		// 使用 hours_ago 计算时间范围，如果没有指定则默认24小时
 		if req.HoursAgo == 0 {
 			req.HoursAgo = 24
 		}
-		endTime = time.Now()
-		startTime = endTime.Add(-time.Duration(req.HoursAgo) * time.Hour)
+		timeRange := utils.CreateTimeRangeFromHours(req.HoursAgo)
+		startTime, endTime = timeRange.Start, timeRange.End
 	}
 
 	// 获取指定时间范围内的文件

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -21,6 +20,7 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/telegram"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
+	timeutils "github.com/easayliu/alist-aria2-download/pkg/utils"
 	"github.com/gin-gonic/gin"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -520,13 +520,12 @@ func (h *TelegramHandler) handleCallbackQuery(update *tgbotapi.Update) {
 // 2. 日期范围 - 两个日期（如：2025-09-01 2025-09-26）
 // 3. 时间范围 - 两个时间戳（如：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z）
 func (h *TelegramHandler) parseTimeArguments(args []string) (*TimeParseResult, error) {
-	now := time.Now()
-
 	if len(args) == 0 {
 		// 默认24小时
+		timeRange := timeutils.CreateTimeRangeFromHours(24)
 		return &TimeParseResult{
-			StartTime:   now.Add(-24 * time.Hour),
-			EndTime:     now,
+			StartTime:   timeRange.Start,
+			EndTime:     timeRange.End,
 			Description: "最近24小时",
 		}, nil
 	}
@@ -540,9 +539,10 @@ func (h *TelegramHandler) parseTimeArguments(args []string) (*TimeParseResult, e
 			if hours > 8760 { // 一年的小时数
 				return nil, fmt.Errorf("小时数不能超过8760（一年）")
 			}
+			timeRange := timeutils.CreateTimeRangeFromHours(hours)
 			return &TimeParseResult{
-				StartTime:   now.Add(-time.Duration(hours) * time.Hour),
-				EndTime:     now,
+				StartTime:   timeRange.Start,
+				EndTime:     timeRange.End,
 				Description: fmt.Sprintf("最近%d小时", hours),
 			}, nil
 		}
@@ -553,42 +553,25 @@ func (h *TelegramHandler) parseTimeArguments(args []string) (*TimeParseResult, e
 	if len(args) == 2 {
 		startStr, endStr := args[0], args[1]
 
-		// 尝试解析为完整的时间戳（ISO 8601格式）
-		startTime, err1 := time.Parse(time.RFC3339, startStr)
-		endTime, err2 := time.Parse(time.RFC3339, endStr)
-
-		if err1 == nil && err2 == nil {
-			if startTime.After(endTime) {
-				return nil, fmt.Errorf("开始时间不能晚于结束时间")
-			}
-			return &TimeParseResult{
-				StartTime:   startTime,
-				EndTime:     endTime,
-				Description: fmt.Sprintf("从 %s 到 %s", startTime.Format("2006-01-02 15:04"), endTime.Format("2006-01-02 15:04")),
-			}, nil
+		// 使用统一的时间解析工具
+		timeRange, err := timeutils.ParseTimeRange(startStr, endStr)
+		if err != nil {
+			return nil, fmt.Errorf("无效的时间格式，支持的格式：\n• 日期范围：2025-09-01 2025-09-26\n• 时间范围：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
 		}
 
-		// 尝试解析为日期格式（YYYY-MM-DD）
-		dateRegex := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-		if dateRegex.MatchString(startStr) && dateRegex.MatchString(endStr) {
-			startTime, err1 := time.Parse("2006-01-02", startStr)
-			endTime, err2 := time.Parse("2006-01-02", endStr)
-
-			if err1 == nil && err2 == nil {
-				if startTime.After(endTime) {
-					return nil, fmt.Errorf("开始日期不能晚于结束日期")
-				}
-				// 结束时间设为当天的23:59:59
-				endTime = endTime.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-				return &TimeParseResult{
-					StartTime:   startTime,
-					EndTime:     endTime,
-					Description: fmt.Sprintf("从 %s 到 %s", startTime.Format("2006-01-02"), endTime.Format("2006-01-02")),
-				}, nil
-			}
+		// 根据时间格式生成描述
+		description := fmt.Sprintf("从 %s 到 %s", timeRange.Start.Format("2006-01-02 15:04"), timeRange.End.Format("2006-01-02 15:04"))
+		// 如果是日期格式（时间都是0点），使用日期格式描述
+		if timeRange.Start.Hour() == 0 && timeRange.Start.Minute() == 0 && timeRange.Start.Second() == 0 &&
+			(timeRange.End.Hour() == 23 && timeRange.End.Minute() == 59) {
+			description = fmt.Sprintf("从 %s 到 %s", timeRange.Start.Format("2006-01-02"), timeRange.End.Format("2006-01-02"))
 		}
 
-		return nil, fmt.Errorf("无效的时间格式，支持的格式：\n• 日期范围：2025-09-01 2025-09-26\n• 时间范围：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
+		return &TimeParseResult{
+			StartTime:   timeRange.Start,
+			EndTime:     timeRange.End,
+			Description: description,
+		}, nil
 	}
 
 	return nil, fmt.Errorf("参数过多，支持的格式：\n• /download\n• /download 48\n• /download 2025-09-01 2025-09-26\n• /download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
@@ -890,13 +873,13 @@ func (h *TelegramHandler) handleManualConfirm(chatID int64, token string, messag
 
 	req := ctx.Request
 
-	// 解析时间参数
-	startTime, err := time.Parse(time.RFC3339, req.StartTime)
+	// 使用统一的时间解析工具
+	startTime, err := timeutils.ParseTime(req.StartTime)
 	if err != nil {
 		h.messageUtils.SendMessage(chatID, fmt.Sprintf("时间解析失败: %v", err))
 		return
 	}
-	endTime, err := time.Parse(time.RFC3339, req.EndTime)
+	endTime, err := timeutils.ParseTime(req.EndTime)
 	if err != nil {
 		h.messageUtils.SendMessage(chatID, fmt.Sprintf("时间解析失败: %v", err))
 		return
@@ -1532,74 +1515,93 @@ func (h *TelegramHandler) calculateDirectoryStats(files []contracts.FileResponse
 	return stats
 }
 
-// createDownloadTasks 创建下载任务并返回结果统计
-func (h *TelegramHandler) createDownloadTasks(ctx context.Context, files []contracts.FileResponse) DirectoryDownloadResult {
-	result := DirectoryDownloadResult{
-		Stats: h.calculateDirectoryStats(files),
-	}
-	
-	// 过滤出视频文件
-	var videoFiles []contracts.FileResponse
-	for _, file := range files {
-		if h.fileService.IsVideoFile(file.Name) {
-			videoFiles = append(videoFiles, file)
-		}
-	}
-	
-	// 创建下载任务
-	for _, file := range videoFiles {
-		downloadReq := contracts.DownloadRequest{
-			URL:         file.InternalURL,
-			Filename:    file.Name,
-			Directory:   file.DownloadPath,
-			AutoClassify: true,
-		}
-		
-		download, err := h.downloadService.CreateDownload(ctx, downloadReq)
-		if err != nil {
-			result.FailedCount++
-			result.FailedFiles = append(result.FailedFiles, file.Name)
-			logger.Error("通过/downloads命令创建下载任务失败", "file", file.Name, "error", err)
-			continue
-		}
+// [已删除] createDownloadTasks - 旧方法，已被新架构的DownloadDirectory替代
 
-		result.SuccessCount++
-		logger.Info("通过/downloads命令创建下载任务成功", "file", file.Name, "gid", download.ID)
-	}
-	
-	return result
-}
-
-// handleDownloadDirectoryByPath 通过路径下载目录
+// handleDownloadDirectoryByPath 通过路径下载目录 - 使用重构后的新架构
 func (h *TelegramHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string) {
-	h.messageUtils.SendMessage(chatID, "📂 正在通过/downloads命令创建目录下载任务...")
+	h.messageUtils.SendMessage(chatID, "📂 正在创建目录下载任务...")
 
 	ctx := context.Background()
 	
-	// 使用文件服务获取目录中的所有文件
-	files, err := h.getFilesFromPath(dirPath, true)
+	// 使用新架构的目录下载服务
+	req := contracts.DirectoryDownloadRequest{
+		DirectoryPath: dirPath,
+		Recursive:     true,
+		VideoOnly:     true,  // 只下载视频文件
+		AutoClassify:  true,
+	}
+	
+	result, err := h.fileService.DownloadDirectory(ctx, req)
 	if err != nil {
 		h.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 扫描目录失败: %v", err))
 		return
 	}
-
-	if len(files) == 0 {
-		h.messageUtils.SendMessage(chatID, "📁 目录为空，没有可下载的文件")
+	
+	if result.SuccessCount == 0 {
+		if result.Summary.VideoFiles == 0 {
+			h.messageUtils.SendMessage(chatID, "🎬 目录中没有找到视频文件")
+		} else {
+			h.messageUtils.SendMessage(chatID, "❌ 所有文件下载创建失败，请检查日志")
+		}
 		return
 	}
+	
+	// 发送结果消息（使用新架构的结果格式）
+	h.sendBatchDownloadResult(chatID, dirPath, result)
+}
 
-	// 计算统计信息，检查是否有视频文件
-	stats := h.calculateDirectoryStats(files)
-	if stats.VideoFiles == 0 {
-		h.messageUtils.SendMessage(chatID, "🎬 目录中没有找到视频文件")
+// sendBatchDownloadResult 发送批量下载结果消息 - 新架构格式
+func (h *TelegramHandler) sendBatchDownloadResult(chatID int64, dirPath string, result *contracts.BatchDownloadResponse) {
+	// 防止空指针解引用
+	if result == nil {
+		h.messageUtils.SendMessage(chatID, "❌ 批量下载结果为空")
 		return
 	}
+	
+	// 构建结果消息
+	message := fmt.Sprintf(
+		"📊 <b>目录下载任务创建完成</b>\n\n"+
+			"<b>目录:</b> <code>%s</code>\n"+
+			"<b>扫描文件:</b> %d 个\n"+
+			"<b>视频文件:</b> %d 个\n"+
+			"<b>成功创建:</b> %d 个任务\n"+
+			"<b>失败:</b> %d 个任务\n\n",
+		h.messageUtils.EscapeHTML(dirPath),
+		result.Summary.TotalFiles,
+		result.Summary.VideoFiles,
+		result.SuccessCount,
+		result.FailureCount)
 
-	// 创建下载任务
-	result := h.createDownloadTasks(ctx, files)
+	if result.Summary.MovieFiles > 0 {
+		message += fmt.Sprintf("<b>电影:</b> %d 个\n", result.Summary.MovieFiles)
+	}
+	if result.Summary.TVFiles > 0 {
+		message += fmt.Sprintf("<b>电视剧:</b> %d 个\n", result.Summary.TVFiles)
+	}
 
-	// 发送结果消息
-	h.sendDirectoryDownloadResult(chatID, dirPath, result)
+	if result.FailureCount > 0 && len(result.Results) <= 3 {
+		message += "\n<b>失败的文件:</b>\n"
+		failedCount := 0
+		for _, downloadResult := range result.Results {
+			if !downloadResult.Success && failedCount < 3 {
+				// 安全地获取文件名，避免空指针解引用
+				filename := "未知文件"
+				if downloadResult.Request.Filename != "" {
+					filename = downloadResult.Request.Filename
+				}
+				message += fmt.Sprintf("• <code>%s</code>\n", h.messageUtils.EscapeHTML(filename))
+				failedCount++
+			}
+		}
+	} else if result.FailureCount > 3 {
+		message += fmt.Sprintf("\n<b>有 %d 个文件下载失败</b>\n", result.FailureCount)
+	}
+
+	if result.SuccessCount > 0 {
+		message += "\n✅ 所有任务已使用自动路径分类功能\n📥 可通过「下载管理」查看任务状态"
+	}
+
+	h.messageUtils.SendMessageHTML(chatID, message)
 }
 
 // sendDirectoryDownloadResult 发送目录下载结果消息

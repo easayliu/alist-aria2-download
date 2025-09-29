@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/types"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
+	timeutils "github.com/easayliu/alist-aria2-download/pkg/utils"
 )
 
 // TimeParseResult 时间解析结果
@@ -404,13 +404,12 @@ func (dc *DownloadCommands) handleManualDownload(ctx context.Context, chatID int
 // 2. 日期范围 - 两个日期（如：2025-09-01 2025-09-26）
 // 3. 时间范围 - 两个时间戳（如：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z）
 func (dc *DownloadCommands) parseTimeArguments(args []string) (*TimeParseResult, error) {
-	now := time.Now()
-
 	if len(args) == 0 {
 		// 默认24小时
+		timeRange := timeutils.CreateTimeRangeFromHours(24)
 		return &TimeParseResult{
-			StartTime:   now.Add(-24 * time.Hour),
-			EndTime:     now,
+			StartTime:   timeRange.Start,
+			EndTime:     timeRange.End,
 			Description: "最近24小时",
 		}, nil
 	}
@@ -424,9 +423,10 @@ func (dc *DownloadCommands) parseTimeArguments(args []string) (*TimeParseResult,
 			if hours > 8760 { // 一年的小时数
 				return nil, fmt.Errorf("小时数不能超过8760（一年）")
 			}
+			timeRange := timeutils.CreateTimeRangeFromHours(hours)
 			return &TimeParseResult{
-				StartTime:   now.Add(-time.Duration(hours) * time.Hour),
-				EndTime:     now,
+				StartTime:   timeRange.Start,
+				EndTime:     timeRange.End,
 				Description: fmt.Sprintf("最近%d小时", hours),
 			}, nil
 		}
@@ -437,42 +437,25 @@ func (dc *DownloadCommands) parseTimeArguments(args []string) (*TimeParseResult,
 	if len(args) == 2 {
 		startStr, endStr := args[0], args[1]
 
-		// 尝试解析为完整的时间戳（ISO 8601格式）
-		startTime, err1 := time.Parse(time.RFC3339, startStr)
-		endTime, err2 := time.Parse(time.RFC3339, endStr)
-
-		if err1 == nil && err2 == nil {
-			if startTime.After(endTime) {
-				return nil, fmt.Errorf("开始时间不能晚于结束时间")
-			}
-			return &TimeParseResult{
-				StartTime:   startTime,
-				EndTime:     endTime,
-				Description: fmt.Sprintf("从 %s 到 %s", startTime.Format("2006-01-02 15:04"), endTime.Format("2006-01-02 15:04")),
-			}, nil
+		// 使用统一的时间解析工具
+		timeRange, err := timeutils.ParseTimeRange(startStr, endStr)
+		if err != nil {
+			return nil, fmt.Errorf("无效的时间格式，支持的格式：\n• 日期范围：2025-09-01 2025-09-26\n• 时间范围：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
 		}
 
-		// 尝试解析为日期格式（YYYY-MM-DD）
-		dateRegex := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-		if dateRegex.MatchString(startStr) && dateRegex.MatchString(endStr) {
-			startTime, err1 := time.Parse("2006-01-02", startStr)
-			endTime, err2 := time.Parse("2006-01-02", endStr)
-
-			if err1 == nil && err2 == nil {
-				if startTime.After(endTime) {
-					return nil, fmt.Errorf("开始日期不能晚于结束日期")
-				}
-				// 结束时间设为当天的23:59:59
-				endTime = endTime.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
-				return &TimeParseResult{
-					StartTime:   startTime,
-					EndTime:     endTime,
-					Description: fmt.Sprintf("从 %s 到 %s", startTime.Format("2006-01-02"), endTime.Format("2006-01-02")),
-				}, nil
-			}
+		// 根据时间格式生成描述
+		description := fmt.Sprintf("从 %s 到 %s", timeRange.Start.Format("2006-01-02 15:04"), timeRange.End.Format("2006-01-02 15:04"))
+		// 如果是日期格式（时间都是0点），使用日期格式描述
+		if timeRange.Start.Hour() == 0 && timeRange.Start.Minute() == 0 && timeRange.Start.Second() == 0 &&
+			(timeRange.End.Hour() == 23 && timeRange.End.Minute() == 59) {
+			description = fmt.Sprintf("从 %s 到 %s", timeRange.Start.Format("2006-01-02"), timeRange.End.Format("2006-01-02"))
 		}
 
-		return nil, fmt.Errorf("无效的时间格式，支持的格式：\n• 日期范围：2025-09-01 2025-09-26\n• 时间范围：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
+		return &TimeParseResult{
+			StartTime:   timeRange.Start,
+			EndTime:     timeRange.End,
+			Description: description,
+		}, nil
 	}
 
 	return nil, fmt.Errorf("参数过多，支持的格式：\n• /download\n• /download 48\n• /download 2025-09-01 2025-09-26\n• /download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,11 @@ func NewAppFileService(cfg *config.Config, downloadService contracts.DownloadSer
 	}
 }
 
+// SetDownloadService 设置下载服务（用于解决循环依赖）
+func (s *AppFileService) SetDownloadService(downloadService contracts.DownloadService) {
+	s.downloadService = downloadService
+}
+
 // ListFiles 获取文件列表 - 统一的业务逻辑
 func (s *AppFileService) ListFiles(ctx context.Context, req contracts.FileListRequest) (*contracts.FileListResponse, error) {
 	logger.Info("Listing files", "path", req.Path, "page", req.Page, "recursive", req.Recursive)
@@ -44,7 +50,15 @@ func (s *AppFileService) ListFiles(ctx context.Context, req contracts.FileListRe
 		req.PageSize = 1000
 	}
 
-	// 2. 从AList获取文件列表
+	// 2. 确保AList客户端已登录并获取文件列表
+	if s.alistClient.Token == "" {
+		logger.Info("🔑 ListFiles: 检测到未登录，开始登录AList", "baseURL", s.alistClient.BaseURL)
+		if err := s.alistClient.Login(); err != nil {
+			return nil, fmt.Errorf("failed to login to AList: %w", err)
+		}
+		logger.Info("✅ ListFiles: AList登录成功")
+	}
+	
 	alistResp, err := s.alistClient.ListFiles(req.Path, req.Page, req.PageSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %w", err)
@@ -60,18 +74,21 @@ func (s *AppFileService) ListFiles(ctx context.Context, req contracts.FileListRe
 		if item.IsDir {
 			directories = append(directories, fileResp)
 			summary.TotalDirs++
+			logger.Info("Added directory", "name", item.Name)
 		} else {
 			// 应用视频过滤
 			if req.VideoOnly && !s.IsVideoFile(item.Name) {
+				logger.Info("File filtered out by VideoOnly", "name", item.Name, "isVideo", s.IsVideoFile(item.Name))
 				continue
 			}
 
 			files = append(files, fileResp)
 			summary.TotalFiles++
 			summary.TotalSize += item.Size
+			logger.Info("Added file", "name", item.Name, "isVideo", s.IsVideoFile(item.Name))
 
-			// 媒体分类统计
-			s.updateMediaStats(&summary, item.Name)
+			// 媒体分类统计 - 传入完整路径用于路径分类
+			s.updateMediaStats(&summary, fileResp.Path, item.Name)
 		}
 	}
 
@@ -151,6 +168,16 @@ func (s *AppFileService) GetFileInfo(ctx context.Context, path string) (*contrac
 	for _, item := range listResp.Data.Content {
 		if item.Name == fileName {
 			fileResp := s.convertToFileResponse(item, parentDir)
+			
+			// 如果不是目录，获取实际的raw_url用于下载
+			if !item.IsDir {
+				logger.Info("🔽 GetFileInfo: 准备获取文件的真实下载URL", "file", fileName, "path", path)
+				internalURL, externalURL := s.getRealDownloadURLs(path)
+				fileResp.InternalURL = internalURL
+				fileResp.ExternalURL = externalURL
+				logger.Info("🔽 GetFileInfo: 已更新文件响应的URL", "internal", internalURL, "external", externalURL)
+			}
+			
 			return &fileResp, nil
 		}
 	}
@@ -221,26 +248,22 @@ func (s *AppFileService) SearchFiles(ctx context.Context, req contracts.FileSear
 
 // GetFilesByTimeRange 根据时间范围获取文件
 func (s *AppFileService) GetFilesByTimeRange(ctx context.Context, req contracts.TimeRangeFileRequest) (*contracts.TimeRangeFileResponse, error) {
-	// 获取所有文件
-	listReq := contracts.FileListRequest{
-		Path:      req.Path,
-		Recursive: true,
-		VideoOnly: req.VideoOnly,
-		PageSize:  10000, // 大页面，获取所有文件
-	}
+	logger.Info("GetFilesByTimeRange called", 
+		"path", req.Path,
+		"startTime", req.StartTime.Format("2006-01-02 15:04:05 -07:00"), 
+		"endTime", req.EndTime.Format("2006-01-02 15:04:05 -07:00"),
+		"startUnix", req.StartTime.Unix(),
+		"endUnix", req.EndTime.Unix(),
+		"videoOnly", req.VideoOnly)
 
-	listResp, err := s.ListFiles(ctx, listReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get files: %w", err)
-	}
-
-	// 按时间范围过滤
+	// 使用自定义递归逻辑，先检查目录时间再决定是否递归
 	var filteredFiles []contracts.FileResponse
-	for _, file := range listResp.Files {
-		if file.Modified.After(req.StartTime) && file.Modified.Before(req.EndTime) {
-			filteredFiles = append(filteredFiles, file)
-		}
+	err := s.collectFilesInTimeRange(ctx, req.Path, req.StartTime, req.EndTime, req.VideoOnly, &filteredFiles)
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect files: %w", err)
 	}
+
+	logger.Info("Time range filtering completed", "filteredCount", len(filteredFiles))
 
 	// 重新计算摘要
 	summary := s.calculateFileSummary(filteredFiles)
@@ -255,15 +278,77 @@ func (s *AppFileService) GetFilesByTimeRange(ctx context.Context, req contracts.
 	}, nil
 }
 
+// collectFilesInTimeRange 递归收集在时间范围内的文件
+func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path string, startTime, endTime time.Time, videoOnly bool, result *[]contracts.FileResponse) error {
+	logger.Info("Collecting files in path", "path", path)
+
+	// 获取当前目录的文件列表（非递归）
+	alistResp, err := s.alistClient.ListFiles(path, 1, 1000)
+	if err != nil {
+		return fmt.Errorf("failed to list files in %s: %w", path, err)
+	}
+
+	for _, item := range alistResp.Data.Content {
+		fileResp := s.convertToFileResponse(item, path)
+		
+		// 检查时间范围
+		inTimeRange := utils.IsInRange(fileResp.Modified, startTime, endTime)
+		
+		logger.Info("Checking item", 
+			"name", item.Name, 
+			"isDir", item.IsDir,
+			"modified", fileResp.Modified.Format("2006-01-02 15:04:05 -07:00"),
+			"modifiedUnix", fileResp.Modified.Unix(),
+			"inTimeRange", inTimeRange)
+
+		if item.IsDir {
+			// 对于目录，如果目录修改时间在范围内，则递归搜索
+			if inTimeRange {
+				logger.Info("Directory in time range, recursing", "dir", item.Name)
+				subPath := utils.JoinPath(path, item.Name)
+				err := s.collectFilesInTimeRange(ctx, subPath, startTime, endTime, videoOnly, result)
+				if err != nil {
+					logger.Warn("Failed to recurse into directory", "dir", item.Name, "error", err)
+					// 继续处理其他目录，不因单个目录失败而停止
+				}
+			} else {
+				logger.Info("Directory not in time range, skipping", "dir", item.Name)
+			}
+		} else {
+			// 对于文件，检查时间范围和视频过滤
+			if inTimeRange {
+				if !videoOnly || s.IsVideoFile(item.Name) {
+					logger.Info("File matches criteria, adding", "file", item.Name, "isVideo", s.IsVideoFile(item.Name))
+					
+					// 为符合条件的文件获取真实的下载URL
+					filePath := utils.JoinPath(path, item.Name)
+					internalURL, externalURL := s.getRealDownloadURLs(filePath)
+					fileResp.InternalURL = internalURL
+					fileResp.ExternalURL = externalURL
+					logger.Info("🎯 已为时间范围文件获取真实下载URL", "file", item.Name, "url", internalURL)
+					
+					*result = append(*result, fileResp)
+				} else {
+					logger.Info("File not video, skipping", "file", item.Name)
+				}
+			} else {
+				logger.Info("File not in time range, skipping", "file", item.Name)
+			}
+		}
+	}
+
+	return nil
+}
+
 // GetRecentFiles 获取最近文件
 func (s *AppFileService) GetRecentFiles(ctx context.Context, req contracts.RecentFilesRequest) (*contracts.FileListResponse, error) {
-	endTime := time.Now()
-	startTime := endTime.Add(-time.Duration(req.HoursAgo) * time.Hour)
+	// 使用时间工具创建时间范围
+	timeRange := utils.CreateTimeRangeFromHours(req.HoursAgo)
 
 	timeRangeReq := contracts.TimeRangeFileRequest{
 		Path:      req.Path,
-		StartTime: startTime,
-		EndTime:   endTime,
+		StartTime: timeRange.Start,
+		EndTime:   timeRange.End,
 		VideoOnly: req.VideoOnly,
 	}
 
@@ -288,21 +373,13 @@ func (s *AppFileService) GetRecentFiles(ctx context.Context, req contracts.Recen
 
 // GetYesterdayFiles 获取昨天的文件
 func (s *AppFileService) GetYesterdayFiles(ctx context.Context, path string) (*contracts.FileListResponse, error) {
-	now := time.Now()
-	startOfYesterday := time.Date(now.Year(), now.Month(), now.Day()-1, 0, 0, 0, 0, now.Location())
-	endOfYesterday := startOfYesterday.Add(24 * time.Hour)
+	// 使用时间工具创建昨天的时间范围
+	yesterdayRange := utils.CreateYesterdayRange()
 
-	_ = contracts.RecentFilesRequest{
-		Path:      path,
-		HoursAgo:  24,
-		VideoOnly: true,
-	}
-
-	// 手动设置时间范围为昨天
 	timeRangeReq := contracts.TimeRangeFileRequest{
 		Path:      path,
-		StartTime: startOfYesterday,
-		EndTime:   endOfYesterday,
+		StartTime: yesterdayRange.Start,
+		EndTime:   yesterdayRange.End,
 		VideoOnly: true,
 	}
 
@@ -378,11 +455,24 @@ func (s *AppFileService) GetFilesByCategory(ctx context.Context, path string, ca
 
 // DownloadFile 下载单个文件
 func (s *AppFileService) DownloadFile(ctx context.Context, req contracts.FileDownloadRequest) (*contracts.DownloadResponse, error) {
+	logger.Info("📁 开始下载单个文件", "filePath", req.FilePath)
+	
+	// 检查下载服务是否可用
+	if s.downloadService == nil {
+		return nil, fmt.Errorf("download service not available")
+	}
+	
 	// 获取文件信息
 	fileInfo, err := s.GetFileInfo(ctx, req.FilePath)
 	if err != nil {
+		logger.Error("❌ 获取文件信息失败", "filePath", req.FilePath, "error", err)
 		return nil, fmt.Errorf("failed to get file info: %w", err)
 	}
+
+	logger.Info("📋 文件信息获取成功", 
+		"fileName", fileInfo.Name,
+		"fileSize", fileInfo.Size,
+		"downloadURL", fileInfo.InternalURL)
 
 	// 构建下载请求
 	downloadReq := contracts.DownloadRequest{
@@ -397,11 +487,21 @@ func (s *AppFileService) DownloadFile(ctx context.Context, req contracts.FileDow
 		downloadReq.Directory = s.GenerateDownloadPath(*fileInfo)
 	}
 
+	logger.Info("🚀 准备创建下载任务", 
+		"url", downloadReq.URL,
+		"filename", downloadReq.Filename,
+		"directory", downloadReq.Directory)
+
 	return s.downloadService.CreateDownload(ctx, downloadReq)
 }
 
 // DownloadFiles 批量下载文件
 func (s *AppFileService) DownloadFiles(ctx context.Context, req contracts.BatchFileDownloadRequest) (*contracts.BatchDownloadResponse, error) {
+	// 检查下载服务是否可用
+	if s.downloadService == nil {
+		return nil, fmt.Errorf("download service not available")
+	}
+	
 	var downloadRequests []contracts.DownloadRequest
 
 	for _, fileReq := range req.Files {
@@ -446,6 +546,11 @@ func (s *AppFileService) DownloadFiles(ctx context.Context, req contracts.BatchF
 
 // DownloadDirectory 下载目录
 func (s *AppFileService) DownloadDirectory(ctx context.Context, req contracts.DirectoryDownloadRequest) (*contracts.BatchDownloadResponse, error) {
+	// 检查下载服务是否可用
+	if s.downloadService == nil {
+		return nil, fmt.Errorf("download service not available")
+	}
+	
 	// 获取目录下的所有文件
 	listReq := contracts.FileListRequest{
 		Path:      req.DirectoryPath,
@@ -462,8 +567,12 @@ func (s *AppFileService) DownloadDirectory(ctx context.Context, req contracts.Di
 	// 转换为下载请求
 	var downloadRequests []contracts.DownloadRequest
 	for _, file := range listResp.Files {
+		// 动态获取真实的下载URL
+		logger.Info("📂 获取目录中文件的下载URL", "file", file.Name, "path", file.Path)
+		internalURL, _ := s.getRealDownloadURLs(file.Path)
+		
 		downloadReq := contracts.DownloadRequest{
-			URL:          file.InternalURL,
+			URL:          internalURL,
 			Filename:     file.Name,
 			Directory:    req.TargetDir,
 			AutoClassify: req.AutoClassify,
@@ -541,6 +650,38 @@ func (s *AppFileService) GetFileCategory(filename string) string {
 	return "video"
 }
 
+// GetMediaType 获取媒体类型（用于统计）
+func (s *AppFileService) GetMediaType(filePath string) string {
+	// 首先检查路径中的类型指示器（优先级）
+	pathCategory := s.GetCategoryFromPath(filePath)
+	if pathCategory != "" {
+		switch pathCategory {
+		case "movie":
+			return "movie"
+		case "tv":
+			return "tv"
+		case "variety":
+			return "tv" // 综艺节目也算作TV类型
+		default:
+			return "other"
+		}
+	}
+
+	// 回退到基于文件名的分类
+	filename := utils.GetFileName(filePath)
+	category := s.GetFileCategory(filename)
+	switch category {
+	case "movie":
+		return "movie"
+	case "tv":
+		return "tv"
+	case "variety":
+		return "tv" // 综艺节目也算作TV类型
+	default:
+		return "other"
+	}
+}
+
 // FormatFileSize 格式化文件大小
 func (s *AppFileService) FormatFileSize(size int64) string {
 	return utils.FormatFileSize(size)
@@ -553,35 +694,168 @@ func (s *AppFileService) GenerateDownloadPath(file contracts.FileResponse) strin
 		baseDir = "/downloads"
 	}
 
-	// 首先检查路径中的类型指示器（优先级）
+	// 首先检查路径中的类型指示器（优先级最高）
 	pathCategory := s.GetCategoryFromPath(file.Path)
+	logger.Info("🏷️  路径分类分析", "path", file.Path, "pathCategory", pathCategory)
+	
 	if pathCategory != "" {
-		switch pathCategory {
-		case "movie":
-			return utils.JoinPath(baseDir, "movies")
-		case "tv":
-			return utils.JoinPath(baseDir, "tvs")  // 使用 tvs 目录匹配用户期望
-		case "variety":
-			return utils.JoinPath(baseDir, "variety")
-		case "video":
-			return utils.JoinPath(baseDir, "videos")
+		// 对于电视剧，使用智能路径解析和重组
+		if pathCategory == "tv" {
+			smartPath := s.generateSmartTVPath(file.Path, baseDir)
+			if smartPath != "" {
+				logger.Info("🎯 使用智能电视剧路径", "file", file.Name, "path", file.Path, "smartPath", smartPath)
+				return smartPath
+			}
+		}
+		
+		// 提取并保留原始路径结构
+		targetDir := s.extractPathStructure(file.Path, pathCategory, baseDir)
+		if targetDir != "" {
+			logger.Info("✅ 使用路径分类结果（保留目录结构）", "file", file.Name, "path", file.Path, "pathCategory", pathCategory, "targetDir", targetDir)
+			return targetDir
 		}
 	}
 
-	// 回退到基于文件名的分类
-	category := s.GetFileCategory(file.Name)
-	switch category {
-	case "movie":
-		return utils.JoinPath(baseDir, "movies")
+	// 如果路径分类失败，直接使用默认目录
+	defaultDir := utils.JoinPath(baseDir, "others")
+	logger.Info("⚠️  路径分类失败，使用默认目录", "file", file.Name, "path", file.Path, "defaultDir", defaultDir)
+	return defaultDir
+}
+
+// extractPathStructure 从原始路径中提取并保留目录结构（过滤其他分类关键词）
+func (s *AppFileService) extractPathStructure(filePath, pathCategory, baseDir string) string {
+	// 将路径转为小写用于匹配
+	pathLower := strings.ToLower(filePath)
+	
+	// 定义所有分类关键词
+	allCategoryKeywords := []string{"tvs", "movies", "variety", "show", "综艺", "娱乐", "videos", "video", "视频"}
+	
+	// 根据分类找到对应的关键词和目标目录
+	var keywordFound string
+	var targetCategoryDir string
+	
+	switch pathCategory {
 	case "tv":
-		return utils.JoinPath(baseDir, "tvs")  // 统一使用 tvs 目录
+		targetCategoryDir = "tvs"
+		keywordFound = "tvs"
+	case "movie":
+		targetCategoryDir = "movies"
+		keywordFound = "movies"
 	case "variety":
-		return utils.JoinPath(baseDir, "variety")
+		targetCategoryDir = "variety"
+		// 对于 variety，选择第一个匹配的关键词
+		varietyKeywords := []string{"variety", "show", "综艺", "娱乐"}
+		for _, keyword := range varietyKeywords {
+			if strings.Contains(pathLower, keyword) {
+				keywordFound = keyword
+				break
+			}
+		}
 	case "video":
-		return utils.JoinPath(baseDir, "videos")
-	default:
-		return utils.JoinPath(baseDir, "others")
+		targetCategoryDir = "videos"
+		// 对于 video，选择第一个匹配的关键词
+		videoKeywords := []string{"videos", "video", "视频"}
+		for _, keyword := range videoKeywords {
+			if strings.Contains(pathLower, keyword) {
+				keywordFound = keyword
+				break
+			}
+		}
 	}
+	
+	if keywordFound == "" {
+		logger.Warn("未找到匹配的关键词", "filePath", filePath, "pathCategory", pathCategory)
+		return ""
+	}
+	
+	// 在原始路径中找到关键词的位置（保持原始大小写）
+	keywordIndex := strings.Index(pathLower, keywordFound)
+	if keywordIndex == -1 {
+		logger.Warn("无法在原始路径中找到关键词位置", "filePath", filePath, "keywordFound", keywordFound)
+		return ""
+	}
+	
+	// 提取关键词之后的路径部分
+	afterKeywordStart := keywordIndex + len(keywordFound)
+	if afterKeywordStart < len(filePath) && filePath[afterKeywordStart] == '/' {
+		afterKeywordStart++ // 跳过关键词后的 /
+	}
+	
+	afterKeyword := ""
+	if afterKeywordStart < len(filePath) {
+		afterKeyword = filePath[afterKeywordStart:]
+	}
+	
+	logger.Info("🔍 提取路径片段", "keywordFound", keywordFound, "afterKeyword", afterKeyword)
+	
+	// 获取文件的父目录（去掉文件名）
+	parentDir := utils.GetParentPath(afterKeyword)
+	
+	// 关键步骤：过滤掉路径中的其他分类关键词
+	if parentDir != "" && parentDir != "/" {
+		parentDir = s.filterCategoryKeywords(parentDir, allCategoryKeywords)
+		logger.Info("🧹 过滤分类关键词后", "originalParentDir", utils.GetParentPath(afterKeyword), "filteredParentDir", parentDir)
+	}
+	
+	// 构建最终路径：baseDir + 分类目录 + 过滤后的目录结构
+	if parentDir == "" || parentDir == "/" {
+		// 如果没有子目录，直接使用分类目录
+		targetDir := utils.JoinPath(baseDir, targetCategoryDir)
+		logger.Info("📁 无子目录，使用分类根目录", "targetDir", targetDir)
+		return targetDir
+	} else {
+		// 保留过滤后的子目录结构
+		targetDir := utils.JoinPath(baseDir, targetCategoryDir, parentDir)
+		logger.Info("✅ 最终下载路径", "targetDir", targetDir)
+		return targetDir
+	}
+}
+
+// filterCategoryKeywords 过滤路径中的分类关键词目录
+func (s *AppFileService) filterCategoryKeywords(path string, keywords []string) string {
+	if path == "" || path == "/" {
+		return path
+	}
+	
+	logger.Info("🧹 开始过滤分类关键词", "originalPath", path, "keywords", keywords)
+	
+	// 分割路径为目录片段
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	var filteredParts []string
+	
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		
+		partLower := strings.ToLower(part)
+		isKeyword := false
+		
+		// 检查是否是完全匹配的分类关键词
+		for _, keyword := range keywords {
+			if partLower == keyword {
+				logger.Info("🚫 过滤掉分类关键词目录（完全匹配）", "part", part, "keyword", keyword)
+				isKeyword = true
+				break
+			}
+		}
+		
+		// 如果不是关键词，保留这个目录
+		if !isKeyword {
+			logger.Info("✅ 保留目录", "part", part)
+			filteredParts = append(filteredParts, part)
+		}
+	}
+	
+	// 重新组装路径
+	if len(filteredParts) == 0 {
+		logger.Info("⚠️  所有目录都被过滤，返回空路径")
+		return ""
+	}
+	
+	result := strings.Join(filteredParts, "/")
+	logger.Info("🔧 路径过滤结果", "original", path, "filtered", result, "removedParts", len(parts)-len(filteredParts))
+	return result
 }
 
 // GetStorageInfo 获取存储信息
@@ -618,10 +892,14 @@ func (s *AppFileService) convertToFileResponse(item alist.FileItem, basePath str
 	fullPath := utils.JoinPath(basePath, item.Name)
 	
 	// 解析修改时间
-	modifiedTime, err := time.Parse("2006-01-02T15:04:05.999999999Z", item.Modified)
+	logger.Info("Parsing time", "file", item.Name, "modifiedString", item.Modified)
+	
+	modifiedTime, err := utils.ParseTime(item.Modified)
 	if err != nil {
-		// 尝试其他时间格式
-		modifiedTime, _ = time.Parse("2006-01-02 15:04:05", item.Modified)
+		logger.Warn("Failed to parse time, using zero time", "file", item.Name, "modifiedString", item.Modified, "error", err)
+		modifiedTime = time.Time{} // 零值时间
+	} else {
+		logger.Info("Time parsed successfully", "file", item.Name, "parsedTime", modifiedTime.Format("2006-01-02 15:04:05 -07:00"), "unix", modifiedTime.Unix(), "location", modifiedTime.Location().String())
 	}
 	
 	resp := contracts.FileResponse{
@@ -634,24 +912,106 @@ func (s *AppFileService) convertToFileResponse(item alist.FileItem, basePath str
 	}
 
 	if !item.IsDir {
-		resp.MediaType = s.GetFileCategory(item.Name)
-		resp.Category = resp.MediaType
+		// 优先使用路径分类，回退到文件名分类
+		pathCategory := s.GetCategoryFromPath(fullPath)
+		if pathCategory != "" {
+			resp.MediaType = pathCategory
+			resp.Category = pathCategory
+			logger.Info("📁 convertToFileResponse: 使用路径分类", "file", item.Name, "path", fullPath, "category", pathCategory)
+		} else {
+			// 回退到文件名分类（如果路径分类失败）
+			fileCategory := s.GetFileCategory(item.Name)
+			resp.MediaType = fileCategory
+			resp.Category = fileCategory
+			logger.Info("📁 convertToFileResponse: 使用文件名分类", "file", item.Name, "category", fileCategory)
+		}
+		
 		resp.DownloadPath = s.GenerateDownloadPath(resp)
-		resp.InternalURL = s.generateInternalURL(fullPath)
-		resp.ExternalURL = s.generateExternalURL(fullPath)
+		
+		// 直接获取真实的raw_url用于下载（采用延迟加载方式避免性能问题）
+		// URL将在实际需要时通过getRealDownloadURLs方法获取
+		resp.InternalURL = ""  // 将在需要时填充
+		resp.ExternalURL = ""  // 将在需要时填充
 	}
 
 	return resp
 }
 
-// generateInternalURL 生成内部下载URL
-func (s *AppFileService) generateInternalURL(path string) string {
-	return fmt.Sprintf("%s/d%s", s.config.Alist.BaseURL, path)
+// getRealDownloadURLs 获取实际的下载URL（参考旧实现的简单有效方法）
+func (s *AppFileService) getRealDownloadURLs(filePath string) (internalURL, externalURL string) {
+	logger.Info("🔍 开始获取文件的raw_url", "path", filePath)
+	
+	// 确保AList客户端已登录
+	if s.alistClient.Token == "" {
+		logger.Info("🔑 检测到未登录，开始登录AList", "baseURL", s.alistClient.BaseURL)
+		if err := s.alistClient.Login(); err != nil {
+			logger.Error("❌ AList登录失败", "error", err)
+			fallbackInternal := s.generateInternalURL(filePath)
+			fallbackExternal := s.generateExternalURL(filePath)
+			logger.Info("🔄 登录失败，使用回退URL", "internal", fallbackInternal, "external", fallbackExternal)
+			return fallbackInternal, fallbackExternal
+		}
+		logger.Info("✅ AList登录成功")
+	}
+	
+	// 获取文件详细信息（包含raw_url）
+	fileInfo, err := s.alistClient.GetFileInfo(filePath)
+	if err != nil {
+		logger.Warn("❌ 获取文件信息失败，使用回退URL", "path", filePath, "error", err)
+		fallbackInternal := s.generateInternalURL(filePath)
+		fallbackExternal := s.generateExternalURL(filePath)
+		logger.Info("🔄 使用回退URL", "internal", fallbackInternal, "external", fallbackExternal)
+		return fallbackInternal, fallbackExternal
+	}
+	
+	// 使用旧实现的简单逻辑：直接获取raw_url并做域名替换
+	originalURL := fileInfo.Data.RawURL
+	logger.Info("🎯 获取到原始raw_url", "raw_url", originalURL)
+	
+	// 如果raw_url为空，使用回退逻辑
+	if originalURL == "" {
+		logger.Error("❌ raw_url为空，这不应该发生！", "path", filePath, "fileInfo", fileInfo.Data)
+		fallbackInternal := s.generateInternalURL(filePath)
+		fallbackExternal := s.generateExternalURL(filePath)
+		logger.Error("🔄 使用回退URL", "internal", fallbackInternal, "external", fallbackExternal)
+		return fallbackInternal, fallbackExternal
+	}
+	
+	// 采用旧实现的简单替换逻辑：只在包含fcalist-public时替换
+	internalURL = originalURL
+	externalURL = originalURL
+	
+	if strings.Contains(originalURL, "fcalist-public") {
+		internalURL = strings.ReplaceAll(originalURL, "fcalist-public", "fcalist-internal")
+		logger.Info("🔄 URL替换完成（采用旧实现逻辑）", 
+			"original", externalURL,
+			"internal", internalURL,
+			"replacement", "fcalist-public -> fcalist-internal")
+	} else {
+		logger.Info("ℹ️  无需URL替换", "internal", internalURL, "external", externalURL)
+	}
+	
+	logger.Info("✅ 成功获取下载URL（采用旧实现的简单逻辑）", 
+		"path", filePath,
+		"internal_url", internalURL, 
+		"external_url", externalURL,
+		"url_replaced", strings.Contains(originalURL, "fcalist-public"))
+	
+	return internalURL, externalURL
 }
 
-// generateExternalURL 生成外部访问URL
+// generateInternalURL 生成内部下载URL（回退方法）
+func (s *AppFileService) generateInternalURL(path string) string {
+	url := fmt.Sprintf("%s/d%s", s.config.Alist.BaseURL, path)
+	logger.Info("🔄 生成回退下载URL", "url", url, "path", path)
+	return url
+}
+
+// generateExternalURL 生成外部访问URL（回退方法）
 func (s *AppFileService) generateExternalURL(path string) string {
-	return fmt.Sprintf("%s/p%s", s.config.Alist.BaseURL, path)
+	url := fmt.Sprintf("%s/p%s", s.config.Alist.BaseURL, path)
+	logger.Info("🔄 生成回退外部URL", "url", url, "path", path)
+	return url
 }
 
 // getParentPath 获取父路径
@@ -671,20 +1031,29 @@ func (s *AppFileService) GetCategoryFromPath(path string) string {
 	// 将路径转为小写以便匹配
 	pathLower := strings.ToLower(path)
 	
-	// 电视剧类型指示器 - 优先级最高
-	tvPathKeywords := []string{"/tvs/", "/tv/", "/series/", "/电视剧/", "/连续剧/", "/剧集/"}
-	for _, keyword := range tvPathKeywords {
-		if strings.Contains(pathLower, keyword) {
+	// 检查 TVs 和 Movies 的位置，选择最早出现的
+	tvsIndex := strings.Index(pathLower, "tvs")
+	moviesIndex := strings.Index(pathLower, "movies")
+	
+	// 如果两个都存在，选择最早出现的（路径层级更高的）
+	if tvsIndex != -1 && moviesIndex != -1 {
+		if tvsIndex < moviesIndex {
+			logger.Info("🔍 路径同时包含 tvs 和 movies，选择更早出现的 tvs", "path", path, "tvsIndex", tvsIndex, "moviesIndex", moviesIndex)
 			return "tv"
-		}
-	}
-
-	// 电影类型指示器
-	moviePathKeywords := []string{"/movies/", "/movie/", "/film/", "/电影/", "/影片/"}
-	for _, keyword := range moviePathKeywords {
-		if strings.Contains(pathLower, keyword) {
+		} else {
+			logger.Info("🔍 路径同时包含 tvs 和 movies，选择更早出现的 movies", "path", path, "tvsIndex", tvsIndex, "moviesIndex", moviesIndex)
 			return "movie"
 		}
+	}
+	
+	// 简化的 TVs 判断：只要路径包含 tvs 就判断为 tv
+	if tvsIndex != -1 {
+		return "tv"
+	}
+
+	// 简化的 Movies 判断：只要路径包含 movies 就判断为 movie  
+	if moviesIndex != -1 {
+		return "movie"
 	}
 
 	// 综艺类型指示器
@@ -708,15 +1077,19 @@ func (s *AppFileService) GetCategoryFromPath(path string) string {
 }
 
 // updateMediaStats 更新媒体统计
-func (s *AppFileService) updateMediaStats(summary *contracts.FileSummary, filename string) {
+func (s *AppFileService) updateMediaStats(summary *contracts.FileSummary, filePath, filename string) {
 	if !s.IsVideoFile(filename) {
 		summary.OtherFiles++
 		return
 	}
 
 	summary.VideoFiles++
-	category := s.GetFileCategory(filename)
-	switch category {
+	
+	// 使用 GetMediaType 方法，它会优先使用路径分类，然后回退到文件名分类
+	mediaType := s.GetMediaType(filePath)
+	logger.Info("📊 文件统计分类", "filePath", filePath, "filename", filename, "mediaType", mediaType)
+	
+	switch mediaType {
 	case "movie":
 		summary.MovieFiles++
 	case "tv":
@@ -761,9 +1134,308 @@ func (s *AppFileService) calculateFileSummary(files []contracts.FileResponse) co
 	for _, file := range files {
 		summary.TotalFiles++
 		summary.TotalSize += file.Size
-		s.updateMediaStats(&summary, file.Name)
+		// 传入完整路径用于路径分类
+		s.updateMediaStats(&summary, file.Path, file.Name)
 	}
 
 	summary.TotalSizeFormatted = s.FormatFileSize(summary.TotalSize)
 	return summary
+}
+
+// generateSmartTVPath 智能生成电视剧路径，将季度信息规范化
+func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
+	logger.Info("🎬 开始智能电视剧路径解析", "filePath", filePath)
+	
+	// 从路径中提取tvs之后的部分
+	pathLower := strings.ToLower(filePath)
+	tvsIndex := strings.Index(pathLower, "tvs")
+	if tvsIndex == -1 {
+		logger.Warn("⚠️  路径中未找到tvs关键词", "filePath", filePath)
+		return ""
+	}
+	
+	// 提取tvs之后的路径部分
+	afterTvs := filePath[tvsIndex+3:] // 跳过"tvs"
+	if strings.HasPrefix(afterTvs, "/") {
+		afterTvs = afterTvs[1:] // 去掉开头的/
+	}
+	
+	// 分割路径为各个部分
+	pathParts := strings.Split(afterTvs, "/")
+	if len(pathParts) < 2 {
+		logger.Warn("⚠️  电视剧路径结构不完整", "afterTvs", afterTvs, "parts", pathParts)
+		return ""
+	}
+	
+	logger.Info("🔍 路径组件分析", "pathParts", pathParts)
+	
+	// 寻找包含季度信息的目录（从最深层开始检查）
+	var smartPath string
+	lastIndex := len(pathParts) - 1
+	
+	// 如果最后一个部分是文件（包含文件扩展名），则排除它
+	if strings.Contains(pathParts[lastIndex], ".") {
+		lastIndex-- 
+	}
+	
+	for i := lastIndex; i >= 0; i-- {
+		currentDir := pathParts[i]
+		logger.Info("🔍 检查目录", "index", i, "dir", currentDir)
+		
+		// 先检查是否包含完整的节目名信息
+		extractedShowName := s.extractFullShowName(currentDir)
+		if extractedShowName != "" {
+			// 检查是否是"宝藏行"或其他特殊系列（包含更多信息）
+			if strings.Contains(extractedShowName, "宝藏行") || strings.Contains(extractedShowName, "公益季") {
+				// 对于特殊系列，直接使用完整节目名
+				smartPath = utils.JoinPath(baseDir, "tvs", extractedShowName)
+				logger.Info("✅ 使用完整特殊节目名", 
+					"原路径", filePath,
+					"完整节目名", extractedShowName,
+					"智能路径", smartPath)
+				return smartPath
+			}
+		}
+		
+		// 尝试从当前目录提取季度信息并生成规范化路径
+		seasonNumber := s.extractSeasonNumber(currentDir)
+		if seasonNumber > 0 {
+			// 使用第一层目录作为基础节目名，生成 节目名/S##
+			baseShowName := pathParts[0]
+			seasonCode := fmt.Sprintf("S%02d", seasonNumber)
+			smartPath = utils.JoinPath(baseDir, "tvs", baseShowName, seasonCode)
+			
+			logger.Info("✅ 从目录生成季度路径", 
+				"原路径", filePath,
+				"基础节目名", baseShowName,
+				"季度目录", currentDir,
+				"季度", seasonNumber,
+				"季度代码", seasonCode,
+				"智能路径", smartPath)
+			
+			return smartPath
+		}
+		
+		// 最后检查其他完整节目名
+		if extractedShowName != "" {
+			// 直接使用提取的完整节目名作为最终目录
+			smartPath = utils.JoinPath(baseDir, "tvs", extractedShowName)
+			
+			logger.Info("✅ 使用完整节目名生成路径", 
+				"原路径", filePath,
+				"目标目录", currentDir,
+				"提取节目名", extractedShowName,
+				"智能路径", smartPath)
+			
+			return smartPath
+		}
+	}
+	
+	// 如果上述方法失败，尝试传统的季度解析方法
+	showName := pathParts[0]
+	seasonDir := pathParts[1]
+	
+	logger.Info("🔄 回退到传统解析", "showName", showName, "seasonDir", seasonDir)
+	
+	// 解析季度信息
+	seasonNumber := s.extractSeasonNumber(seasonDir)
+	if seasonNumber > 0 {
+		// 构建规范化路径：/downloads/tvs/节目名/S##
+		seasonCode := fmt.Sprintf("S%02d", seasonNumber)
+		smartPath = utils.JoinPath(baseDir, "tvs", showName, seasonCode)
+		
+		logger.Info("✅ 传统方法生成路径", 
+			"原路径", filePath,
+			"节目名", showName, 
+			"季度", seasonNumber,
+			"季度代码", seasonCode,
+			"智能路径", smartPath)
+		
+		return smartPath
+	}
+	
+	logger.Info("⚠️  未能解析季度信息，使用原始逻辑", "seasonDir", seasonDir)
+	return ""
+}
+
+// extractSeasonNumber 从目录名中提取季度编号
+func (s *AppFileService) extractSeasonNumber(dirName string) int {
+	if dirName == "" {
+		return 0
+	}
+	
+	dirLower := strings.ToLower(dirName)
+	
+	// 匹配各种季度格式
+	patterns := []struct {
+		pattern string
+		extract func(string) int
+	}{
+		// 第X季 格式
+		{"第", func(s string) int {
+			if idx := strings.Index(s, "第"); idx != -1 {
+				after := s[idx+len("第"):]
+				if seasonIdx := strings.Index(after, "季"); seasonIdx != -1 {
+					seasonStr := after[:seasonIdx]
+					// 转换中文数字或阿拉伯数字
+					return chineseOrArabicToNumber(seasonStr)
+				}
+			}
+			return 0
+		}},
+		// Season X 格式
+		{"season", func(s string) int {
+			if idx := strings.Index(s, "season"); idx != -1 {
+				after := strings.TrimSpace(s[idx+6:])
+				// 提取数字部分
+				var numStr string
+				for _, char := range after {
+					if char >= '0' && char <= '9' {
+						numStr += string(char)
+					} else {
+						break
+					}
+				}
+				if num, err := strconv.Atoi(numStr); err == nil && num > 0 {
+					return num
+				}
+			}
+			return 0
+		}},
+		// SXX 格式
+		{"s", func(s string) int {
+			if len(s) >= 2 && s[0] == 's' {
+				numStr := ""
+				for i := 1; i < len(s) && i < 4; i++ { // 最多取3位数字
+					if s[i] >= '0' && s[i] <= '9' {
+						numStr += string(s[i])
+					} else {
+						break
+					}
+				}
+				if num, err := strconv.Atoi(numStr); err == nil && num > 0 {
+					return num
+				}
+			}
+			return 0
+		}},
+		// 直接包含年份+季度信息，如"极限挑战第9季2023"
+		{"", func(s string) int {
+			// 查找"第X季"模式
+			for i := 0; i < len(s)-1; i++ {
+				if s[i:i+1] == "第" && i+2 < len(s) && s[i+2:i+3] == "季" {
+					seasonChar := s[i+1 : i+2]
+					return chineseOrArabicToNumber(seasonChar)
+				}
+			}
+			return 0
+		}},
+	}
+	
+	// 尝试各种模式
+	for _, pattern := range patterns {
+		if pattern.pattern == "" || strings.Contains(dirLower, pattern.pattern) {
+			if num := pattern.extract(dirLower); num > 0 {
+				logger.Info("🎯 成功提取季度编号", "dirName", dirName, "pattern", pattern.pattern, "seasonNumber", num)
+				return num
+			}
+		}
+	}
+	
+	logger.Info("⚠️  无法从目录名提取季度编号", "dirName", dirName)
+	return 0
+}
+
+// extractFullShowName 提取完整的节目名（包含季度信息）
+func (s *AppFileService) extractFullShowName(dirName string) string {
+	if dirName == "" {
+		return ""
+	}
+	
+	logger.Info("🔍 分析节目名", "dirName", dirName)
+	
+	// 检查是否包含季度关键词，如果包含则认为这是完整的节目名
+	seasonKeywords := []string{"第", "季", "season", "宝藏行", "公益季"}
+	hasSeasonInfo := false
+	
+	dirLower := strings.ToLower(dirName)
+	for _, keyword := range seasonKeywords {
+		if strings.Contains(dirLower, strings.ToLower(keyword)) {
+			hasSeasonInfo = true
+			logger.Info("🎯 发现季度关键词", "dirName", dirName, "keyword", keyword)
+			break
+		}
+	}
+	
+	if hasSeasonInfo {
+		// 清理目录名，移除不必要的后缀信息
+		cleanName := s.cleanShowName(dirName)
+		if cleanName != "" {
+			logger.Info("✅ 提取完整节目名", "原目录名", dirName, "清理后", cleanName)
+			return cleanName
+		}
+	}
+	
+	logger.Info("⚠️  目录不包含季度信息", "dirName", dirName)
+	return ""
+}
+
+// cleanShowName 清理节目名，移除不必要的后缀信息
+func (s *AppFileService) cleanShowName(showName string) string {
+	if showName == "" {
+		return ""
+	}
+	
+	// 移除常见的后缀信息
+	suffixesToRemove := []string{
+		"（", "(", // 移除括号及之后的内容
+		"2021", "2022", "2023", "2024", "2025", // 移除年份
+		"全", "期全", "完结", "[", "【", // 移除完结标记
+	}
+	
+	cleaned := showName
+	for _, suffix := range suffixesToRemove {
+		if idx := strings.Index(cleaned, suffix); idx != -1 {
+			cleaned = cleaned[:idx]
+			logger.Info("🧹 移除后缀", "原名", showName, "后缀", suffix, "清理后", cleaned)
+		}
+	}
+	
+	// 去除前后空白
+	cleaned = strings.TrimSpace(cleaned)
+	
+	// 如果清理后为空或太短，返回原名
+	if len(cleaned) < 3 {
+		logger.Info("⚠️  清理后名称太短，使用原名", "cleaned", cleaned, "original", showName)
+		return showName
+	}
+	
+	logger.Info("✅ 节目名清理完成", "原名", showName, "清理后", cleaned)
+	return cleaned
+}
+
+// chineseOrArabicToNumber 转换中文数字或阿拉伯数字为整数
+func chineseOrArabicToNumber(str string) int {
+	if str == "" {
+		return 0
+	}
+	
+	// 先尝试直接转换阿拉伯数字
+	if num, err := strconv.Atoi(str); err == nil {
+		return num
+	}
+	
+	// 转换中文数字
+	chineseNumbers := map[string]int{
+		"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
+		"六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+		"1": 1, "2": 2, "3": 3, "4": 4, "5": 5,
+		"6": 6, "7": 7, "8": 8, "9": 9,
+	}
+	
+	if num, exists := chineseNumbers[str]; exists {
+		return num
+	}
+	
+	return 0
 }

@@ -168,6 +168,7 @@ type FileService interface {
 	// 文件工具
 	IsVideoFile(filename string) bool
 	GetFileCategory(filename string) string
+	GetMediaType(filePath string) string
 	FormatFileSize(size int64) string
 	GenerateDownloadPath(file FileResponse) string
 	

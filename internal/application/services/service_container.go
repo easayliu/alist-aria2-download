@@ -46,8 +46,9 @@ func NewServiceContainer(cfg *config.Config) (*ServiceContainer, error) {
 	container.downloadService = NewAppDownloadService(cfg, container.fileService)
 	
 	// 更新fileService的downloadService依赖
+	// 注意：由于字段私有，需要添加setter方法
 	if appFileService, ok := container.fileService.(*AppFileService); ok {
-		appFileService.downloadService = container.downloadService
+		appFileService.SetDownloadService(container.downloadService)
 	}
 	
 	// 3. 初始化需要复杂依赖的服务

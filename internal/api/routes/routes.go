@@ -24,152 +24,61 @@ func NewRoutesConfig(container *services.ServiceContainer) *RoutesConfig {
 	}
 }
 
-// SetupRoutes 设置路由 - 统一业务服务架构
+// SetupRoutes 设置路由 - 简单直接的处理方式
 func (rc *RoutesConfig) SetupRoutes(router *gin.Engine) {
-	// 创建处理器实例
-	downloadHandler := handlers.NewDownloadHandler(rc.container)
-	taskHandler := handlers.NewTaskHandler(rc.container)
-	
 	// API 路由组
-	api := router.Group("/api")
+	api := router.Group("/api/v1")
 	{
-		// 下载管理路由
+		// 健康检查
+		api.GET("/health", handlers.HealthCheck)
+
+		// 下载相关路由
 		downloads := api.Group("/downloads")
 		{
-			// 基础下载操作
-			downloads.POST("", downloadHandler.CreateDownload)
-			downloads.GET("", downloadHandler.ListDownloads)
-			downloads.GET("/:id", downloadHandler.GetDownload)
-			downloads.DELETE("/:id", downloadHandler.DeleteDownload)
-			
-			// 下载控制
-			downloads.POST("/:id/pause", downloadHandler.PauseDownload)
-			downloads.POST("/:id/resume", downloadHandler.ResumeDownload)
-			
-			// 批量操作
-			downloads.POST("/batch", downloadHandler.CreateBatchDownload)
-			
-			// 系统状态
-			downloads.GET("/status", downloadHandler.GetSystemStatus)
-			downloads.GET("/statistics", downloadHandler.GetStatistics)
+			downloads.POST("/", handlers.CreateDownload)
+			downloads.GET("/", handlers.ListDownloads)
+			downloads.GET("/:id", handlers.GetDownload)
+			downloads.DELETE("/:id", handlers.DeleteDownload)
+			downloads.POST("/:id/pause", handlers.PauseDownload)
+			downloads.POST("/:id/resume", handlers.ResumeDownload)
 		}
 
-		// 任务管理路由
-		tasks := api.Group("/tasks")
+		// Alist相关路由
+		alist := api.Group("/alist")
 		{
-			// 基础任务操作
-			tasks.POST("", taskHandler.CreateTask)
-			tasks.GET("", taskHandler.ListTasks)
-			tasks.GET("/:id", taskHandler.GetTask)
-			tasks.PUT("/:id", taskHandler.UpdateTask)
-			tasks.DELETE("/:id", taskHandler.DeleteTask)
-			
-			// 任务控制
-			tasks.POST("/:id/run", taskHandler.RunTaskNow)
-			tasks.GET("/:id/preview", taskHandler.PreviewTask)
-			tasks.POST("/:id/enable", taskHandler.EnableTask)
-			tasks.POST("/:id/disable", taskHandler.DisableTask)
-			
-			// 快捷任务
-			tasks.POST("/quick", taskHandler.CreateQuickTask)
-			
-			// 系统状态
-			tasks.GET("/statistics", taskHandler.GetTaskStatistics)
-			tasks.GET("/scheduler/status", taskHandler.GetSchedulerStatus)
+			alist.GET("/files", handlers.ListFiles)
+			alist.GET("/file", handlers.GetFileInfo)
+			alist.POST("/login", handlers.AlistLogin)
 		}
 
-		// 文件管理路由（如果需要）
+		// 文件管理相关路由
 		files := api.Group("/files")
 		{
-			// TODO: 实现文件管理相关路由
-			_ = files // 避免未使用变量警告
+			files.GET("/yesterday", handlers.GetYesterdayFiles)
+			files.POST("/yesterday/download", handlers.DownloadYesterdayFiles)
+			files.POST("/download", handlers.DownloadFilesFromPath)
+			files.POST("/list", handlers.ListFilesHandler)
+			files.POST("/manual-download", handlers.ManualDownloadFiles)
 		}
 
-		// 通知管理路由（如果需要）
-		notifications := api.Group("/notifications")
+		// 定时任务相关路由
+		tasks := api.Group("/tasks")
 		{
-			// TODO: 实现通知管理相关路由
-			_ = notifications // 避免未使用变量警告
+			tasks.POST("/", handlers.CreateTask)
+			tasks.GET("/", handlers.ListTasks)
+			tasks.GET("/:id", handlers.GetTask)
+			tasks.PUT("/:id", handlers.UpdateTask)
+			tasks.DELETE("/:id", handlers.DeleteTask)
+			tasks.POST("/:id/run", handlers.RunTaskNow)
+			tasks.GET("/:id/preview", handlers.PreviewTask)
+			tasks.POST("/:id/toggle", handlers.ToggleTask)
 		}
-
-		// 系统健康检查
-		api.GET("/health", rc.handleHealthCheck)
 	}
 }
 
-// handleHealthCheck 处理健康检查请求
-func (rc *RoutesConfig) handleHealthCheck(c *gin.Context) {
-	health := rc.container.GetHealthStatus()
-	
-	// 根据健康状态设置HTTP状态码
-	var statusCode int
-	switch health.Status {
-	case "healthy":
-		statusCode = 200
-	case "degraded":
-		statusCode = 200 // 降级但仍可用
-	case "unhealthy":
-		statusCode = 503 // 服务不可用
-	default:
-		statusCode = 500
-	}
-	
-	c.JSON(statusCode, health)
-}
 
-// SetupMiddlewares 设置中间件
-func (rc *RoutesConfig) SetupMiddlewares(router *gin.Engine) {
-	// 依赖注入中间件 - 将服务容器注入到上下文
-	router.Use(func(c *gin.Context) {
-		c.Set("serviceContainer", rc.container)
-		c.Set("downloadService", rc.container.GetDownloadService())
-		c.Set("fileService", rc.container.GetFileService())
-		c.Set("taskService", rc.container.GetTaskService())
-		c.Set("notificationService", rc.container.GetNotificationService())
-		c.Next()
-	})
 
-	// 错误处理中间件
-	router.Use(rc.errorHandlingMiddleware())
-
-	// 请求日志中间件
-	router.Use(rc.requestLoggingMiddleware())
-}
-
-// errorHandlingMiddleware 错误处理中间件
-func (rc *RoutesConfig) errorHandlingMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		defer func() {
-			if err := recover(); err != nil {
-				// 记录panic错误
-				c.JSON(500, gin.H{
-					"error": "Internal server error",
-					"code":  "INTERNAL_ERROR",
-				})
-				c.Abort()
-			}
-		}()
-		c.Next()
-	}
-}
-
-// requestLoggingMiddleware 请求日志中间件
-func (rc *RoutesConfig) requestLoggingMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		// 记录请求信息
-		// TODO: 实现详细的请求日志记录
-		c.Next()
-	}
-}
-
-// GetContainer 获取服务容器（用于其他组件）
-func (rc *RoutesConfig) GetContainer() *services.ServiceContainer {
-	return rc.container
-}
-
-// ========== 向后兼容性支持 ==========
-
-// SetupRoutes 向后兼容函数 - 保持与现有main.go的兼容性
+// SetupRoutes 设置路由 - 重构前的简单实现
 func SetupRoutes(cfg *config.Config, notificationService *services.NotificationService, fileService *services.FileService) (*gin.Engine, *telegram.TelegramHandler, *services.SchedulerService) {
 	router := gin.Default()
 
@@ -178,7 +87,7 @@ func SetupRoutes(cfg *config.Config, notificationService *services.NotificationS
 	downloadService := services.NewDownloadService(cfg)
 	schedulerService := services.NewSchedulerService(taskRepo, fileService, notificationService, downloadService)
 
-	// 设置中间件
+	// 设置中间件，将服务实例添加到上下文
 	router.Use(func(c *gin.Context) {
 		c.Set("schedulerService", schedulerService)
 		c.Set("taskRepo", taskRepo)
@@ -201,13 +110,65 @@ func SetupRoutes(cfg *config.Config, notificationService *services.NotificationS
 		router.POST("/telegram/webhook", telegramHandler.Webhook)
 	}
 
-	// 创建服务容器和新路由配置
-	container, _ := services.NewServiceContainer(cfg)
-	routesConfig := NewRoutesConfig(container)
-	
-	// 设置新架构的路由
-	routesConfig.SetupRoutes(router)
-	routesConfig.SetupMiddlewares(router)
+	// API路由组
+	api := router.Group("/api/v1")
+	{
+		// 健康检查
+		api.GET("/health", handlers.HealthCheck)
+
+		// 下载相关路由
+		downloads := api.Group("/downloads")
+		{
+			downloads.POST("/", handlers.CreateDownload)
+			downloads.GET("/", handlers.ListDownloads)
+			downloads.GET("/:id", handlers.GetDownload)
+			downloads.DELETE("/:id", handlers.DeleteDownload)
+			downloads.POST("/:id/pause", handlers.PauseDownload)
+			downloads.POST("/:id/resume", handlers.ResumeDownload)
+		}
+
+		// Alist相关路由
+		alist := api.Group("/alist")
+		{
+			alist.GET("/files", handlers.ListFiles)
+			alist.GET("/file", handlers.GetFileInfo)
+			alist.POST("/login", handlers.AlistLogin)
+		}
+
+		// 文件管理相关路由
+		files := api.Group("/files")
+		{
+			files.GET("/yesterday", handlers.GetYesterdayFiles)
+			files.POST("/yesterday/download", handlers.DownloadYesterdayFiles)
+			files.POST("/download", handlers.DownloadFilesFromPath)
+			files.POST("/list", handlers.ListFilesHandler)
+			files.POST("/manual-download", handlers.ManualDownloadFiles)
+		}
+
+		// 定时任务相关路由
+		tasks := api.Group("/tasks")
+		{
+			tasks.POST("/", handlers.CreateTask)
+			tasks.GET("/", handlers.ListTasks)
+			tasks.GET("/:id", handlers.GetTask)
+			tasks.PUT("/:id", handlers.UpdateTask)
+			tasks.DELETE("/:id", handlers.DeleteTask)
+			tasks.POST("/:id/run", handlers.RunTaskNow)
+			tasks.GET("/:id/preview", handlers.PreviewTask)
+			tasks.POST("/:id/toggle", handlers.ToggleTask)
+		}
+
+		// Telegram管理路由
+		if cfg.Telegram.Enabled {
+			telegram := api.Group("/telegram")
+			{
+				telegram.POST("/notify", func(c *gin.Context) {
+					// TODO: 手动发送通知接口
+					c.JSON(200, gin.H{"message": "Notification sent"})
+				})
+			}
+		}
+	}
 
 	return router, telegramHandler, schedulerService
 }

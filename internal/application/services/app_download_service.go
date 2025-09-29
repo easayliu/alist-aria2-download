@@ -32,10 +32,11 @@ func NewAppDownloadService(cfg *config.Config, fileService contracts.FileService
 
 // CreateDownload 创建下载任务 - 统一的业务逻辑
 func (s *AppDownloadService) CreateDownload(ctx context.Context, req contracts.DownloadRequest) (*contracts.DownloadResponse, error) {
-	logger.Info("Creating download", "url", req.URL, "filename", req.Filename)
+	logger.Info("Creating download", "url", req.URL, "filename", req.Filename, "directory", req.Directory)
 
 	// 1. 参数验证
 	if err := s.validateDownloadRequest(req); err != nil {
+		logger.Error("❌ 下载请求验证失败", "url", req.URL, "filename", req.Filename, "error", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
@@ -211,14 +212,18 @@ func (s *AppDownloadService) CreateBatchDownload(ctx context.Context, req contra
 			result.Download = download
 			successCount++
 			
-			// 更新摘要统计
+			// 更新摘要统计 - 使用最终下载目录路径进行正确分类
 			summary.TotalFiles++
 			if s.isVideoFile(download.Filename) {
 				summary.VideoFiles++
-				if s.isMovieFile(download.Filename) {
+				// 使用最终的下载目录路径来判断分类
+				downloadDir := strings.ToLower(download.Directory)
+				if strings.Contains(downloadDir, "movies") {
 					summary.MovieFiles++
-				} else if s.isTVFile(download.Filename) {
+				} else if strings.Contains(downloadDir, "tvs") {
 					summary.TVFiles++
+				} else {
+					summary.OtherFiles++
 				}
 			} else {
 				summary.OtherFiles++
@@ -371,10 +376,12 @@ func (s *AppDownloadService) prepareDownloadOptions(req contracts.DownloadReques
 		options["out"] = req.Filename
 	}
 
-	// 应用自动分类
-	if req.AutoClassify {
-		options["dir"] = s.generateClassifiedPath(req.Filename, req.Directory)
-	}
+	// 应用自动分类 - 已注释掉，因为 AppFileService 中的 GenerateDownloadPath 已经处理了路径分类
+	// if req.AutoClassify {
+	//     options["dir"] = s.generateClassifiedPath(req.Filename, req.Directory)
+	// }
+	
+	logger.Info("📁 prepareDownloadOptions: 最终下载选项", "dir", options["dir"], "out", options["out"], "autoClassify", req.AutoClassify)
 
 	return options
 }
@@ -440,8 +447,30 @@ func (s *AppDownloadService) isVideoFile(filename string) bool {
 	return false
 }
 
-// isMovieFile 检查是否为电影文件
-func (s *AppDownloadService) isMovieFile(filename string) bool {
+// isMovieFile 检查是否为电影文件 - 使用智能路径分类
+func (s *AppDownloadService) isMovieFile(filepath string) bool {
+	if filepath == "" {
+		return false
+	}
+	
+	// 使用文件服务的智能媒体类型判断
+	mediaType := s.fileService.GetMediaType(filepath)
+	return mediaType == "movie"
+}
+
+// isTVFile 检查是否为电视剧文件 - 使用智能路径分类
+func (s *AppDownloadService) isTVFile(filepath string) bool {
+	if filepath == "" {
+		return false
+	}
+	
+	// 使用文件服务的智能媒体类型判断
+	mediaType := s.fileService.GetMediaType(filepath)
+	return mediaType == "tv"
+}
+
+// isMovieFileSimple 简单的电影文件检查（回退方法）
+func (s *AppDownloadService) isMovieFileSimple(filename string) bool {
 	filename = strings.ToLower(filename)
 	movieKeywords := []string{"movie", "film", "电影", "mp4", "mkv"}
 	for _, keyword := range movieKeywords {
@@ -452,8 +481,8 @@ func (s *AppDownloadService) isMovieFile(filename string) bool {
 	return false
 }
 
-// isTVFile 检查是否为电视剧文件
-func (s *AppDownloadService) isTVFile(filename string) bool {
+// isTVFileSimple 简单的电视剧文件检查（回退方法）
+func (s *AppDownloadService) isTVFileSimple(filename string) bool {
 	filename = strings.ToLower(filename)
 	tvKeywords := []string{"tv", "series", "episode", "ep", "s01", "s02", "电视剧"}
 	for _, keyword := range tvKeywords {
@@ -546,3 +575,4 @@ func (s *AppDownloadService) sortDownloads(downloads []contracts.DownloadRespons
 	// 简单实现，实际可以使用更复杂的排序逻辑
 	return downloads
 }
+

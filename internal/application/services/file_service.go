@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
+	"github.com/easayliu/alist-aria2-download/pkg/logger"
+	"github.com/easayliu/alist-aria2-download/pkg/utils"
 )
 
 // FileService 文件服务
@@ -52,7 +54,7 @@ func (s *FileService) fetchFilesRecursiveByTime(path string, startTime, endTime 
 	}
 
 	for _, file := range fileList.Data.Content {
-		fileTime, _ := time.Parse(time.RFC3339, file.Modified)
+		fileTime := utils.ParseTimeOrZero(file.Modified)
 
 		if file.IsDir {
 			// 递归处理子目录
@@ -63,7 +65,7 @@ func (s *FileService) fetchFilesRecursiveByTime(path string, startTime, endTime 
 			s.fetchFilesRecursiveByTime(subPath, startTime, endTime, videoOnly, files)
 		} else {
 			// 检查文件时间和类型
-			if fileTime.After(startTime) && fileTime.Before(endTime) {
+			if utils.IsInRange(fileTime, startTime, endTime) {
 				if !videoOnly || (videoOnly && s.isSingleVideoFile(file.Name)) {
 					*files = append(*files, file)
 				}
@@ -119,14 +121,11 @@ type YesterdayFileInfo struct {
 func (s *FileService) GetYesterdayFiles(basePath string) ([]YesterdayFileInfo, error) {
 	var allYesterdayFiles []YesterdayFileInfo
 
-	// 获取昨天的日期范围
-	now := time.Now()
-	yesterday := now.AddDate(0, 0, -1)
-	yesterdayStart := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, yesterday.Location())
-	yesterdayEnd := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 23, 59, 59, 999999999, yesterday.Location())
+	// 使用时间工具创建昨天的时间范围
+	yesterdayRange := utils.CreateYesterdayRange()
 
 	// 递归获取文件
-	if err := s.fetchYesterdayFilesRecursive(basePath, yesterdayStart, yesterdayEnd, &allYesterdayFiles); err != nil {
+	if err := s.fetchYesterdayFilesRecursive(basePath, yesterdayRange.Start, yesterdayRange.End, &allYesterdayFiles); err != nil {
 		return nil, err
 	}
 
@@ -166,8 +165,8 @@ func (s *FileService) fetchFilesRecursiveWithInfo(path string, startTime, endTim
 		// 处理每个文件/目录
 		for _, file := range fileList.Data.Content {
 			// 解析修改时间
-			modTime, err := time.Parse(time.RFC3339, file.Modified)
-			if err != nil {
+			modTime := utils.ParseTimeOrZero(file.Modified)
+			if modTime.IsZero() {
 				continue
 			}
 
@@ -193,7 +192,7 @@ func (s *FileService) fetchFilesRecursiveWithInfo(path string, startTime, endTim
 				}
 
 				// 检查是否在时间范围内
-				if modTime.After(startTime) && modTime.Before(endTime) {
+				if utils.IsInRange(modTime, startTime, endTime) {
 					// 获取文件详细信息（包含下载链接）
 					fileInfo, err := s.alistClient.GetFileInfo(fullPath)
 					if err != nil {
@@ -202,9 +201,14 @@ func (s *FileService) fetchFilesRecursiveWithInfo(path string, startTime, endTim
 
 					// 替换URL（只在包含fcalist-public时替换）
 					originalURL := fileInfo.Data.RawURL
+					logger.Info("🎯 FileService获取到raw_url", "path", fullPath, "raw_url", originalURL)
+					
 					internalURL := originalURL
 					if strings.Contains(originalURL, "fcalist-public") {
 						internalURL = strings.ReplaceAll(originalURL, "fcalist-public", "fcalist-internal")
+						logger.Info("🔄 FileService URL替换", "original", originalURL, "internal", internalURL)
+					} else {
+						logger.Info("ℹ️  FileService无需URL替换", "url", originalURL)
 					}
 
 					// 判断媒体类型并生成下载路径
@@ -249,8 +253,8 @@ func (s *FileService) fetchYesterdayFilesRecursive(path string, yesterdayStart, 
 		// 处理每个文件/目录
 		for _, file := range fileList.Data.Content {
 			// 解析修改时间
-			modTime, err := time.Parse(time.RFC3339, file.Modified)
-			if err != nil {
+			modTime := utils.ParseTimeOrZero(file.Modified)
+			if modTime.IsZero() {
 				continue
 			}
 
@@ -276,7 +280,7 @@ func (s *FileService) fetchYesterdayFilesRecursive(path string, yesterdayStart, 
 				}
 
 				// 检查是否是昨天修改的
-				if modTime.After(yesterdayStart) && modTime.Before(yesterdayEnd) {
+				if utils.IsInRange(modTime, yesterdayStart, yesterdayEnd) {
 					// 获取文件详细信息（包含下载链接）
 					fileInfo, err := s.alistClient.GetFileInfo(fullPath)
 					if err != nil {
@@ -317,6 +321,25 @@ func (s *FileService) fetchYesterdayFilesRecursive(path string, yesterdayStart, 
 	return nil
 }
 
+
+// DetermineMediaTypeAndPath 根据文件路径判断媒体类型并生成下载路径（公开方法）
+func (s *FileService) DetermineMediaTypeAndPath(fullPath, fileName string) (MediaType, string) {
+	return s.determineMediaTypeAndPath(fullPath, fileName)
+}
+
+// GetMediaType 获取文件的媒体类型（用于统计）
+func (s *FileService) GetMediaType(filePath string) string {
+	mediaType, _ := s.determineMediaTypeAndPath(filePath, filePath)
+	switch mediaType {
+	case MediaTypeMovie:
+		return "movie"
+	case MediaTypeTV:
+		return "tv"
+	default:
+		return "other"
+	}
+}
+
 // determineMediaTypeAndPath 根据文件路径判断媒体类型并生成下载路径
 func (s *FileService) determineMediaTypeAndPath(fullPath, fileName string) (MediaType, string) {
 	// 需要同时检查原始路径和小写路径
@@ -328,7 +351,8 @@ func (s *FileService) determineMediaTypeAndPath(fullPath, fileName string) (Medi
 		if s.isMovieSeries(fullPath) {
 			movieName := s.extractMovieName(fullPath)
 			if movieName != "" {
-				return MediaTypeMovie, "/downloads/movies/" + movieName
+				downloadPath := "/downloads/movies/" + movieName
+				return MediaTypeMovie, s.applyPathMapping(fullPath, downloadPath)
 			}
 		}
 
@@ -339,26 +363,36 @@ func (s *FileService) determineMediaTypeAndPath(fullPath, fileName string) (Medi
 				showName, versionPath := s.extractTVShowWithVersion(fullPath)
 				if showName != "" {
 					if versionPath != "" {
-						return MediaTypeTV, "/downloads/tvs/" + showName + "/" + versionPath
+						downloadPath := "/downloads/tvs/" + showName + "/" + versionPath
+						return MediaTypeTV, s.applyPathMapping(fullPath, downloadPath)
 					}
-					return MediaTypeTV, "/downloads/tvs/" + showName + "/S1"
+					downloadPath := "/downloads/tvs/" + showName
+					return MediaTypeTV, s.applyPathMapping(fullPath, downloadPath)
 				}
 			}
 			
 			// 提取剧集信息
 			showName, seasonInfo := s.extractTVShowInfo(fullPath)
 			if showName != "" && seasonInfo != "" {
-				return MediaTypeTV, "/downloads/tvs/" + showName + "/" + seasonInfo
+				downloadPath := "/downloads/tvs/" + showName + "/" + seasonInfo
+				return MediaTypeTV, s.applyPathMapping(fullPath, downloadPath)
 			}
-			return MediaTypeTV, "/downloads/tvs/" + s.extractFolderName(fullPath) + "/S1"
+			if showName != "" {
+				downloadPath := "/downloads/tvs/" + showName
+				return MediaTypeTV, s.applyPathMapping(fullPath, downloadPath)
+			}
+			downloadPath := "/downloads/tvs/" + s.extractFolderName(fullPath)
+			return MediaTypeTV, s.applyPathMapping(fullPath, downloadPath)
 		}
 
 		// 单个视频文件，默认判定为电影
 		movieName := s.extractMovieName(fullPath)
 		if movieName != "" {
-			return MediaTypeMovie, "/downloads/movies/" + movieName
+			downloadPath := "/downloads/movies/" + movieName
+			return MediaTypeMovie, s.applyPathMapping(fullPath, downloadPath)
 		}
-		return MediaTypeMovie, "/downloads/movies"
+		downloadPath := "/downloads/movies"
+		return MediaTypeMovie, s.applyPathMapping(fullPath, downloadPath)
 	}
 
 	// 判断是否为电影
@@ -366,9 +400,11 @@ func (s *FileService) determineMediaTypeAndPath(fullPath, fileName string) (Medi
 		// 提取电影名称或系列名称
 		movieName := s.extractMovieName(fullPath)
 		if movieName != "" {
-			return MediaTypeMovie, "/downloads/movies/" + movieName
+			downloadPath := "/downloads/movies/" + movieName
+			return MediaTypeMovie, s.applyPathMapping(fullPath, downloadPath)
 		}
-		return MediaTypeMovie, "/downloads/movies"
+		downloadPath := "/downloads/movies"
+		return MediaTypeMovie, s.applyPathMapping(fullPath, downloadPath)
 	}
 
 	// 判断是否为TV剧集
@@ -376,13 +412,70 @@ func (s *FileService) determineMediaTypeAndPath(fullPath, fileName string) (Medi
 		// 提取剧集信息
 		showName, seasonInfo := s.extractTVShowInfo(fullPath)
 		if showName != "" && seasonInfo != "" {
-			return MediaTypeTV, "/downloads/tvs/" + showName + "/" + seasonInfo
+			downloadPath := "/downloads/tvs/" + showName + "/" + seasonInfo
+			return MediaTypeTV, s.applyPathMapping(fullPath, downloadPath)
 		}
-		return MediaTypeTV, "/downloads/tvs/" + s.extractFolderName(fullPath) + "/S1"
+		if showName != "" {
+			downloadPath := "/downloads/tvs/" + showName
+			return MediaTypeTV, s.applyPathMapping(fullPath, downloadPath)
+		}
+		downloadPath := "/downloads/tvs/" + s.extractFolderName(fullPath)
+		return MediaTypeTV, s.applyPathMapping(fullPath, downloadPath)
 	}
 
 	// 默认其他类型
-	return MediaTypeOther, "/downloads"
+	mediaType := MediaTypeOther
+	downloadPath := "/downloads"
+	
+	// 应用源路径到下载路径的映射
+	return mediaType, s.applyPathMapping(fullPath, downloadPath)
+}
+
+// applyPathMapping 应用路径映射规则
+func (s *FileService) applyPathMapping(sourcePath, defaultDownloadPath string) string {
+	// 获取源路径的目录
+	dirPath := filepath.Dir(sourcePath)
+	
+	// 查找 tvs 目录的位置
+	if idx := strings.Index(dirPath, "/tvs/"); idx != -1 {
+		// 提取 tvs 后面的路径部分
+		tvsPath := dirPath[idx+1:] // 包含 "tvs/" 
+		
+		// 如果默认下载路径包含智能生成的季度信息，需要保留
+		if strings.HasPrefix(defaultDownloadPath, "/downloads/tvs/") {
+			// 从默认路径中提取剧名和季度信息
+			pathAfterTvs := strings.TrimPrefix(defaultDownloadPath, "/downloads/tvs/")
+			// 从源路径中提取剧名
+			sourcePathParts := strings.Split(tvsPath, "/")
+			if len(sourcePathParts) >= 2 && pathAfterTvs != "" {
+				// 如果智能生成的路径包含季度信息，保留完整路径
+				if strings.Contains(pathAfterTvs, "/") {
+					return defaultDownloadPath
+				}
+			}
+		}
+		
+		return "/downloads/" + tvsPath
+	}
+	
+	// 查找 movies 目录的位置
+	if idx := strings.Index(dirPath, "/movies/"); idx != -1 {
+		// 提取 movies 后面的路径部分
+		moviesPath := dirPath[idx+1:] // 包含 "movies/"
+		
+		// 如果默认下载路径包含智能生成的电影信息，需要保留
+		if strings.HasPrefix(defaultDownloadPath, "/downloads/movies/") {
+			pathAfterMovies := strings.TrimPrefix(defaultDownloadPath, "/downloads/movies/")
+			if pathAfterMovies != "" && strings.Contains(pathAfterMovies, "/") {
+				return defaultDownloadPath
+			}
+		}
+		
+		return "/downloads/" + moviesPath
+	}
+	
+	// 对于其他路径，保持原有的智能生成逻辑
+	return defaultDownloadPath
 }
 
 // isMovieSeries 检查是否为电影系列
@@ -879,7 +972,10 @@ func (s *FileService) extractTVShowInfo(fullPath string) (showName, seasonInfo s
 	// 如果没有找到明确的季度信息，尝试从路径提取剧名
 	showName = s.extractShowNameFromFullPath(fullPath)
 	if seasonInfo == "" {
-		seasonInfo = "S1" // 默认第一季
+		// 检查是否为综艺节目，综艺节目不添加默认季度
+		if !s.isVarietyShow(fullPath) {
+			seasonInfo = "S1" // 默认第一季
+		}
 	}
 
 	return
@@ -979,6 +1075,74 @@ func (s *FileService) isKnownTVShow(path string) bool {
 	if datePattern.MatchString(fileName) {
 		// 如果文件名包含8位日期格式（YYYYMMDD），很可能是综艺节目
 		return true
+	}
+	
+	return false
+}
+
+// isVarietyShow 检查是否为综艺节目
+func (s *FileService) isVarietyShow(path string) bool {
+	// 已知的综艺节目名称列表
+	knownVarietyShows := []string{
+		"喜人奇妙夜",
+		"快乐大本营",
+		"天天向上",
+		"向往的生活",
+		"奔跑吧",
+		"极限挑战",
+		"王牌对王牌",
+		"明星大侦探",
+		"乘风破浪",
+		"爸爸去哪儿",
+		"中国好声音",
+		"我是歌手",
+		"蒙面歌王",
+		"这就是街舞",
+		"创造营",
+		"青春有你",
+		"脱口秀大会",
+		"吐槽大会",
+	}
+	
+	// 检查是否包含已知综艺节目名称
+	for _, show := range knownVarietyShows {
+		if strings.Contains(path, show) {
+			return true
+		}
+	}
+	
+	// 检查综艺特征词
+	varietyPatterns := []string{
+		"先导",       // 先导片
+		"纯享版",     // 纯享版
+		"精华版",     // 精华版
+		"加长版",     // 加长版
+		"花絮",      // 花絮
+		"彩蛋",      // 彩蛋
+		"幕后",      // 幕后
+		"复盘",      // 复盘
+	}
+	
+	for _, pattern := range varietyPatterns {
+		if strings.Contains(path, pattern) {
+			return true
+		}
+	}
+	
+	// 检查日期格式的节目（如 20240628, 20250919）
+	fileName := filepath.Base(path)
+	datePattern := regexp.MustCompile(`\b20\d{6}\b`)
+	if datePattern.MatchString(fileName) {
+		return true
+	}
+	
+	// 检查路径中是否包含综艺相关目录
+	lowerPath := strings.ToLower(path)
+	varietyDirs := []string{"/variety/", "/show/", "/综艺/", "/娱乐/"}
+	for _, dir := range varietyDirs {
+		if strings.Contains(lowerPath, dir) {
+			return true
+		}
 	}
 	
 	return false
@@ -1483,10 +1647,7 @@ func (s *FileService) fetchFilesFromDirectory(path string, result *[]FileInfo) e
 			}
 
 			// 解析修改时间
-			modTime, err := time.Parse(time.RFC3339, file.Modified)
-			if err != nil {
-				modTime = time.Now()
-			}
+			modTime := utils.ParseTimeOrNow(file.Modified)
 
 			// 构建完整路径
 			fullPath := file.Path
@@ -1551,10 +1712,7 @@ func (s *FileService) fetchFilesRecursive(path string, result *[]FileInfo) error
 		// 处理每个文件/目录
 		for _, file := range fileList.Data.Content {
 			// 解析修改时间
-			modTime, err := time.Parse(time.RFC3339, file.Modified)
-			if err != nil {
-				modTime = time.Now()
-			}
+			modTime := utils.ParseTimeOrNow(file.Modified)
 
 			// 构建完整路径
 			fullPath := file.Path
