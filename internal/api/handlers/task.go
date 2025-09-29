@@ -1,38 +1,25 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
-	"time"
+	"strconv"
 
-	"github.com/easayliu/alist-aria2-download/internal/api/utils"
+	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
-	"github.com/easayliu/alist-aria2-download/internal/domain/entities"
-	"github.com/easayliu/alist-aria2-download/internal/infrastructure/repository"
+	"github.com/easayliu/alist-aria2-download/pkg/utils"
 	"github.com/gin-gonic/gin"
 )
 
-// CreateTaskRequest 创建定时任务请求
-type CreateTaskRequest struct {
-	Name        string `json:"name" binding:"required" example:"每日同步"`
-	Path        string `json:"path" binding:"required" example:"/data/来自：分享"`
-	CronExpr    string `json:"cron_expr" binding:"required" example:"0 2 * * *"`
-	HoursAgo    int    `json:"hours_ago" binding:"required,min=1" example:"24"`
-	VideoOnly   bool   `json:"video_only" example:"true"`
-	AutoPreview bool   `json:"auto_preview" example:"false"`
-	Enabled     bool   `json:"enabled" example:"true"`
-	CreatedBy   int64  `json:"created_by" example:"63401853"`
+// TaskHandler REST任务处理器 - 纯协议转换层
+type TaskHandler struct {
+	container *services.ServiceContainer
 }
 
-// UpdateTaskRequest 更新定时任务请求
-type UpdateTaskRequest struct {
-	Name        string `json:"name" example:"每日同步"`
-	Path        string `json:"path" example:"/data/来自：分享"`
-	CronExpr    string `json:"cron_expr" example:"0 2 * * *"`
-	HoursAgo    int    `json:"hours_ago,omitempty" example:"24"`
-	VideoOnly   bool   `json:"video_only" example:"true"`
-	AutoPreview bool   `json:"auto_preview" example:"false"`
-	Enabled     bool   `json:"enabled" example:"true"`
+// NewTaskHandler 创建任务处理器
+func NewTaskHandler(container *services.ServiceContainer) *TaskHandler {
+	return &TaskHandler{
+		container: container,
+	}
 }
 
 // CreateTask 创建定时任务
@@ -41,43 +28,37 @@ type UpdateTaskRequest struct {
 // @Tags 定时任务
 // @Accept json
 // @Produce json
-// @Param request body CreateTaskRequest true "创建任务请求"
-// @Success 200 {object} map[string]interface{} "任务创建成功"
+// @Param request body contracts.TaskRequest true "创建任务请求"
+// @Success 200 {object} contracts.TaskResponse "任务创建成功"
 // @Failure 400 {object} map[string]interface{} "请求参数错误"
 // @Failure 500 {object} map[string]interface{} "服务器内部错误"
 // @Router /tasks [post]
-func CreateTask(c *gin.Context) {
-	var req CreateTaskRequest
-
+func (h *TaskHandler) CreateTask(c *gin.Context) {
+	// 1. 解析HTTP请求 - 协议转换
+	var req contracts.TaskRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
 		return
 	}
 
-	// 获取scheduler服务实例（从上下文中）
-	schedulerService := c.MustGet("schedulerService").(*services.SchedulerService)
-
-	// 创建任务实体
-	task := &entities.ScheduledTask{
-		Name:        req.Name,
-		Path:        req.Path,
-		Cron:        req.CronExpr,
-		HoursAgo:    req.HoursAgo,
-		VideoOnly:   req.VideoOnly,
-		AutoPreview: req.AutoPreview,
-		Enabled:     req.Enabled,
-		CreatedBy:   req.CreatedBy,
-	}
-
-	// 创建任务
-	if err := schedulerService.CreateTask(task); err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to create task: "+err.Error())
+	// 2. 调用应用服务 - 业务逻辑委托
+	taskService := h.container.GetTaskService()
+	response, err := taskService.CreateTask(c.Request.Context(), req)
+	if err != nil {
+		// 错误映射
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			utils.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to create task: "+err.Error())
+		}
 		return
 	}
 
+	// 3. 返回HTTP响应 - 协议转换
 	utils.Success(c, gin.H{
 		"message": "Task created successfully",
-		"task":    task,
+		"task":    response,
 	})
 }
 
@@ -88,23 +69,33 @@ func CreateTask(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path string true "任务ID"
-// @Success 200 {object} entities.ScheduledTask "任务详情"
+// @Success 200 {object} contracts.TaskResponse "任务详情"
 // @Failure 404 {object} map[string]interface{} "任务不存在"
 // @Failure 500 {object} map[string]interface{} "服务器内部错误"
 // @Router /tasks/{id} [get]
-func GetTask(c *gin.Context) {
+func (h *TaskHandler) GetTask(c *gin.Context) {
+	// 1. 提取路径参数
 	taskID := c.Param("id")
-
-	// 获取任务仓库（从上下文中）
-	taskRepo := c.MustGet("taskRepo").(*repository.TaskRepository)
-
-	task, err := taskRepo.GetByID(taskID)
-	if err != nil {
-		utils.ErrorWithStatus(c, http.StatusNotFound, 404, "Task not found")
+	if taskID == "" {
+		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Task ID is required")
 		return
 	}
 
-	utils.Success(c, task)
+	// 2. 调用应用服务
+	taskService := h.container.GetTaskService()
+	response, err := taskService.GetTask(c.Request.Context(), taskID)
+	if err != nil {
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			utils.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			utils.ErrorWithStatus(c, http.StatusNotFound, 404, "Task not found")
+		}
+		return
+	}
+
+	// 3. 返回响应
+	utils.Success(c, response)
 }
 
 // ListTasks 获取任务列表
@@ -113,23 +104,68 @@ func GetTask(c *gin.Context) {
 // @Tags 定时任务
 // @Accept json
 // @Produce json
-// @Success 200 {object} map[string]interface{} "任务列表"
+// @Param created_by query int false "创建者ID"
+// @Param enabled query bool false "是否启用"
+// @Param status query string false "任务状态"
+// @Param limit query int false "限制数量" default(100)
+// @Param offset query int false "偏移量" default(0)
+// @Param sort_by query string false "排序字段"
+// @Param sort_order query string false "排序方向"
+// @Success 200 {object} contracts.TaskListResponse "任务列表"
 // @Failure 500 {object} map[string]interface{} "服务器内部错误"
 // @Router /tasks [get]
-func ListTasks(c *gin.Context) {
-	// 获取任务仓库（从上下文中）
-	taskRepo := c.MustGet("taskRepo").(*repository.TaskRepository)
+func (h *TaskHandler) ListTasks(c *gin.Context) {
+	// 1. 解析查询参数 - 协议转换
+	req := contracts.TaskListRequest{
+		Status:    c.Query("status"),
+		SortBy:    c.Query("sort_by"),
+		SortOrder: c.Query("sort_order"),
+	}
 
-	tasks, err := taskRepo.GetAll()
+	// 解析数值参数
+	if createdByStr := c.Query("created_by"); createdByStr != "" {
+		if createdBy, err := strconv.ParseInt(createdByStr, 10, 64); err == nil {
+			req.CreatedBy = createdBy
+		}
+	}
+
+	if enabledStr := c.Query("enabled"); enabledStr != "" {
+		if enabled, err := strconv.ParseBool(enabledStr); err == nil {
+			req.Enabled = &enabled
+		}
+	}
+
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil {
+			req.Limit = limit
+		} else {
+			req.Limit = 100
+		}
+	} else {
+		req.Limit = 100
+	}
+
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if offset, err := strconv.Atoi(offsetStr); err == nil {
+			req.Offset = offset
+		}
+	}
+
+	// 2. 调用应用服务
+	taskService := h.container.GetTaskService()
+	response, err := taskService.ListTasks(c.Request.Context(), req)
 	if err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get tasks: "+err.Error())
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			utils.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get tasks: "+err.Error())
+		}
 		return
 	}
 
-	utils.Success(c, gin.H{
-		"total": len(tasks),
-		"tasks": tasks,
-	})
+	// 3. 返回响应
+	utils.Success(c, response)
 }
 
 // UpdateTask 更新定时任务
@@ -139,58 +175,44 @@ func ListTasks(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path string true "任务ID"
-// @Param request body UpdateTaskRequest true "更新任务请求"
-// @Success 200 {object} map[string]interface{} "任务更新成功"
+// @Param request body contracts.TaskUpdateRequest true "更新任务请求"
+// @Success 200 {object} contracts.TaskResponse "任务更新成功"
 // @Failure 400 {object} map[string]interface{} "请求参数错误"
 // @Failure 404 {object} map[string]interface{} "任务不存在"
 // @Failure 500 {object} map[string]interface{} "服务器内部错误"
 // @Router /tasks/{id} [put]
-func UpdateTask(c *gin.Context) {
+func (h *TaskHandler) UpdateTask(c *gin.Context) {
+	// 1. 提取路径参数
 	taskID := c.Param("id")
-	var req UpdateTaskRequest
+	if taskID == "" {
+		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Task ID is required")
+		return
+	}
 
+	// 2. 解析请求体
+	var req contracts.TaskUpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
 		return
 	}
 
-	// 获取任务仓库和调度服务
-	taskRepo := c.MustGet("taskRepo").(*repository.TaskRepository)
-	schedulerService := c.MustGet("schedulerService").(*services.SchedulerService)
-
-	// 获取现有任务
-	task, err := taskRepo.GetByID(taskID)
+	// 3. 调用应用服务
+	taskService := h.container.GetTaskService()
+	response, err := taskService.UpdateTask(c.Request.Context(), taskID, req)
 	if err != nil {
-		utils.ErrorWithStatus(c, http.StatusNotFound, 404, "Task not found")
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			utils.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to update task: "+err.Error())
+		}
 		return
 	}
 
-	// 更新任务字段
-	if req.Name != "" {
-		task.Name = req.Name
-	}
-	if req.Path != "" {
-		task.Path = req.Path
-	}
-	if req.CronExpr != "" {
-		task.Cron = req.CronExpr
-	}
-	if req.HoursAgo > 0 {
-		task.HoursAgo = req.HoursAgo
-	}
-	task.VideoOnly = req.VideoOnly
-	task.AutoPreview = req.AutoPreview
-	task.Enabled = req.Enabled
-
-	// 更新任务
-	if err := schedulerService.UpdateTask(task); err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to update task: "+err.Error())
-		return
-	}
-
+	// 4. 返回响应
 	utils.Success(c, gin.H{
 		"message": "Task updated successfully",
-		"task":    task,
+		"task":    response,
 	})
 }
 
@@ -205,27 +227,32 @@ func UpdateTask(c *gin.Context) {
 // @Failure 404 {object} map[string]interface{} "任务不存在"
 // @Failure 500 {object} map[string]interface{} "服务器内部错误"
 // @Router /tasks/{id} [delete]
-func DeleteTask(c *gin.Context) {
+func (h *TaskHandler) DeleteTask(c *gin.Context) {
+	// 1. 提取路径参数
 	taskID := c.Param("id")
-
-	// 获取调度服务
-	schedulerService := c.MustGet("schedulerService").(*services.SchedulerService)
-
-	// 删除任务
-	if err := schedulerService.DeleteTask(taskID); err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to delete task: "+err.Error())
+	if taskID == "" {
+		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Task ID is required")
 		return
 	}
 
+	// 2. 调用应用服务
+	taskService := h.container.GetTaskService()
+	err := taskService.DeleteTask(c.Request.Context(), taskID)
+	if err != nil {
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			utils.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to delete task: "+err.Error())
+		}
+		return
+	}
+
+	// 3. 返回响应
 	utils.Success(c, gin.H{
 		"message": "Task deleted successfully",
 		"task_id": taskID,
 	})
-}
-
-// RunTaskRequest 执行任务请求
-type RunTaskRequest struct {
-	Preview bool `json:"preview" example:"false"` // 是否仅预览，不实际下载
 }
 
 // RunTaskNow 立即执行任务
@@ -235,36 +262,48 @@ type RunTaskRequest struct {
 // @Accept json
 // @Produce json
 // @Param id path string true "任务ID"
-// @Param request body RunTaskRequest false "执行选项"
-// @Success 200 {object} map[string]interface{} "任务已开始执行或预览结果"
+// @Param request body contracts.TaskRunRequest false "执行选项"
+// @Success 200 {object} contracts.TaskRunResponse "任务已开始执行或预览结果"
 // @Failure 404 {object} map[string]interface{} "任务不存在"
 // @Failure 500 {object} map[string]interface{} "服务器内部错误"
 // @Router /tasks/{id}/run [post]
-func RunTaskNow(c *gin.Context) {
+func (h *TaskHandler) RunTaskNow(c *gin.Context) {
+	// 1. 提取路径参数
 	taskID := c.Param("id")
-	var req RunTaskRequest
-
-	// 尝试绑定请求体（可选）
-	c.ShouldBindJSON(&req)
-
-	// 如果是预览模式，重定向到预览接口
-	if req.Preview {
-		PreviewTask(c)
+	if taskID == "" {
+		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Task ID is required")
 		return
 	}
 
-	// 获取调度服务
-	schedulerService := c.MustGet("schedulerService").(*services.SchedulerService)
+	// 2. 解析请求体（可选）
+	var req contracts.TaskRunRequest
+	req.TaskID = taskID // 确保设置任务ID
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// 如果解析失败，使用默认值
+		req = contracts.TaskRunRequest{
+			TaskID:   taskID,
+			Preview:  false,
+			ForceRun: false,
+		}
+	}
 
-	// 立即执行任务
-	if err := schedulerService.RunTaskNow(taskID); err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to run task: "+err.Error())
+	// 3. 调用应用服务
+	taskService := h.container.GetTaskService()
+	response, err := taskService.RunTaskNow(c.Request.Context(), req)
+	if err != nil {
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			utils.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to run task: "+err.Error())
+		}
 		return
 	}
 
+	// 4. 返回响应
 	utils.Success(c, gin.H{
-		"message": "Task started successfully",
-		"task_id": taskID,
+		"message": "Task execution started",
+		"result":  response,
 	})
 }
 
@@ -275,134 +314,231 @@ func RunTaskNow(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path string true "任务ID"
-// @Success 200 {object} map[string]interface{} "预览结果"
+// @Success 200 {object} contracts.TaskPreviewResponse "预览结果"
 // @Failure 404 {object} map[string]interface{} "任务不存在"
 // @Failure 500 {object} map[string]interface{} "服务器内部错误"
 // @Router /tasks/{id}/preview [get]
-func PreviewTask(c *gin.Context) {
+func (h *TaskHandler) PreviewTask(c *gin.Context) {
+	// 1. 提取路径参数
 	taskID := c.Param("id")
-
-	// 获取任务仓库和文件服务
-	taskRepo := c.MustGet("taskRepo").(*repository.TaskRepository)
-	fileService := c.MustGet("fileService").(*services.FileService)
-
-	// 获取任务
-	task, err := taskRepo.GetByID(taskID)
-	if err != nil {
-		utils.ErrorWithStatus(c, http.StatusNotFound, 404, "Task not found")
+	if taskID == "" {
+		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Task ID is required")
 		return
 	}
 
-	// 计算时间范围
-	endTime := time.Now()
-	startTime := endTime.Add(-time.Duration(task.HoursAgo) * time.Hour)
-
-	// 获取文件列表（与 /api/v1/files/yesterday/download 一致的实现）
-	files, err := fileService.GetFilesByTimeRange(task.Path, startTime, endTime, task.VideoOnly)
-	if err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to fetch files: "+err.Error())
-		return
+	// 2. 构建预览请求
+	req := contracts.TaskPreviewRequest{
+		TaskID: taskID,
 	}
 
-	// 构建预览结果
-	previewResults := make([]map[string]interface{}, 0, len(files))
-	var totalSize int64
-	var tvCount, movieCount, otherCount int
+	// 可选的时间范围参数
+	if startTime := c.Query("start_time"); startTime != "" {
+		// 这里可以解析时间参数
+	}
+	if endTime := c.Query("end_time"); endTime != "" {
+		// 这里可以解析时间参数
+	}
 
-	for _, file := range files {
-		totalSize += file.Size
-
-		// 统计媒体类型
-		switch file.MediaType {
-		case "tv":
-			tvCount++
-		case "movie":
-			movieCount++
-		default:
-			otherCount++
+	// 3. 调用应用服务
+	taskService := h.container.GetTaskService()
+	response, err := taskService.PreviewTask(c.Request.Context(), req)
+	if err != nil {
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			utils.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to preview task: "+err.Error())
 		}
-
-		previewResults = append(previewResults, map[string]interface{}{
-			"name":          file.Name,
-			"path":          file.Path,
-			"size":          file.Size,
-			"modified":      file.Modified,
-			"media_type":    file.MediaType,
-			"download_path": file.DownloadPath,
-			"internal_url":  file.InternalURL,
-		})
+		return
 	}
 
-	// 格式化文件大小
-	sizeStr := ""
-	if totalSize < 1024*1024*1024 {
-		sizeStr = fmt.Sprintf("%.2f MB", float64(totalSize)/(1024*1024))
-	} else if totalSize < 1024*1024*1024*1024 {
-		sizeStr = fmt.Sprintf("%.2f GB", float64(totalSize)/(1024*1024*1024))
-	} else {
-		sizeStr = fmt.Sprintf("%.2f TB", float64(totalSize)/(1024*1024*1024*1024))
-	}
-
-	utils.Success(c, gin.H{
-		"task": gin.H{
-			"id":           task.ID,
-			"name":         task.Name,
-			"path":         task.Path,
-			"hours_ago":    task.HoursAgo,
-			"video_only":   task.VideoOnly,
-			"auto_preview": task.AutoPreview,
-			"cron":         task.Cron,
-		},
-		"preview": gin.H{
-			"total_files": len(files),
-			"total_size":  sizeStr,
-			"time_range": gin.H{
-				"start": startTime.Format("2006-01-02 15:04:05"),
-				"end":   endTime.Format("2006-01-02 15:04:05"),
-			},
-			"media_stats": gin.H{
-				"tv":    tvCount,
-				"movie": movieCount,
-				"other": otherCount,
-			},
-			"files": previewResults,
-		},
-	})
+	// 4. 返回响应
+	utils.Success(c, response)
 }
 
-// ToggleTask 启用/禁用任务
-// @Summary 启用或禁用定时任务
-// @Description 切换定时任务的启用状态
+// EnableTask 启用任务
+// @Summary 启用定时任务
+// @Description 启用指定ID的定时任务
 // @Tags 定时任务
 // @Accept json
 // @Produce json
 // @Param id path string true "任务ID"
-// @Param enabled query bool true "是否启用"
-// @Success 200 {object} map[string]interface{} "状态更新成功"
+// @Success 200 {object} map[string]interface{} "任务启用成功"
 // @Failure 404 {object} map[string]interface{} "任务不存在"
 // @Failure 500 {object} map[string]interface{} "服务器内部错误"
-// @Router /tasks/{id}/toggle [post]
-func ToggleTask(c *gin.Context) {
+// @Router /tasks/{id}/enable [post]
+func (h *TaskHandler) EnableTask(c *gin.Context) {
+	// 1. 提取路径参数
 	taskID := c.Param("id")
-	enabled := c.Query("enabled") == "true"
-
-	// 获取调度服务
-	schedulerService := c.MustGet("schedulerService").(*services.SchedulerService)
-
-	// 切换任务状态
-	if err := schedulerService.ToggleTask(taskID, enabled); err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to toggle task: "+err.Error())
+	if taskID == "" {
+		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Task ID is required")
 		return
 	}
 
-	status := "disabled"
-	if enabled {
-		status = "enabled"
+	// 2. 调用应用服务
+	taskService := h.container.GetTaskService()
+	err := taskService.EnableTask(c.Request.Context(), taskID)
+	if err != nil {
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			utils.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to enable task: "+err.Error())
+		}
+		return
 	}
 
+	// 3. 返回响应
 	utils.Success(c, gin.H{
-		"message": "Task " + status + " successfully",
+		"message": "Task enabled successfully",
 		"task_id": taskID,
-		"enabled": enabled,
 	})
+}
+
+// DisableTask 禁用任务
+// @Summary 禁用定时任务
+// @Description 禁用指定ID的定时任务
+// @Tags 定时任务
+// @Accept json
+// @Produce json
+// @Param id path string true "任务ID"
+// @Success 200 {object} map[string]interface{} "任务禁用成功"
+// @Failure 404 {object} map[string]interface{} "任务不存在"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /tasks/{id}/disable [post]
+func (h *TaskHandler) DisableTask(c *gin.Context) {
+	// 1. 提取路径参数
+	taskID := c.Param("id")
+	if taskID == "" {
+		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Task ID is required")
+		return
+	}
+
+	// 2. 调用应用服务
+	taskService := h.container.GetTaskService()
+	err := taskService.DisableTask(c.Request.Context(), taskID)
+	if err != nil {
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			utils.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to disable task: "+err.Error())
+		}
+		return
+	}
+
+	// 3. 返回响应
+	utils.Success(c, gin.H{
+		"message": "Task disabled successfully",
+		"task_id": taskID,
+	})
+}
+
+// CreateQuickTask 创建快捷任务
+// @Summary 创建快捷任务
+// @Description 创建预定义的快捷任务（每日、最近等）
+// @Tags 定时任务
+// @Accept json
+// @Produce json
+// @Param request body contracts.QuickTaskRequest true "快捷任务请求"
+// @Success 200 {object} contracts.TaskResponse "任务创建成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /tasks/quick [post]
+func (h *TaskHandler) CreateQuickTask(c *gin.Context) {
+	// 1. 解析请求
+	var req contracts.QuickTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
+		return
+	}
+
+	// 2. 调用应用服务
+	taskService := h.container.GetTaskService()
+	response, err := taskService.CreateQuickTask(c.Request.Context(), req)
+	if err != nil {
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			utils.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to create quick task: "+err.Error())
+		}
+		return
+	}
+
+	// 3. 返回响应
+	utils.Success(c, gin.H{
+		"message": "Quick task created successfully",
+		"task":    response,
+	})
+}
+
+// GetTaskStatistics 获取任务统计
+// @Summary 获取任务统计
+// @Description 获取任务系统的统计信息
+// @Tags 定时任务
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /tasks/statistics [get]
+func (h *TaskHandler) GetTaskStatistics(c *gin.Context) {
+	// 1. 调用应用服务
+	taskService := h.container.GetTaskService()
+	stats, err := taskService.GetTaskStatistics(c.Request.Context())
+	if err != nil {
+		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get task statistics: "+err.Error())
+		return
+	}
+
+	// 2. 返回响应
+	utils.Success(c, stats)
+}
+
+// GetSchedulerStatus 获取调度器状态
+// @Summary 获取调度器状态
+// @Description 获取任务调度器的状态信息
+// @Tags 定时任务
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /tasks/scheduler/status [get]
+func (h *TaskHandler) GetSchedulerStatus(c *gin.Context) {
+	// 1. 调用应用服务
+	taskService := h.container.GetTaskService()
+	status, err := taskService.GetSchedulerStatus(c.Request.Context())
+	if err != nil {
+		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get scheduler status: "+err.Error())
+		return
+	}
+
+	// 2. 返回响应
+	utils.Success(c, status)
+}
+
+// ========== 私有方法 ==========
+
+// mapErrorCodeToHTTPStatus 将业务错误码映射到HTTP状态码
+func (h *TaskHandler) mapErrorCodeToHTTPStatus(code contracts.ErrorCode) int {
+	switch code {
+	case contracts.ErrorCodeInvalidRequest:
+		return http.StatusBadRequest
+	case contracts.ErrorCodeNotFound:
+		return http.StatusNotFound
+	case contracts.ErrorCodeUnauthorized:
+		return http.StatusUnauthorized
+	case contracts.ErrorCodeForbidden:
+		return http.StatusForbidden
+	case contracts.ErrorCodeConflict:
+		return http.StatusConflict
+	case contracts.ErrorCodeServiceUnavailable:
+		return http.StatusServiceUnavailable
+	case contracts.ErrorCodeTimeout:
+		return http.StatusRequestTimeout
+	case contracts.ErrorCodeRateLimit:
+		return http.StatusTooManyRequests
+	case contracts.ErrorCodeQuotaExceeded:
+		return http.StatusInsufficientStorage
+	default:
+		return http.StatusInternalServerError
+	}
 }

@@ -265,3 +265,21 @@ func (c *Client) GetStopped(offset, num int) ([]StatusResult, error) {
 
 	return stopped, nil
 }
+
+// PauseAll 暂停所有下载
+func (c *Client) PauseAll() error {
+	_, err := c.callRPC("aria2.pauseAll", []interface{}{})
+	if err != nil {
+		return fmt.Errorf("failed to pause all downloads: %w", err)
+	}
+	return nil
+}
+
+// UnpauseAll 恢复所有下载
+func (c *Client) UnpauseAll() error {
+	_, err := c.callRPC("aria2.unpauseAll", []interface{}{})
+	if err != nil {
+		return fmt.Errorf("failed to unpause all downloads: %w", err)
+	}
+	return nil
+}

@@ -1,0 +1,402 @@
+package commands
+
+import (
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/types"
+	"github.com/easayliu/alist-aria2-download/internal/application/services"
+	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
+	"github.com/easayliu/alist-aria2-download/pkg/logger"
+)
+
+// DownloadCommands 下载相关命令处理器
+type DownloadCommands struct {
+	downloadService *services.DownloadService
+	fileService     *services.FileService
+	config          *config.Config
+	messageUtils    types.MessageSender
+}
+
+// NewDownloadCommands 创建下载命令处理器
+func NewDownloadCommands(downloadService *services.DownloadService, fileService *services.FileService, config *config.Config, messageUtils types.MessageSender) *DownloadCommands {
+	return &DownloadCommands{
+		downloadService: downloadService,
+		fileService:     fileService,
+		config:          config,
+		messageUtils:    messageUtils,
+	}
+}
+
+// HandleDownload 处理下载命令
+func (dc *DownloadCommands) HandleDownload(chatID int64, command string) {
+	parts := strings.Fields(command)
+
+	// 如果没有额外参数，默认进入预览模式（最近24小时）
+	if len(parts) == 1 {
+		dc.handleManualDownload(chatID, []string{}, true)
+		return
+	}
+
+	// 检查第一个参数是否为URL（以http开头）
+	if strings.HasPrefix(parts[1], "http") {
+		url := parts[1]
+
+		// 创建下载任务
+		download, err := dc.downloadService.CreateDownload(url, "", "", nil)
+		if err != nil {
+			dc.messageUtils.SendMessage(chatID, "创建下载任务失败: "+err.Error())
+			return
+		}
+
+		// 发送确认消息
+		escapedURL := dc.messageUtils.EscapeHTML(url)
+		escapedID := dc.messageUtils.EscapeHTML(download.ID)
+		escapedFilename := dc.messageUtils.EscapeHTML(download.Filename)
+		message := fmt.Sprintf("<b>下载任务已创建</b>\\n\\nURL: <code>%s</code>\\nGID: <code>%s</code>\\n文件名: <code>%s</code>",
+			escapedURL, escapedID, escapedFilename)
+		dc.messageUtils.SendMessageHTML(chatID, message)
+		return
+	}
+
+	// 检查第一个参数是否为文件路径（以/开头）
+	if strings.HasPrefix(parts[1], "/") {
+		filePath := parts[1]
+		
+		// 判断是文件还是目录
+		if strings.HasSuffix(filePath, "/") || dc.isDirectoryPath(filePath) {
+			// 目录下载
+			dc.handleDownloadDirectoryByPath(chatID, filePath)
+		} else {
+			// 文件下载
+			dc.handleDownloadFileByPath(chatID, filePath)
+		}
+		return
+	}
+
+	// 处理时间参数的手动下载
+	preview := true
+	timeArgs := parts[1:]
+	if len(timeArgs) > 0 {
+		subCommand := strings.ToLower(timeArgs[0])
+		switch subCommand {
+		case "confirm", "start", "run":
+			preview = false
+			timeArgs = timeArgs[1:]
+		case "preview":
+			preview = true
+			timeArgs = timeArgs[1:]
+		}
+	}
+
+	dc.handleManualDownload(chatID, timeArgs, preview)
+}
+
+// HandleCancel 处理取消下载命令
+func (dc *DownloadCommands) HandleCancel(chatID int64, command string) {
+	parts := strings.Fields(command)
+	if len(parts) < 2 {
+		dc.messageUtils.SendMessage(chatID, "请提供下载GID\\n示例: /cancel abc123")
+		return
+	}
+
+	gid := parts[1]
+
+	// 取消下载任务
+	if err := dc.downloadService.CancelDownload(gid); err != nil {
+		dc.messageUtils.SendMessage(chatID, "取消下载失败: "+err.Error())
+		return
+	}
+
+	escapedID := dc.messageUtils.EscapeHTML(gid)
+	message := fmt.Sprintf("<b>下载已取消</b>\\n\\n下载GID: <code>%s</code>", escapedID)
+	dc.messageUtils.SendMessageHTML(chatID, message)
+}
+
+// handleManualDownload 处理手动下载功能（临时实现）
+func (dc *DownloadCommands) handleManualDownload(chatID int64, timeArgs []string, preview bool) {
+	// TODO: 实现完整的手动下载逻辑
+	if preview {
+		dc.messageUtils.SendMessage(chatID, "手动下载预览功能开发中...")
+	} else {
+		dc.messageUtils.SendMessage(chatID, "手动下载功能开发中...")
+	}
+}
+
+// isDirectoryPath 判断路径是否为目录（临时实现）
+func (dc *DownloadCommands) isDirectoryPath(path string) bool {
+	// 尝试获取文件列表来判断是否为目录
+	files, err := dc.fileService.ListFilesSimple(path, 1, 1)
+	return err == nil && len(files) >= 0
+}
+
+// handleDownloadFileByPath 通过路径下载单个文件（临时实现）
+func (dc *DownloadCommands) handleDownloadFileByPath(chatID int64, filePath string) {
+	dc.messageUtils.SendMessage(chatID, "📥 正在通过/downloads命令创建文件下载任务...")
+
+	// 使用文件服务获取文件信息
+	parentDir := filepath.Dir(filePath)
+	fileName := filepath.Base(filePath)
+	
+	files, err := dc.fileService.ListFilesSimple(parentDir, 1, 1000)
+	if err != nil {
+		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 获取文件信息失败: %v", err))
+		return
+	}
+
+	// 查找目标文件
+	found := false
+	for _, file := range files {
+		if file.Name == fileName {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		dc.messageUtils.SendMessage(chatID, "❌ 文件未找到")
+		return
+	}
+
+	// 使用文件服务的智能分类功能
+	fileInfo, err := dc.fileService.GetFilesFromPath(parentDir, false)
+	if err != nil {
+		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 获取文件详细信息失败: %v", err))
+		return
+	}
+
+	// 找到对应的文件信息
+	var targetFileInfo *services.FileInfo
+	for _, info := range fileInfo {
+		if info.Name == fileName {
+			targetFileInfo = &info
+			break
+		}
+	}
+
+	if targetFileInfo == nil {
+		dc.messageUtils.SendMessage(chatID, "❌ 获取文件分类信息失败")
+		return
+	}
+
+	// 创建下载任务
+	download, err := dc.downloadService.CreateDownload(targetFileInfo.InternalURL, targetFileInfo.Name, targetFileInfo.DownloadPath, nil)
+	if err != nil {
+		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 创建下载任务失败: %v", err))
+		return
+	}
+
+	// 发送成功消息
+	message := fmt.Sprintf(
+		"✅ <b>文件下载任务已创建</b>\\n\\n"+
+			"<b>文件:</b> <code>%s</code>\\n"+
+			"<b>路径:</b> <code>%s</code>\\n"+
+			"<b>下载路径:</b> <code>%s</code>\\n"+
+			"<b>任务ID:</b> <code>%s</code>\\n"+
+			"<b>大小:</b> %s",
+		dc.messageUtils.EscapeHTML(targetFileInfo.Name),
+		dc.messageUtils.EscapeHTML(filePath),
+		dc.messageUtils.EscapeHTML(targetFileInfo.DownloadPath),
+		dc.messageUtils.EscapeHTML(download.ID),
+		dc.messageUtils.FormatFileSize(targetFileInfo.Size))
+
+	dc.messageUtils.SendMessageHTML(chatID, message)
+}
+
+// handleDownloadDirectoryByPath 通过路径下载目录（临时实现）
+func (dc *DownloadCommands) handleDownloadDirectoryByPath(chatID int64, dirPath string) {
+	dc.messageUtils.SendMessage(chatID, "📂 正在通过/downloads命令创建目录下载任务...")
+
+	// 使用文件服务获取目录中的所有文件
+	files, err := dc.fileService.GetFilesFromPath(dirPath, true)
+	if err != nil {
+		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 扫描目录失败: %v", err))
+		return
+	}
+
+	if len(files) == 0 {
+		dc.messageUtils.SendMessage(chatID, "📁 目录为空，没有可下载的文件")
+		return
+	}
+
+	// 过滤出视频文件
+	var videoFiles []services.FileInfo
+	for _, file := range files {
+		if dc.fileService.IsVideoFile(file.Name) {
+			videoFiles = append(videoFiles, file)
+		}
+	}
+
+	if len(videoFiles) == 0 {
+		dc.messageUtils.SendMessage(chatID, "🎬 目录中没有找到视频文件")
+		return
+	}
+
+	// 创建下载任务
+	successCount := 0
+	failedCount := 0
+	var failedFiles []string
+
+	for _, file := range videoFiles {
+		download, err := dc.downloadService.CreateDownload(file.InternalURL, file.Name, file.DownloadPath, nil)
+		if err != nil {
+			failedCount++
+			failedFiles = append(failedFiles, file.Name)
+			logger.Error("通过/downloads命令创建下载任务失败", "file", file.Name, "error", err)
+			continue
+		}
+		
+		successCount++
+		logger.Info("通过/downloads命令创建下载任务成功", "file", file.Name, "gid", download.ID)
+	}
+
+	// 发送结果消息
+	resultMessage := fmt.Sprintf(
+		"📊 <b>目录下载任务创建完成</b>\\n\\n"+
+			"<b>目录:</b> <code>%s</code>\\n"+
+			"<b>扫描文件:</b> %d 个\\n"+
+			"<b>视频文件:</b> %d 个\\n"+
+			"<b>成功创建:</b> %d 个任务\\n"+
+			"<b>失败:</b> %d 个任务\\n\\n",
+		dc.messageUtils.EscapeHTML(dirPath),
+		len(files),
+		len(videoFiles),
+		successCount,
+		failedCount)
+
+	if failedCount > 0 && len(failedFiles) <= 3 {
+		resultMessage += "<b>失败的文件:</b>\\n"
+		for _, fileName := range failedFiles {
+			resultMessage += fmt.Sprintf("• <code>%s</code>\\n", dc.messageUtils.EscapeHTML(fileName))
+		}
+	} else if failedCount > 3 {
+		resultMessage += fmt.Sprintf("<b>有 %d 个文件下载失败</b>\\n", failedCount)
+	}
+
+	if successCount > 0 {
+		resultMessage += "\\n✅ 所有任务已使用自动路径分类功能\\n📥 可通过「下载管理」查看任务状态"
+	}
+
+	dc.messageUtils.SendMessageHTML(chatID, resultMessage)
+}
+
+// HandleYesterdayFiles 处理获取昨天文件（临时实现）
+func (dc *DownloadCommands) HandleYesterdayFiles(chatID int64) {
+	dc.messageUtils.SendMessage(chatID, "正在获取昨天的文件...")
+
+	// 使用配置的默认路径
+	path := dc.config.Alist.DefaultPath
+	if path == "" {
+		path = "/"
+	}
+
+	// 获取昨天的文件
+	files, err := dc.fileService.GetYesterdayFiles(path)
+	if err != nil {
+		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("获取昨天文件失败: %v", err))
+		return
+	}
+
+	if len(files) == 0 {
+		dc.messageUtils.SendMessage(chatID, "昨天没有新文件")
+		return
+	}
+
+	// 构建消息
+	message := fmt.Sprintf("<b>昨天的文件 (%d个):</b>\\n\\n", len(files))
+
+	// 统计
+	var totalSize int64
+	tvCount := 0
+	movieCount := 0
+	otherCount := 0
+
+	for i, file := range files {
+		if i < 10 { // 只显示前10个文件
+			sizeStr := dc.messageUtils.FormatFileSize(file.Size)
+			message += fmt.Sprintf("[%s] %s (%s)\\n", file.MediaType, dc.messageUtils.EscapeHTML(file.Name), sizeStr)
+		}
+
+		totalSize += file.Size
+		switch file.MediaType {
+		case "tv":
+			tvCount++
+		case "movie":
+			movieCount++
+		default:
+			otherCount++
+		}
+	}
+
+	if len(files) > 10 {
+		message += fmt.Sprintf("\\n... 还有 %d 个文件未显示\\n", len(files)-10)
+	}
+
+	// 添加统计信息
+	message += fmt.Sprintf("\\n<b>统计信息:</b>\\n")
+	message += fmt.Sprintf("总大小: %s\\n", dc.messageUtils.FormatFileSize(totalSize))
+	if tvCount > 0 {
+		message += fmt.Sprintf("电视剧: %d\\n", tvCount)
+	}
+	if movieCount > 0 {
+		message += fmt.Sprintf("电影: %d\\n", movieCount)
+	}
+	if otherCount > 0 {
+		message += fmt.Sprintf("其他: %d\\n", otherCount)
+	}
+
+	dc.messageUtils.SendMessageHTML(chatID, message)
+}
+
+// HandleYesterdayDownload 处理下载昨天的文件（临时实现）
+func (dc *DownloadCommands) HandleYesterdayDownload(chatID int64) {
+	dc.messageUtils.SendMessage(chatID, "正在准备下载昨天的文件...")
+
+	// 使用配置的默认路径
+	path := dc.config.Alist.DefaultPath
+	if path == "" {
+		path = "/"
+	}
+
+	// 获取昨天的文件
+	files, err := dc.fileService.GetYesterdayFiles(path)
+	if err != nil {
+		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("获取昨天文件失败: %v", err))
+		return
+	}
+
+	if len(files) == 0 {
+		dc.messageUtils.SendMessage(chatID, "昨天没有新文件需要下载")
+		return
+	}
+
+	// 批量添加下载任务
+	successCount := 0
+	failCount := 0
+
+	for _, file := range files {
+		// 创建下载任务
+		_, err := dc.downloadService.CreateDownload(
+			file.InternalURL,
+			file.Name,
+			file.DownloadPath,
+			nil, // 使用默认选项
+		)
+		if err != nil {
+			failCount++
+		} else {
+			successCount++
+		}
+	}
+
+	// 发送结果
+	message := fmt.Sprintf("<b>下载任务创建完成</b>\\n\\n")
+	message += fmt.Sprintf("成功: %d\\n", successCount)
+	if failCount > 0 {
+		message += fmt.Sprintf("失败: %d\\n", failCount)
+	}
+	message += fmt.Sprintf("总计: %d\\n", len(files))
+
+	dc.messageUtils.SendMessageHTML(chatID, message)
+}
