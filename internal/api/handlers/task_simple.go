@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/easayliu/alist-aria2-download/internal/api/utils"
+	// apiutils "github.com/easayliu/alist-aria2-download/internal/api/utils"
+	"github.com/easayliu/alist-aria2-download/pkg/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 	"github.com/easayliu/alist-aria2-download/internal/domain/entities"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/repository"
@@ -50,7 +51,7 @@ func CreateTask(c *gin.Context) {
 	var req CreateTaskRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request parameters: " + err.Error(), "code": 400})
 		return
 	}
 
@@ -71,11 +72,11 @@ func CreateTask(c *gin.Context) {
 
 	// 创建任务
 	if err := schedulerService.CreateTask(task); err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to create task: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create task: " + err.Error(), "code": 500})
 		return
 	}
 
-	utils.Success(c, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"message": "Task created successfully",
 		"task":    task,
 	})
@@ -100,11 +101,11 @@ func GetTask(c *gin.Context) {
 
 	task, err := taskRepo.GetByID(taskID)
 	if err != nil {
-		utils.ErrorWithStatus(c, http.StatusNotFound, 404, "Task not found")
+		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found", "code": 404})
 		return
 	}
 
-	utils.Success(c, task)
+	c.JSON(http.StatusOK, task)
 }
 
 // ListTasks 获取任务列表
@@ -122,11 +123,11 @@ func ListTasks(c *gin.Context) {
 
 	tasks, err := taskRepo.GetAll()
 	if err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get tasks: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get tasks: " + err.Error(), "code": 500})
 		return
 	}
 
-	utils.Success(c, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"total": len(tasks),
 		"tasks": tasks,
 	})
@@ -150,7 +151,7 @@ func UpdateTask(c *gin.Context) {
 	var req UpdateTaskRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request parameters: " + err.Error(), "code": 400})
 		return
 	}
 
@@ -161,7 +162,7 @@ func UpdateTask(c *gin.Context) {
 	// 获取现有任务
 	task, err := taskRepo.GetByID(taskID)
 	if err != nil {
-		utils.ErrorWithStatus(c, http.StatusNotFound, 404, "Task not found")
+		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found", "code": 404})
 		return
 	}
 
@@ -184,11 +185,11 @@ func UpdateTask(c *gin.Context) {
 
 	// 更新任务
 	if err := schedulerService.UpdateTask(task); err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to update task: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update task: " + err.Error(), "code": 500})
 		return
 	}
 
-	utils.Success(c, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"message": "Task updated successfully",
 		"task":    task,
 	})
@@ -213,11 +214,11 @@ func DeleteTask(c *gin.Context) {
 
 	// 删除任务
 	if err := schedulerService.DeleteTask(taskID); err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to delete task: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete task: " + err.Error(), "code": 500})
 		return
 	}
 
-	utils.Success(c, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"message": "Task deleted successfully",
 		"task_id": taskID,
 	})
@@ -258,11 +259,11 @@ func RunTaskNow(c *gin.Context) {
 
 	// 立即执行任务
 	if err := schedulerService.RunTaskNow(taskID); err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to run task: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to run task: " + err.Error(), "code": 500})
 		return
 	}
 
-	utils.Success(c, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"message": "Task started successfully",
 		"task_id": taskID,
 	})
@@ -289,7 +290,7 @@ func PreviewTask(c *gin.Context) {
 	// 获取任务
 	task, err := taskRepo.GetByID(taskID)
 	if err != nil {
-		utils.ErrorWithStatus(c, http.StatusNotFound, 404, "Task not found")
+		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found", "code": 404})
 		return
 	}
 
@@ -300,7 +301,7 @@ func PreviewTask(c *gin.Context) {
 	// 获取文件列表（与 /api/v1/files/yesterday/download 一致的实现）
 	files, err := fileService.GetFilesByTimeRange(task.Path, startTime, endTime, task.VideoOnly)
 	if err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to fetch files: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch files: " + err.Error(), "code": 500})
 		return
 	}
 
@@ -343,7 +344,7 @@ func PreviewTask(c *gin.Context) {
 		sizeStr = fmt.Sprintf("%.2f TB", float64(totalSize)/(1024*1024*1024*1024))
 	}
 
-	utils.Success(c, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"task": gin.H{
 			"id":           task.ID,
 			"name":         task.Name,
@@ -360,11 +361,7 @@ func PreviewTask(c *gin.Context) {
 				"start": startTime.Format("2006-01-02 15:04:05"),
 				"end":   endTime.Format("2006-01-02 15:04:05"),
 			},
-			"media_stats": gin.H{
-				"tv":    tvCount,
-				"movie": movieCount,
-				"other": otherCount,
-			},
+			"media_stats": utils.BuildMediaStats(tvCount, movieCount, otherCount),
 			"files": previewResults,
 		},
 	})
@@ -391,7 +388,7 @@ func ToggleTask(c *gin.Context) {
 
 	// 切换任务状态
 	if err := schedulerService.ToggleTask(taskID, enabled); err != nil {
-		utils.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to toggle task: "+err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to toggle task: " + err.Error(), "code": 500})
 		return
 	}
 
@@ -400,7 +397,7 @@ func ToggleTask(c *gin.Context) {
 		status = "enabled"
 	}
 
-	utils.Success(c, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"message": "Task " + status + " successfully",
 		"task_id": taskID,
 		"enabled": enabled,

@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/easayliu/alist-aria2-download/internal/api/utils"
+	"github.com/easayliu/alist-aria2-download/pkg/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/domain/entities"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"

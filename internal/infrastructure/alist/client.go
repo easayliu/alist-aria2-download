@@ -1,15 +1,13 @@
 package alist
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/ratelimit"
+	httputil "github.com/easayliu/alist-aria2-download/pkg/http"
 )
 
 // Client Alist客户端
@@ -97,32 +95,14 @@ func (c *Client) LoginWithContext(ctx context.Context) error {
 		Password: c.Password,
 	}
 
-	jsonData, err := json.Marshal(loginReq)
-	if err != nil {
-		return fmt.Errorf("failed to marshal login request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", c.BaseURL+"/api/auth/login", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
+	// 使用通用HTTP客户端
+	opts := httputil.DefaultOptions().
+		WithContext(ctx).
+		WithClient(c.httpClient)
 
 	var loginResp LoginResponse
-	if err := json.Unmarshal(body, &loginResp); err != nil {
-		return fmt.Errorf("failed to unmarshal response: %w", err)
+	if err := httputil.PostJSON(c.BaseURL+"/api/auth/login", loginReq, &loginResp, opts); err != nil {
+		return fmt.Errorf("failed to login: %w", err)
 	}
 
 	if loginResp.Code != 200 {
@@ -134,39 +114,29 @@ func (c *Client) LoginWithContext(ctx context.Context) error {
 }
 
 // makeRequest 发起带认证的HTTP请求
-func (c *Client) makeRequest(method, endpoint string, body interface{}) (*http.Response, error) {
-	return c.makeRequestWithContext(context.Background(), method, endpoint, body)
+func (c *Client) makeRequest(method, endpoint string, reqBody, respBody interface{}) error {
+	return c.makeRequestWithContext(context.Background(), method, endpoint, reqBody, respBody)
 }
 
 // makeRequestWithContext 发起带认证的HTTP请求（带上下文）
-func (c *Client) makeRequestWithContext(ctx context.Context, method, endpoint string, body interface{}) (*http.Response, error) {
+func (c *Client) makeRequestWithContext(ctx context.Context, method, endpoint string, reqBody, respBody interface{}) error {
 	// 等待速率限制
 	if c.rateLimiter != nil {
 		if err := c.rateLimiter.Wait(ctx); err != nil {
-			return nil, fmt.Errorf("rate limit exceeded: %w", err)
+			return fmt.Errorf("rate limit exceeded: %w", err)
 		}
 	}
 
-	var reqBody io.Reader
-	if body != nil {
-		jsonData, err := json.Marshal(body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal request body: %w", err)
-		}
-		reqBody = bytes.NewBuffer(jsonData)
-	}
+	// 使用通用HTTP客户端
+	opts := httputil.DefaultOptions().
+		WithContext(ctx).
+		WithClient(c.httpClient)
 
-	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+endpoint, reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
 	if c.Token != "" {
-		req.Header.Set("Authorization", c.Token)
+		opts = opts.WithHeader("Authorization", c.Token)
 	}
 
-	return c.httpClient.Do(req)
+	return httputil.DoJSONRequest(method, c.BaseURL+endpoint, reqBody, respBody, opts)
 }
 
 // ListFiles 获取文件列表
@@ -187,22 +157,9 @@ func (c *Client) ListFiles(path string, page, perPage int) (*FileListResponse, e
 	}
 
 	// 发送请求
-	resp, err := c.makeRequest("POST", "/api/fs/list", reqData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// 读取响应
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// 解析响应
 	var listResp FileListResponse
-	if err := json.Unmarshal(body, &listResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if err := c.makeRequest("POST", "/api/fs/list", reqData, &listResp); err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
 	// 检查响应状态
@@ -228,22 +185,9 @@ func (c *Client) GetFileInfo(path string) (*FileGetResponse, error) {
 	}
 
 	// 发送请求
-	resp, err := c.makeRequest("POST", "/api/fs/get", reqData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// 读取响应
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// 解析响应
 	var getResp FileGetResponse
-	if err := json.Unmarshal(body, &getResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if err := c.makeRequest("POST", "/api/fs/get", reqData, &getResp); err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
 	// 检查响应状态

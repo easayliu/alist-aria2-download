@@ -72,3 +72,12 @@ func FormatFileSize(bytes int64) string {
 	}
 	return strconv.FormatFloat(float64(bytes)/float64(div), 'f', 1, 64) + " " + "KMGTPE"[exp:exp+1] + "B"
 }
+
+// BuildMediaStats 构建媒体统计信息
+func BuildMediaStats(tvCount, movieCount, otherCount int) gin.H {
+	return gin.H{
+		"tv":    tvCount,
+		"movie": movieCount,
+		"other": otherCount,
+	}
+}

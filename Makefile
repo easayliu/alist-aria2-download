@@ -61,7 +61,7 @@ swagger:
 
 # Build for Linux (amd64)
 build-linux:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags '-w -s' -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 ./cmd/server
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags '-w -s' -o $(BUILD_DIR)/$(BINARY_NAME)-linux ./cmd/server
 
 # Build for Linux amd64
 build-linux-amd64:

@@ -1,12 +1,12 @@
 package aria2
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
+
+	httputil "github.com/easayliu/alist-aria2-download/pkg/http"
 )
 
 // Client Aria2客户端
@@ -90,25 +90,13 @@ func (c *Client) callRPC(method string, params []interface{}) (*RPCResponse, err
 		Params:  params,
 	}
 
-	jsonData, err := json.Marshal(request)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	resp, err := c.httpClient.Post(c.RpcURL, "application/json", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
+	// 使用通用HTTP客户端
+	opts := httputil.DefaultOptions().
+		WithClient(c.httpClient)
 
 	var rpcResp RPCResponse
-	if err := json.Unmarshal(body, &rpcResp); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	if err := httputil.PostJSON(c.RpcURL, request, &rpcResp, opts); err != nil {
+		return nil, fmt.Errorf("failed to send RPC request: %w", err)
 	}
 
 	if rpcResp.Error != nil {

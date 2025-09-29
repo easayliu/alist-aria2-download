@@ -1,21 +1,21 @@
 package repository
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/domain/entities"
+	httputil "github.com/easayliu/alist-aria2-download/pkg/http"
 	"github.com/google/uuid"
 )
 
 type TaskRepository struct {
-	filePath string
-	mu       sync.RWMutex
-	tasks    map[string]*entities.ScheduledTask
+	filePath   string
+	mu         sync.RWMutex
+	tasks      map[string]*entities.ScheduledTask
+	jsonUtils  *httputil.JSONFileUtils
 }
 
 func NewTaskRepository(dataDir string) (*TaskRepository, error) {
@@ -25,8 +25,9 @@ func NewTaskRepository(dataDir string) (*TaskRepository, error) {
 	}
 
 	repo := &TaskRepository{
-		filePath: dataDir + "/scheduled_tasks.json",
-		tasks:    make(map[string]*entities.ScheduledTask),
+		filePath:  dataDir + "/scheduled_tasks.json",
+		tasks:     make(map[string]*entities.ScheduledTask),
+		jsonUtils: httputil.NewJSONFileUtils(),
 	}
 
 	// 加载已存在的任务
@@ -39,13 +40,8 @@ func NewTaskRepository(dataDir string) (*TaskRepository, error) {
 
 // load 从文件加载任务
 func (r *TaskRepository) load() error {
-	data, err := ioutil.ReadFile(r.filePath)
-	if err != nil {
-		return err
-	}
-
 	var tasks []*entities.ScheduledTask
-	if err := json.Unmarshal(data, &tasks); err != nil {
+	if err := r.jsonUtils.ReadJSONFile(r.filePath, &tasks); err != nil {
 		return err
 	}
 
@@ -74,12 +70,7 @@ func (r *TaskRepository) saveUnlocked() error {
 		tasks = append(tasks, task)
 	}
 
-	data, err := json.MarshalIndent(tasks, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return ioutil.WriteFile(r.filePath, data, 0644)
+	return r.jsonUtils.WriteJSONFile(r.filePath, tasks, true)
 }
 
 // Create 创建新任务
