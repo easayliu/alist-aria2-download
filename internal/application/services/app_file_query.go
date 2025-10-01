@@ -26,14 +26,7 @@ func (s *AppFileService) ListFiles(ctx context.Context, req contracts.FileListRe
 		req.PageSize = 1000
 	}
 
-	// 2. 确保AList客户端已登录并获取文件列表
-	if s.alistClient.Token == "" {
-		logger.Info("🔑 ListFiles: 检测到未登录，开始登录AList", "baseURL", s.alistClient.BaseURL)
-		if err := s.alistClient.Login(); err != nil {
-			return nil, fmt.Errorf("failed to login to AList: %w", err)
-		}
-		logger.Info("✅ ListFiles: AList登录成功")
-	}
+	// 2. AList客户端将自动处理token验证和刷新
 	
 	alistResp, err := s.alistClient.ListFiles(req.Path, req.Page, req.PageSize)
 	if err != nil {

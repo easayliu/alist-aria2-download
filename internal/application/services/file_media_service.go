@@ -86,7 +86,7 @@ func (s *FileMediaService) determineMediaTypeAndPath(fullPath, fileName string) 
 			movieName := s.extractMovieName(fullPath)
 			if movieName != "" {
 				downloadPath := "/downloads/movies/" + movieName
-				return MediaTypeMovie, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
+				return MediaTypeMovie, downloadPath
 			}
 		}
 
@@ -98,10 +98,10 @@ func (s *FileMediaService) determineMediaTypeAndPath(fullPath, fileName string) 
 				if showName != "" {
 					if versionPath != "" {
 						downloadPath := "/downloads/tvs/" + showName + "/" + versionPath
-						return MediaTypeTV, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
+						return MediaTypeTV, downloadPath
 					}
 					downloadPath := "/downloads/tvs/" + showName
-					return MediaTypeTV, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
+					return MediaTypeTV, downloadPath
 				}
 			}
 			
@@ -109,11 +109,11 @@ func (s *FileMediaService) determineMediaTypeAndPath(fullPath, fileName string) 
 			showName, seasonInfo := s.extractTVShowInfo(fullPath)
 			if showName != "" && seasonInfo != "" {
 				downloadPath := "/downloads/tvs/" + showName + "/" + seasonInfo
-				return MediaTypeTV, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
+				return MediaTypeTV, downloadPath
 			}
 			if showName != "" {
 				downloadPath := "/downloads/tvs/" + showName
-				return MediaTypeTV, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
+				return MediaTypeTV, downloadPath
 			}
 			downloadPath := "/downloads/tvs/" + s.pathSvc.ExtractFolderName(fullPath)
 			return MediaTypeTV, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
@@ -123,7 +123,7 @@ func (s *FileMediaService) determineMediaTypeAndPath(fullPath, fileName string) 
 		movieName := s.extractMovieName(fullPath)
 		if movieName != "" {
 			downloadPath := "/downloads/movies/" + movieName
-			return MediaTypeMovie, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
+			return MediaTypeMovie, downloadPath
 		}
 		downloadPath := "/downloads/movies"
 		return MediaTypeMovie, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
@@ -135,7 +135,7 @@ func (s *FileMediaService) determineMediaTypeAndPath(fullPath, fileName string) 
 		movieName := s.extractMovieName(fullPath)
 		if movieName != "" {
 			downloadPath := "/downloads/movies/" + movieName
-			return MediaTypeMovie, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
+			return MediaTypeMovie, downloadPath
 		}
 		downloadPath := "/downloads/movies"
 		return MediaTypeMovie, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
@@ -147,11 +147,11 @@ func (s *FileMediaService) determineMediaTypeAndPath(fullPath, fileName string) 
 		showName, seasonInfo := s.extractTVShowInfo(fullPath)
 		if showName != "" && seasonInfo != "" {
 			downloadPath := "/downloads/tvs/" + showName + "/" + seasonInfo
-			return MediaTypeTV, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
+			return MediaTypeTV, downloadPath
 		}
 		if showName != "" {
 			downloadPath := "/downloads/tvs/" + showName
-			return MediaTypeTV, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
+			return MediaTypeTV, downloadPath
 		}
 		downloadPath := "/downloads/tvs/" + s.pathSvc.ExtractFolderName(fullPath)
 		return MediaTypeTV, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
@@ -715,14 +715,27 @@ func (s *FileMediaService) extractTVShowWithVersion(fullPath string) (showName, 
 	parts := strings.Split(fullPath, "/")
 	
 	// 查找包含版本/质量信息的目录（通常是文件的直接父目录）
-	// 例如：4K[DV][60帧][高码率]
 	if len(parts) >= 2 {
 		// 获取文件的直接父目录
 		parentDir := parts[len(parts)-2]
 		
 		// 检查是否是版本/质量目录（包含[]或特定关键词）
 		if s.filterSvc.IsVersionDirectory(parentDir) {
-			versionPath = parentDir
+			// 对于混合季度和质量信息的目录，提取季度信息作为版本路径
+			// 例如："第 1 季 - 2160p WEB-DL H265 AAC" -> 提取季度信息
+			if strings.Contains(parentDir, "第") && strings.Contains(parentDir, "季") {
+				// 提取季度信息并标准化
+				seasonInfo := s.extractSeasonFromChinese(parentDir)
+				if seasonInfo != "" && seasonInfo != "S1" {
+					versionPath = seasonInfo
+				}
+			} else {
+				// 纯质量目录（如 "4K[DV][60帧][高码率]"）才保留完整路径
+				if strings.Contains(parentDir, "[") || 
+				   (!strings.Contains(parentDir, "第") && !strings.Contains(parentDir, "季")) {
+					versionPath = parentDir
+				}
+			}
 			
 			// 继续向上查找剧名
 			if len(parts) >= 3 {

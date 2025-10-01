@@ -408,8 +408,8 @@ func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
 		// 尝试从当前目录提取季度信息并生成规范化路径
 		seasonNumber := s.extractSeasonNumber(currentDir)
 		if seasonNumber > 0 {
-			// 使用第一层目录作为基础节目名，生成 节目名/S##
-			baseShowName := pathParts[0]
+			// 使用第一层目录作为基础节目名，并清理年份等信息
+			baseShowName := s.cleanShowName(pathParts[0])
 			seasonCode := fmt.Sprintf("S%02d", seasonNumber)
 			smartPath = utils.JoinPath(baseDir, "tvs", baseShowName, seasonCode)
 			
@@ -440,7 +440,7 @@ func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
 	}
 	
 	// 如果上述方法失败，尝试传统的季度解析方法
-	showName := pathParts[0]
+	showName := s.cleanShowName(pathParts[0])
 	seasonDir := pathParts[1]
 	
 	logger.Info("🔄 回退到传统解析", "showName", showName, "seasonDir", seasonDir)
@@ -624,6 +624,12 @@ func (s *AppFileService) cleanShowName(showName string) string {
 
 // chineseOrArabicToNumber 转换中文数字或阿拉伯数字为整数
 func chineseOrArabicToNumber(str string) int {
+	if str == "" {
+		return 0
+	}
+	
+	// 清理空格
+	str = strings.TrimSpace(str)
 	if str == "" {
 		return 0
 	}

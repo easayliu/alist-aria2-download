@@ -230,7 +230,7 @@ func (bc *BasicCommands) HandlePreviewMenu(chatID int64) {
 
 // HandleAlistLogin 处理Alist登录
 func (bc *BasicCommands) HandleAlistLogin(chatID int64) {
-	bc.messageUtils.SendMessage(chatID, "正在登录Alist...")
+	bc.messageUtils.SendMessage(chatID, "正在测试Alist连接...")
 
 	// 创建Alist客户端
 	alistClient := alist.NewClient(
@@ -239,14 +239,21 @@ func (bc *BasicCommands) HandleAlistLogin(chatID int64) {
 		bc.config.Alist.Password,
 	)
 
-	// 执行登录
-	err := alistClient.Login()
+	// 清除现有token强制重新登录
+	alistClient.ClearToken()
+
+	// 通过调用API测试连接和登录（客户端会自动处理token刷新）
+	_, err := alistClient.ListFiles("/", 1, 1)
 	if err != nil {
-		bc.messageUtils.SendMessage(chatID, fmt.Sprintf("Alist登录失败: %v", err))
+		bc.messageUtils.SendMessage(chatID, fmt.Sprintf("Alist连接失败: %v", err))
 		return
 	}
 
-	bc.messageUtils.SendMessage(chatID, "Alist登录成功！")
+	// 获取token状态
+	hasToken, isValid, expiryTime := alistClient.GetTokenStatus()
+	message := fmt.Sprintf("Alist连接成功！\n有效Token: %v\nToken有效: %v\n过期时间: %s", 
+		hasToken, isValid, expiryTime.Format("2006-01-02 15:04:05"))
+	bc.messageUtils.SendMessage(chatID, message)
 }
 
 // HandleHealthCheck 处理健康检查

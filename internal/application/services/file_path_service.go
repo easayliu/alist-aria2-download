@@ -15,28 +15,27 @@ func NewFilePathService() *FilePathService {
 
 // ApplyPathMapping 应用路径映射规则
 func (s *FilePathService) ApplyPathMapping(sourcePath, defaultDownloadPath string) string {
-	// 获取源路径的目录
+	// 如果智能解析已经生成了有效的下载路径，直接使用
+	if defaultDownloadPath != "" && defaultDownloadPath != "/downloads" {
+		// 检查是否是智能生成的路径（包含剧名/电影名）
+		if strings.HasPrefix(defaultDownloadPath, "/downloads/tvs/") || 
+		   strings.HasPrefix(defaultDownloadPath, "/downloads/movies/") {
+			pathAfterDownloads := strings.TrimPrefix(defaultDownloadPath, "/downloads/")
+			// 如果包含有意义的内容（不只是 tvs/ 或 movies/），直接使用
+			if pathAfterDownloads != "tvs" && pathAfterDownloads != "movies" && 
+			   pathAfterDownloads != "tvs/" && pathAfterDownloads != "movies/" {
+				return defaultDownloadPath
+			}
+		}
+	}
+	
+	// 回退逻辑：从源路径提取
 	dirPath := filepath.Dir(sourcePath)
 	
 	// 查找 tvs 目录的位置
 	if idx := strings.Index(dirPath, "/tvs/"); idx != -1 {
 		// 提取 tvs 后面的路径部分
 		tvsPath := dirPath[idx+1:] // 包含 "tvs/" 
-		
-		// 如果默认下载路径包含智能生成的季度信息，需要保留
-		if strings.HasPrefix(defaultDownloadPath, "/downloads/tvs/") {
-			// 从默认路径中提取剧名和季度信息
-			pathAfterTvs := strings.TrimPrefix(defaultDownloadPath, "/downloads/tvs/")
-			// 从源路径中提取剧名
-			sourcePathParts := strings.Split(tvsPath, "/")
-			if len(sourcePathParts) >= 2 && pathAfterTvs != "" {
-				// 如果智能生成的路径包含季度信息，保留完整路径
-				if strings.Contains(pathAfterTvs, "/") {
-					return defaultDownloadPath
-				}
-			}
-		}
-		
 		return "/downloads/" + tvsPath
 	}
 	
@@ -44,19 +43,10 @@ func (s *FilePathService) ApplyPathMapping(sourcePath, defaultDownloadPath strin
 	if idx := strings.Index(dirPath, "/movies/"); idx != -1 {
 		// 提取 movies 后面的路径部分
 		moviesPath := dirPath[idx+1:] // 包含 "movies/"
-		
-		// 如果默认下载路径包含智能生成的电影信息，需要保留
-		if strings.HasPrefix(defaultDownloadPath, "/downloads/movies/") {
-			pathAfterMovies := strings.TrimPrefix(defaultDownloadPath, "/downloads/movies/")
-			if pathAfterMovies != "" && strings.Contains(pathAfterMovies, "/") {
-				return defaultDownloadPath
-			}
-		}
-		
 		return "/downloads/" + moviesPath
 	}
 	
-	// 对于其他路径，保持原有的智能生成逻辑
+	// 对于其他路径，使用默认下载路径
 	return defaultDownloadPath
 }
 

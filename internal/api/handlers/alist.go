@@ -176,12 +176,23 @@ func AlistLogin(c *gin.Context) {
 
 	client := alist.NewClient(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password)
 
-	if err := client.Login(); err != nil {
-		utils.ErrorWithStatus(c, http.StatusUnauthorized, 401, "Failed to login to Alist: "+err.Error())
+	// 清除现有token强制重新登录
+	client.ClearToken()
+
+	// 通过调用API测试连接和登录（客户端会自动处理token刷新）
+	_, err = client.ListFiles("/", 1, 1)
+	if err != nil {
+		utils.ErrorWithStatus(c, http.StatusUnauthorized, 401, "Failed to connect to Alist: "+err.Error())
 		return
 	}
 
+	// 获取token状态
+	hasToken, isValid, expiryTime := client.GetTokenStatus()
+	
 	utils.Success(c, gin.H{
-		"message": "Login successful",
+		"message":     "Connection successful",
+		"has_token":   hasToken,
+		"token_valid": isValid,
+		"expires_at":  expiryTime.Format("2006-01-02 15:04:05"),
 	})
 }

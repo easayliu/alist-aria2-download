@@ -25,6 +25,7 @@ func NewFileService(alistClient *alist.Client) *FileService {
 	querySvc := NewFileQueryService(alistClient, filterSvc)
 	statsSvc := NewFileStatsService(mediaSvc)
 
+
 	return &FileService{
 		alistClient: alistClient,
 		querySvc:    querySvc,

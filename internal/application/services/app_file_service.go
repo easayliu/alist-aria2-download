@@ -148,17 +148,10 @@ func (s *AppFileService) convertToFileResponse(item alist.FileItem, basePath str
 func (s *AppFileService) getRealDownloadURLs(filePath string) (internalURL, externalURL string) {
 	logger.Info("🔍 开始获取文件的raw_url", "path", filePath)
 	
-	// 确保AList客户端已登录
-	if s.alistClient.Token == "" {
-		logger.Info("🔑 检测到未登录，开始登录AList", "baseURL", s.alistClient.BaseURL)
-		if err := s.alistClient.Login(); err != nil {
-			logger.Error("❌ AList登录失败", "error", err)
-			fallbackInternal := s.generateInternalURL(filePath)
-			fallbackExternal := s.generateExternalURL(filePath)
-			logger.Info("🔄 登录失败，使用回退URL", "internal", fallbackInternal, "external", fallbackExternal)
-			return fallbackInternal, fallbackExternal
-		}
-		logger.Info("✅ AList登录成功")
+	// 确保AList客户端token有效（将自动处理登录和刷新）
+	hasToken, isValid, _ := s.alistClient.GetTokenStatus()
+	if !hasToken || !isValid {
+		logger.Info("🔑 检测到token无效，将在请求时自动刷新", "hasToken", hasToken, "isValid", isValid)
 	}
 	
 	// 获取文件详细信息（包含raw_url）

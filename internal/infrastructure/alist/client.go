@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/ratelimit"
@@ -12,12 +14,14 @@ import (
 
 // Client Alist客户端
 type Client struct {
-	BaseURL     string
-	Username    string
-	Password    string
-	Token       string
-	httpClient  *http.Client
-	rateLimiter *ratelimit.RateLimiter
+	BaseURL      string
+	Username     string
+	Password     string
+	Token        string
+	TokenExpiry  time.Time // Token过期时间
+	httpClient   *http.Client
+	rateLimiter  *ratelimit.RateLimiter
+	tokenMutex   sync.RWMutex // 保护token的读写
 }
 
 // LoginRequest 登录请求结构
@@ -31,7 +35,8 @@ type LoginResponse struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 	Data    struct {
-		Token string `json:"token"`
+		Token    string `json:"token"`
+		ExpireAt string `json:"expire_at,omitempty"` // Token过期时间(可选)
 	} `json:"data"`
 }
 
@@ -109,17 +114,78 @@ func (c *Client) LoginWithContext(ctx context.Context) error {
 		return fmt.Errorf("login failed: code=%d, message=%s", loginResp.Code, loginResp.Message)
 	}
 
+	c.tokenMutex.Lock()
+	defer c.tokenMutex.Unlock()
+	
 	c.Token = loginResp.Data.Token
+	
+	// 设置token过期时间，默认1小时后过期
+	if loginResp.Data.ExpireAt != "" {
+		if expiry, err := time.Parse(time.RFC3339, loginResp.Data.ExpireAt); err == nil {
+			c.TokenExpiry = expiry
+		} else {
+			// 如果解析失败，设置默认过期时间
+			c.TokenExpiry = time.Now().Add(1 * time.Hour)
+		}
+	} else {
+		// 没有过期时间信息，设置默认1小时过期
+		c.TokenExpiry = time.Now().Add(1 * time.Hour)
+	}
+	
 	return nil
 }
 
+// isTokenValid 检查token是否有效（未过期且不为空）
+func (c *Client) isTokenValid() bool {
+	c.tokenMutex.RLock()
+	defer c.tokenMutex.RUnlock()
+	
+	return c.Token != "" && time.Now().Before(c.TokenExpiry)
+}
+
+// ensureValidToken 确保token有效，如果无效则重新登录
+func (c *Client) ensureValidToken(ctx context.Context) error {
+	if c.isTokenValid() {
+		return nil
+	}
+	
+	// token无效，需要重新登录
+	return c.LoginWithContext(ctx)
+}
+
+// ClearToken 清除当前token，强制下次请求重新登录
+func (c *Client) ClearToken() {
+	c.tokenMutex.Lock()
+	defer c.tokenMutex.Unlock()
+	
+	c.Token = ""
+	c.TokenExpiry = time.Time{}
+}
+
+// GetTokenStatus 获取token状态信息
+func (c *Client) GetTokenStatus() (hasToken bool, isValid bool, expiryTime time.Time) {
+	c.tokenMutex.RLock()
+	defer c.tokenMutex.RUnlock()
+	
+	hasToken = c.Token != ""
+	isValid = hasToken && time.Now().Before(c.TokenExpiry)
+	expiryTime = c.TokenExpiry
+	
+	return
+}
+
 // makeRequest 发起带认证的HTTP请求
-func (c *Client) makeRequest(method, endpoint string, reqBody, respBody interface{}) error {
+func (c *Client) makeRequest(method, endpoint string, reqBody, respBody any) error {
 	return c.makeRequestWithContext(context.Background(), method, endpoint, reqBody, respBody)
 }
 
 // makeRequestWithContext 发起带认证的HTTP请求（带上下文）
-func (c *Client) makeRequestWithContext(ctx context.Context, method, endpoint string, reqBody, respBody interface{}) error {
+func (c *Client) makeRequestWithContext(ctx context.Context, method, endpoint string, reqBody, respBody any) error {
+	// 确保token有效
+	if err := c.ensureValidToken(ctx); err != nil {
+		return fmt.Errorf("failed to ensure valid token: %w", err)
+	}
+
 	// 等待速率限制
 	if c.rateLimiter != nil {
 		if err := c.rateLimiter.Wait(ctx); err != nil {
@@ -127,26 +193,64 @@ func (c *Client) makeRequestWithContext(ctx context.Context, method, endpoint st
 		}
 	}
 
+	// 获取当前有效的token
+	c.tokenMutex.RLock()
+	token := c.Token
+	c.tokenMutex.RUnlock()
+
 	// 使用通用HTTP客户端
 	opts := httputil.DefaultOptions().
 		WithContext(ctx).
 		WithClient(c.httpClient)
 
-	if c.Token != "" {
-		opts = opts.WithHeader("Authorization", c.Token)
+	if token != "" {
+		opts = opts.WithHeader("Authorization", token)
 	}
 
-	return httputil.DoJSONRequest(method, c.BaseURL+endpoint, reqBody, respBody, opts)
+	err := httputil.DoJSONRequest(method, c.BaseURL+endpoint, reqBody, respBody, opts)
+	
+	// 如果是认证错误，尝试重新登录后再试一次
+	if err != nil && isAuthError(err) {
+		// 强制重新登录
+		c.tokenMutex.Lock()
+		c.Token = ""
+		c.TokenExpiry = time.Time{}
+		c.tokenMutex.Unlock()
+		
+		// 重新获取token
+		if loginErr := c.ensureValidToken(ctx); loginErr != nil {
+			return fmt.Errorf("failed to refresh token after auth error: %w", loginErr)
+		}
+		
+		// 获取新token重试请求
+		c.tokenMutex.RLock()
+		newToken := c.Token
+		c.tokenMutex.RUnlock()
+		
+		if newToken != "" {
+			opts = opts.WithHeader("Authorization", newToken)
+		}
+		
+		err = httputil.DoJSONRequest(method, c.BaseURL+endpoint, reqBody, respBody, opts)
+	}
+	
+	return err
+}
+
+// isAuthError 判断是否为认证错误
+func isAuthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "401") || 
+		   strings.Contains(errStr, "unauthorized") || 
+		   strings.Contains(errStr, "invalid token") || 
+		   strings.Contains(errStr, "token expired")
 }
 
 // ListFiles 获取文件列表
 func (c *Client) ListFiles(path string, page, perPage int) (*FileListResponse, error) {
-	// 如果没有token，先登录
-	if c.Token == "" {
-		if err := c.Login(); err != nil {
-			return nil, fmt.Errorf("failed to login: %w", err)
-		}
-	}
 
 	// 构建请求参数
 	reqData := FileListRequest{
@@ -172,12 +276,6 @@ func (c *Client) ListFiles(path string, page, perPage int) (*FileListResponse, e
 
 // GetFileInfo 获取文件信息
 func (c *Client) GetFileInfo(path string) (*FileGetResponse, error) {
-	// 如果没有token，先登录
-	if c.Token == "" {
-		if err := c.Login(); err != nil {
-			return nil, fmt.Errorf("failed to login: %w", err)
-		}
-	}
 
 	// 构建请求参数
 	reqData := FileGetRequest{

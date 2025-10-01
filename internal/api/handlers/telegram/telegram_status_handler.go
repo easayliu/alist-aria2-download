@@ -127,8 +127,8 @@ func (h *StatusHandler) HandleDownloadStatusAPIWithEdit(chatID int64, messageID 
 
 // HandleAlistLoginWithEdit 处理Alist登录（支持消息编辑）
 func (h *StatusHandler) HandleAlistLoginWithEdit(chatID int64, messageID int) {
-	// 显示正在登录的消息
-	loadingMessage := "正在登录Alist..."
+	// 显示正在测试连接的消息
+	loadingMessage := "正在测试Alist连接..."
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("返回管理面板", "menu_system"),
@@ -143,12 +143,15 @@ func (h *StatusHandler) HandleAlistLoginWithEdit(chatID int64, messageID int) {
 		h.controller.config.Alist.Password,
 	)
 
-	// 执行登录
-	err := alistClient.Login()
+	// 清除现有token强制重新登录
+	alistClient.ClearToken()
+
+	// 通过调用API测试连接和登录（客户端会自动处理token刷新）
+	_, err := alistClient.ListFiles("/", 1, 1)
 
 	var message string
 	if err != nil {
-		message = fmt.Sprintf("<b>❌ Alist登录失败</b>\n\n"+
+		message = fmt.Sprintf("<b>❌ Alist连接失败</b>\n\n"+
 			"<b>错误信息:</b> <code>%s</code>\n\n"+
 			"<b>配置信息:</b>\n"+
 			"• 地址: <code>%s</code>\n"+
@@ -158,13 +161,20 @@ func (h *StatusHandler) HandleAlistLoginWithEdit(chatID int64, messageID int) {
 			h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.BaseURL),
 			h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.Username))
 	} else {
-		message = fmt.Sprintf("<b>✅ Alist登录成功！</b>\n\n"+
+		// 获取token状态
+		hasToken, isValid, expiryTime := alistClient.GetTokenStatus()
+		message = fmt.Sprintf("<b>✅ Alist连接成功！</b>\n\n"+
 			"<b>服务器信息:</b>\n"+
 			"• 地址: <code>%s</code>\n"+
 			"• 用户名: <code>%s</code>\n"+
-			"• 登录时间: %s",
+			"• 有效Token: %v\n"+
+			"• Token有效: %v\n"+
+			"• 过期时间: %s\n"+
+			"• 测试时间: %s",
 			h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.BaseURL),
 			h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.Username),
+			hasToken, isValid,
+			expiryTime.Format("2006-01-02 15:04:05"),
 			time.Now().Format("2006-01-02 15:04:05"))
 	}
 
