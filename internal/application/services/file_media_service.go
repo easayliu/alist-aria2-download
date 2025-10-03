@@ -1,12 +1,13 @@
 package services
 
 import (
-	"fmt"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/easayliu/alist-aria2-download/pkg/utils"
 )
 
 // MediaType 媒体类型
@@ -429,63 +430,32 @@ func (s *FileMediaService) extractTVShowInfo(fullPath string) (showName, seasonI
 
 // extractSeasonFromFileName 从文件名提取季度信息（S##E##格式）
 func (s *FileMediaService) extractSeasonFromFileName(fileName string) string {
-	// 匹配 S01E01, S##E## 格式
-	seasonEpRegex := regexp.MustCompile(`(?i)S(\d{1,2})E\d{1,3}`)
-	matches := seasonEpRegex.FindStringSubmatch(fileName)
-	
+	// 匹配 S01E01, S##E## 格式（使用预编译正则）
+	matches := utils.SeasonEpisodePattern.FindStringSubmatch(fileName)
+
 	if len(matches) > 1 {
 		if seasonNum, err := strconv.Atoi(matches[1]); err == nil {
-			if seasonNum < 10 {
-				return fmt.Sprintf("S0%d", seasonNum)
-			}
-			return fmt.Sprintf("S%d", seasonNum)
+			return utils.FormatSeason(seasonNum)
 		}
 	}
-	
+
 	return ""
 }
 
-// isSeasonDirectory 检查是否为季度目录
+// isSeasonDirectory 检查是否为季度目录（使用公共工具函数）
 func (s *FileMediaService) isSeasonDirectory(dir string) bool {
-	lowerDir := strings.ToLower(dir)
-	
-	// 检查是否为纯季度目录名（s1, s01, season1, season 1 等）
-	// 匹配模式：s1, s01, season1, season 1, 第1季, 第一季 等
-	patterns := []string{
-		`^s\d{1,2}$`,           // s1, s01
-		`^season\s*\d{1,2}$`,   // season1, season 1
-		`^第.{1,2}季$`,         // 第1季, 第一季
-	}
-	
-	for _, pattern := range patterns {
-		if matched, _ := regexp.MatchString(pattern, lowerDir); matched {
-			return true
-		}
-	}
-	
-	return false
+	return utils.IsSeasonDirectory(dir)
 }
 
 // extractShowNameFromPath 从路径部分提取剧集名称
 func (s *FileMediaService) extractShowNameFromPath(parts []string, seasonIndex int) string {
-	// 优先查找包含剧名的上级目录
-	skipDirs := map[string]bool{
-		"": true, ".": true, "..": true, "/": true,
-		"data": true, "来自：分享": true,
-		"tvs": true, "series": true, "movies": true, "films": true,
-		"tv": true, "movie": true, "video": true, "videos": true,
-		"anime": true, "动画": true, "长篇剧": true, "drama": true,
-		"download": true, "downloads": true, "media": true,
-		"variety": true, "shows": true, "综艺": true,
-	}
-
 	// 从季度目录向前查找，优先选择有意义的剧名目录
 	var candidateNames []string
-	
+
 	for i := seasonIndex - 1; i >= 0; i-- {
 		part := parts[i]
-		// 跳过系统目录及通用分类目录
-		if skipDirs[part] || skipDirs[strings.ToLower(part)] {
+		// 跳过系统目录及通用分类目录（使用公共工具）
+		if utils.ShouldSkipDirectory(part) {
 			continue
 		}
 		
@@ -530,18 +500,9 @@ func (s *FileMediaService) extractShowNameFromFullPath(fullPath string) string {
 	parts := strings.Split(fullPath, "/")
 
 	// 从路径中找到最可能是剧名的部分，跳过系统目录和通用目录名
-	skipDirs := map[string]bool{
-		"data": true, "来自：分享": true, "/": true, "": true,
-		"tvs": true, "series": true, "movies": true, "films": true,
-		"tv": true, "movie": true, "video": true, "videos": true,
-		"anime": true, "动画": true, "长篇剧": true, "drama": true,
-		"download": true, "downloads": true, "media": true,
-		"variety": true, "shows": true, "综艺": true,  // 跳过variety/shows这类通用类别目录
-	}
-
 	for _, part := range parts {
-		// 跳过系统目录、空目录和通用目录名
-		if skipDirs[part] || skipDirs[strings.ToLower(part)] {
+		// 跳过系统目录、空目录和通用目录名（使用公共工具）
+		if utils.ShouldSkipDirectory(part) {
 			continue
 		}
 
@@ -628,52 +589,22 @@ func (s *FileMediaService) standardizeShowName(name string) string {
 	return name
 }
 
-// extractSeasonFromChinese 从中文格式提取季度
+// extractSeasonFromChinese 从中文格式提取季度（使用公共工具）
 func (s *FileMediaService) extractSeasonFromChinese(part string) string {
-	// 处理 "第 0 季", "第 1 季", "第一季" 等格式
-	if strings.Contains(part, "第") && strings.Contains(part, "季") {
-		// 提取数字
-		start := strings.Index(part, "第") + len("第")
-		end := strings.Index(part, "季")
-		if start > 0 && end > start {
-			seasonStr := strings.TrimSpace(part[start:end])
-
-			// 尝试解析数字
-			seasonNum := s.parseChineseNumber(seasonStr)
-			if seasonNum >= 0 {
-				if seasonNum < 10 {
-					return "S0" + strconv.Itoa(seasonNum)
-				}
-				return "S" + strconv.Itoa(seasonNum)
-			}
-		}
+	season := utils.ExtractSeason(part)
+	if season == "S01" && !strings.Contains(part, "第") {
+		return "S1" // 兼容原逻辑
 	}
-	return "S1"
+	return season
 }
 
-// parseChineseNumber 解析中文数字或阿拉伯数字
+// parseChineseNumber 解析中文数字或阿拉伯数字（使用公共工具）
 func (s *FileMediaService) parseChineseNumber(str string) int {
-	str = strings.TrimSpace(str)
-
-	// 先尝试直接解析阿拉伯数字
-	if num, err := strconv.Atoi(str); err == nil {
-		return num
+	num := utils.ChineseToNumber(str)
+	if num == 0 && str != "零" && str != "0" {
+		return -1 // 保持原逻辑，未匹配返回-1
 	}
-
-	// 解析中文数字
-	chineseNumbers := map[string]int{
-		"零": 0, "一": 1, "二": 2, "三": 3, "四": 4,
-		"五": 5, "六": 6, "七": 7, "八": 8, "九": 9,
-		"十": 10, "十一": 11, "十二": 12, "十三": 13, "十四": 14,
-		"十五": 15, "十六": 16, "十七": 17, "十八": 18, "十九": 19,
-		"二十": 20,
-	}
-
-	if num, ok := chineseNumbers[str]; ok {
-		return num
-	}
-
-	return -1
+	return num
 }
 
 // parseSeasonNumber 从季度字符串中解析出数字（如 "S08" -> 8, "S1" -> 1）
@@ -688,24 +619,19 @@ func (s *FileMediaService) parseSeasonNumber(seasonStr string) int {
 	return 1 // 默认第一季
 }
 
-// extractSeasonNumber 提取季度编号
+// extractSeasonNumber 提取季度编号（使用公共工具和预编译正则）
 func (s *FileMediaService) extractSeasonNumber(part string) string {
 	lowerPart := strings.ToLower(part)
 
 	// 只从简单的季度目录中提取，避免从复杂格式中提取
-	// 匹配 s1, s01, season1, season 1 等简单格式
-	seasonRegex := regexp.MustCompile(`^(?:s|season\s*)(\d{1,2})$`)
-	matches := seasonRegex.FindStringSubmatch(lowerPart)
-	
+	matches := utils.SeasonStrictPattern.FindStringSubmatch(lowerPart)
+
 	if len(matches) > 1 {
 		if seasonNum, err := strconv.Atoi(matches[1]); err == nil {
-			if seasonNum < 10 {
-				return fmt.Sprintf("S0%d", seasonNum)
-			}
-			return fmt.Sprintf("S%d", seasonNum)
+			return utils.FormatSeason(seasonNum)
 		}
 	}
-	
+
 	// 如果没有找到，返回S1
 	return "S1"
 }

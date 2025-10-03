@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
@@ -10,24 +9,9 @@ import (
 	"github.com/easayliu/alist-aria2-download/pkg/utils"
 )
 
-// IsVideoFile 检查是否为视频文件
+// IsVideoFile 检查是否为视频文件（使用公共工具函数）
 func (s *AppFileService) IsVideoFile(filename string) bool {
-	if filename == "" {
-		return false
-	}
-
-	ext := strings.ToLower(filename)
-	if idx := strings.LastIndex(ext, "."); idx != -1 {
-		ext = ext[idx+1:]
-	}
-
-	for _, videoExt := range s.config.Download.VideoExts {
-		if ext == strings.ToLower(videoExt) {
-			return true
-		}
-	}
-
-	return false
+	return utils.IsVideoFile(filename, s.config.Download.VideoExts)
 }
 
 // GetFileCategory 获取文件分类
@@ -104,6 +88,30 @@ func (s *AppFileService) FormatFileSize(size int64) string {
 
 // GenerateDownloadPath 生成下载路径
 func (s *AppFileService) GenerateDownloadPath(file contracts.FileResponse) string {
+	// 如果启用了路径策略服务，使用新的统一路径生成
+	if s.pathStrategy != nil {
+		baseDir := s.config.Aria2.DownloadDir
+		if baseDir == "" {
+			baseDir = "/downloads"
+		}
+
+		generatedPath, err := s.pathStrategy.GenerateDownloadPath(file, baseDir)
+		if err != nil {
+			logger.Debug("PathStrategyService failed, using fallback", "error", err, "file", file.Name)
+			// 回退到旧逻辑
+			return s.generateDownloadPathLegacy(file)
+		}
+
+		logger.Debug("Path generated via PathStrategyService", "file", file.Name, "path", generatedPath)
+		return generatedPath
+	}
+
+	// 未启用路径策略服务时，使用旧逻辑
+	return s.generateDownloadPathLegacy(file)
+}
+
+// generateDownloadPathLegacy 旧的路径生成逻辑（保留作为回退）
+func (s *AppFileService) generateDownloadPathLegacy(file contracts.FileResponse) string {
 	baseDir := s.config.Aria2.DownloadDir
 	if baseDir == "" {
 		baseDir = "/downloads"
@@ -111,29 +119,29 @@ func (s *AppFileService) GenerateDownloadPath(file contracts.FileResponse) strin
 
 	// 首先检查路径中的类型指示器（优先级最高）
 	pathCategory := s.GetCategoryFromPath(file.Path)
-	logger.Info("🏷️  路径分类分析", "path", file.Path, "pathCategory", pathCategory)
-	
+	logger.Debug("Path category analysis (legacy)", "path", file.Path, "category", pathCategory)
+
 	if pathCategory != "" {
 		// 对于电视剧，使用智能路径解析和重组
 		if pathCategory == "tv" {
 			smartPath := s.generateSmartTVPath(file.Path, baseDir)
 			if smartPath != "" {
-				logger.Info("🎯 使用智能电视剧路径", "file", file.Name, "path", file.Path, "smartPath", smartPath)
+				logger.Debug("Using smart TV path", "file", file.Name, "path", smartPath)
 				return smartPath
 			}
 		}
-		
+
 		// 提取并保留原始路径结构
 		targetDir := s.extractPathStructure(file.Path, pathCategory, baseDir)
 		if targetDir != "" {
-			logger.Info("✅ 使用路径分类结果（保留目录结构）", "file", file.Name, "path", file.Path, "pathCategory", pathCategory, "targetDir", targetDir)
+			logger.Debug("Using categorized path", "file", file.Name, "category", pathCategory, "path", targetDir)
 			return targetDir
 		}
 	}
 
 	// 如果路径分类失败，直接使用默认目录
 	defaultDir := utils.JoinPath(baseDir, "others")
-	logger.Info("⚠️  路径分类失败，使用默认目录", "file", file.Name, "path", file.Path, "defaultDir", defaultDir)
+	logger.Debug("Path categorization failed, using default", "file", file.Name, "path", defaultDir)
 	return defaultDir
 }
 
@@ -153,10 +161,10 @@ func (s *AppFileService) GetCategoryFromPath(path string) string {
 	// 如果两个都存在，选择最早出现的（路径层级更高的）
 	if tvsIndex != -1 && moviesIndex != -1 {
 		if tvsIndex < moviesIndex {
-			logger.Info("🔍 路径同时包含 tvs 和 movies，选择更早出现的 tvs", "path", path, "tvsIndex", tvsIndex, "moviesIndex", moviesIndex)
+			logger.Debug("Path contains both tvs and movies, choosing earlier tvs", "path", path, "tvsIndex", tvsIndex, "moviesIndex", moviesIndex)
 			return "tv"
 		} else {
-			logger.Info("🔍 路径同时包含 tvs 和 movies，选择更早出现的 movies", "path", path, "tvsIndex", tvsIndex, "moviesIndex", moviesIndex)
+			logger.Debug("Path contains both tvs and movies, choosing earlier movies", "path", path, "tvsIndex", tvsIndex, "moviesIndex", moviesIndex)
 			return "movie"
 		}
 	}
@@ -202,7 +210,7 @@ func (s *AppFileService) updateMediaStats(summary *contracts.FileSummary, filePa
 	
 	// 使用 GetMediaType 方法，它会优先使用路径分类，然后回退到文件名分类
 	mediaType := s.GetMediaType(filePath)
-	logger.Info("📊 文件统计分类", "filePath", filePath, "filename", filename, "mediaType", mediaType)
+	logger.Debug("File media type determined", "file", filename, "mediaType", mediaType)
 	
 	switch mediaType {
 	case "movie":
@@ -278,27 +286,37 @@ func (s *AppFileService) extractPathStructure(filePath, pathCategory, baseDir st
 		afterKeyword = filePath[afterKeywordStart:]
 	}
 	
-	logger.Info("🔍 提取路径片段", "keywordFound", keywordFound, "afterKeyword", afterKeyword)
-	
+	logger.Debug("Extracted path segment", "keywordFound", keywordFound, "afterKeyword", afterKeyword)
+
 	// 获取文件的父目录（去掉文件名）
 	parentDir := utils.GetParentPath(afterKeyword)
-	
+
 	// 关键步骤：过滤掉路径中的其他分类关键词
 	if parentDir != "" && parentDir != "/" {
 		parentDir = s.filterCategoryKeywords(parentDir, allCategoryKeywords)
-		logger.Info("🧹 过滤分类关键词后", "originalParentDir", utils.GetParentPath(afterKeyword), "filteredParentDir", parentDir)
+		logger.Debug("Category keywords filtered", "originalParentDir", utils.GetParentPath(afterKeyword), "filteredParentDir", parentDir)
 	}
-	
+
 	// 构建最终路径：baseDir + 分类目录 + 过滤后的目录结构
 	if parentDir == "" || parentDir == "/" {
 		// 如果没有子目录，直接使用分类目录
 		targetDir := utils.JoinPath(baseDir, targetCategoryDir)
-		logger.Info("📁 无子目录，使用分类根目录", "targetDir", targetDir)
+		logger.Debug("No subdirectory, using category root", "targetDir", targetDir)
 		return targetDir
 	} else {
+		// 清理节目名（提取第一层目录作为节目名）
+		pathParts := strings.Split(strings.Trim(parentDir, "/"), "/")
+		if len(pathParts) > 0 {
+			// 清理第一层目录名（节目名）
+			cleanedShowName := s.cleanShowName(pathParts[0])
+			pathParts[0] = cleanedShowName
+			parentDir = strings.Join(pathParts, "/")
+			logger.Debug("Show name cleaned", "original", utils.GetParentPath(afterKeyword), "cleaned", parentDir)
+		}
+
 		// 保留过滤后的子目录结构
 		targetDir := utils.JoinPath(baseDir, targetCategoryDir, parentDir)
-		logger.Info("✅ 最终下载路径", "targetDir", targetDir)
+		logger.Debug("Final download path", "path", targetDir)
 		return targetDir
 	}
 }
@@ -309,73 +327,73 @@ func (s *AppFileService) filterCategoryKeywords(path string, keywords []string) 
 		return path
 	}
 	
-	logger.Info("🧹 开始过滤分类关键词", "originalPath", path, "keywords", keywords)
-	
+	logger.Debug("Filtering category keywords", "originalPath", path, "keywords", keywords)
+
 	// 分割路径为目录片段
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	var filteredParts []string
-	
+
 	for _, part := range parts {
 		if part == "" {
 			continue
 		}
-		
+
 		partLower := strings.ToLower(part)
 		isKeyword := false
-		
+
 		// 检查是否是完全匹配的分类关键词
 		for _, keyword := range keywords {
 			if partLower == keyword {
-				logger.Info("🚫 过滤掉分类关键词目录（完全匹配）", "part", part, "keyword", keyword)
+				logger.Debug("Filtered category keyword directory", "part", part, "keyword", keyword)
 				isKeyword = true
 				break
 			}
 		}
-		
+
 		// 如果不是关键词，保留这个目录
 		if !isKeyword {
-			logger.Info("✅ 保留目录", "part", part)
+			logger.Debug("Keeping directory", "part", part)
 			filteredParts = append(filteredParts, part)
 		}
 	}
-	
+
 	// 重新组装路径
 	if len(filteredParts) == 0 {
-		logger.Info("⚠️  所有目录都被过滤，返回空路径")
+		logger.Debug("All directories filtered, returning empty path")
 		return ""
 	}
-	
+
 	result := strings.Join(filteredParts, "/")
-	logger.Info("🔧 路径过滤结果", "original", path, "filtered", result, "removedParts", len(parts)-len(filteredParts))
+	logger.Debug("Path filtering result", "original", path, "filtered", result, "removedParts", len(parts)-len(filteredParts))
 	return result
 }
 
 // generateSmartTVPath 智能生成电视剧路径，将季度信息规范化
 func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
-	logger.Info("🎬 开始智能电视剧路径解析", "filePath", filePath)
+	logger.Debug("Parsing smart TV path", "filePath", filePath)
 	
 	// 从路径中提取tvs之后的部分
 	pathLower := strings.ToLower(filePath)
 	tvsIndex := strings.Index(pathLower, "tvs")
 	if tvsIndex == -1 {
-		logger.Warn("⚠️  路径中未找到tvs关键词", "filePath", filePath)
+		logger.Warn("tvs keyword not found in path", "filePath", filePath)
 		return ""
 	}
-	
+
 	// 提取tvs之后的路径部分
 	afterTvs := filePath[tvsIndex+3:] // 跳过"tvs"
 	if strings.HasPrefix(afterTvs, "/") {
 		afterTvs = afterTvs[1:] // 去掉开头的/
 	}
-	
+
 	// 分割路径为各个部分
 	pathParts := strings.Split(afterTvs, "/")
 	if len(pathParts) < 2 {
-		logger.Warn("⚠️  电视剧路径结构不完整", "afterTvs", afterTvs, "parts", pathParts)
+		logger.Warn("Incomplete TV path structure", "afterTvs", afterTvs, "parts", pathParts)
 		return ""
 	}
-	
-	logger.Info("🔍 路径组件分析", "pathParts", pathParts)
+
+	logger.Debug("Path components analysis", "pathParts", pathParts)
 	
 	// 寻找包含季度信息的目录（从最深层开始检查）
 	var smartPath string
@@ -388,8 +406,8 @@ func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
 	
 	for i := lastIndex; i >= 0; i-- {
 		currentDir := pathParts[i]
-		logger.Info("🔍 检查目录", "index", i, "dir", currentDir)
-		
+		logger.Debug("Checking directory", "index", i, "dir", currentDir)
+
 		// 先检查是否包含完整的节目名信息
 		extractedShowName := s.extractFullShowName(currentDir)
 		if extractedShowName != "" {
@@ -397,8 +415,8 @@ func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
 			if strings.Contains(extractedShowName, "宝藏行") || strings.Contains(extractedShowName, "公益季") {
 				// 对于特殊系列，直接使用完整节目名
 				smartPath = utils.JoinPath(baseDir, "tvs", extractedShowName)
-				logger.Info("✅ 使用完整特殊节目名", 
-					"原路径", filePath,
+				logger.Debug("Using complete special show name",
+					"originalPath", filePath,
 					"完整节目名", extractedShowName,
 					"智能路径", smartPath)
 				return smartPath
@@ -466,92 +484,19 @@ func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
 	return ""
 }
 
-// extractSeasonNumber 从目录名中提取季度编号
+// extractSeasonNumber 从目录名中提取季度编号（使用公共工具）
 func (s *AppFileService) extractSeasonNumber(dirName string) int {
 	if dirName == "" {
 		return 0
 	}
-	
-	dirLower := strings.ToLower(dirName)
-	
-	// 匹配各种季度格式
-	patterns := []struct {
-		pattern string
-		extract func(string) int
-	}{
-		// 第X季 格式
-		{"第", func(s string) int {
-			if idx := strings.Index(s, "第"); idx != -1 {
-				after := s[idx+len("第"):]
-				if seasonIdx := strings.Index(after, "季"); seasonIdx != -1 {
-					seasonStr := after[:seasonIdx]
-					// 转换中文数字或阿拉伯数字
-					return chineseOrArabicToNumber(seasonStr)
-				}
-			}
-			return 0
-		}},
-		// Season X 格式
-		{"season", func(s string) int {
-			if idx := strings.Index(s, "season"); idx != -1 {
-				after := strings.TrimSpace(s[idx+6:])
-				// 提取数字部分
-				var numStr string
-				for _, char := range after {
-					if char >= '0' && char <= '9' {
-						numStr += string(char)
-					} else {
-						break
-					}
-				}
-				if num, err := strconv.Atoi(numStr); err == nil && num > 0 {
-					return num
-				}
-			}
-			return 0
-		}},
-		// SXX 格式
-		{"s", func(s string) int {
-			if len(s) >= 2 && s[0] == 's' {
-				numStr := ""
-				for i := 1; i < len(s) && i < 4; i++ { // 最多取3位数字
-					if s[i] >= '0' && s[i] <= '9' {
-						numStr += string(s[i])
-					} else {
-						break
-					}
-				}
-				if num, err := strconv.Atoi(numStr); err == nil && num > 0 {
-					return num
-				}
-			}
-			return 0
-		}},
-		// 直接包含年份+季度信息，如"极限挑战第9季2023"
-		{"", func(s string) int {
-			// 查找"第X季"模式
-			for i := 0; i < len(s)-1; i++ {
-				if s[i:i+1] == "第" && i+2 < len(s) && s[i+2:i+3] == "季" {
-					seasonChar := s[i+1 : i+2]
-					return chineseOrArabicToNumber(seasonChar)
-				}
-			}
-			return 0
-		}},
+
+	seasonNum := utils.ExtractSeasonNumber(dirName)
+	if seasonNum > 0 {
+		logger.Debug("Season number extracted", "dir", dirName, "season", seasonNum)
+	} else {
+		logger.Debug("Failed to extract season number", "dir", dirName)
 	}
-	
-	// 尝试各种模式
-	for _, pattern := range patterns {
-		if pattern.pattern == "" || strings.Contains(dirLower, pattern.pattern) {
-			if num := pattern.extract(dirLower); num > 0 {
-				logger.Info("🎯 成功提取季度编号", "dirName", dirName, "pattern", pattern.pattern, "seasonNumber", num)
-				return num
-			}
-		}
-	}
-	
-	logger.Info("⚠️  无法从目录名提取季度编号", "dirName", dirName)
-	return 0
+	return seasonNum
 }
 
 // extractFullShowName 提取完整的节目名（包含季度信息）
@@ -588,68 +533,16 @@ func (s *AppFileService) extractFullShowName(dirName string) string {
 	return ""
 }
 
-// cleanShowName 清理节目名，移除不必要的后缀信息
+// cleanShowName 清理节目名（使用公共工具函数）
 func (s *AppFileService) cleanShowName(showName string) string {
-	if showName == "" {
-		return ""
-	}
-	
-	// 移除常见的后缀信息
-	suffixesToRemove := []string{
-		"（", "(", // 移除括号及之后的内容
-		"2021", "2022", "2023", "2024", "2025", // 移除年份
-		"全", "期全", "完结", "[", "【", // 移除完结标记
-	}
-	
-	cleaned := showName
-	for _, suffix := range suffixesToRemove {
-		if idx := strings.Index(cleaned, suffix); idx != -1 {
-			cleaned = cleaned[:idx]
-			logger.Info("🧹 移除后缀", "原名", showName, "后缀", suffix, "清理后", cleaned)
-		}
-	}
-	
-	// 去除前后空白
-	cleaned = strings.TrimSpace(cleaned)
-	
-	// 如果清理后为空或太短，返回原名
-	if len(cleaned) < 3 {
-		logger.Info("⚠️  清理后名称太短，使用原名", "cleaned", cleaned, "original", showName)
-		return showName
-	}
-	
+	cleaned := utils.CleanShowName(showName)
 	logger.Info("✅ 节目名清理完成", "原名", showName, "清理后", cleaned)
 	return cleaned
 }
 
 // chineseOrArabicToNumber 转换中文数字或阿拉伯数字为整数
+// chineseOrArabicToNumber 已废弃，使用 utils.ChineseToNumber
+// Deprecated: 使用 utils.ChineseToNumber 代替
 func chineseOrArabicToNumber(str string) int {
-	if str == "" {
-		return 0
-	}
-	
-	// 清理空格
-	str = strings.TrimSpace(str)
-	if str == "" {
-		return 0
-	}
-	
-	// 先尝试直接转换阿拉伯数字
-	if num, err := strconv.Atoi(str); err == nil {
-		return num
-	}
-	
-	// 转换中文数字
-	chineseNumbers := map[string]int{
-		"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
-		"六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
-		"1": 1, "2": 2, "3": 3, "4": 4, "5": 5,
-		"6": 6, "7": 7, "8": 8, "9": 9,
-	}
-	
-	if num, exists := chineseNumbers[str]; exists {
-		return num
-	}
-	
-	return 0
+	return utils.ChineseToNumber(str)
 }

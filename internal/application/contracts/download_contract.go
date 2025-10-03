@@ -15,6 +15,7 @@ type DownloadRequest struct {
 	Options     map[string]interface{} `json:"options,omitempty"`
 	VideoOnly   bool                   `json:"video_only,omitempty"`
 	AutoClassify bool                  `json:"auto_classify,omitempty"`
+	FileSize    int64                  `json:"file_size,omitempty"` // 文件大小，用于磁盘空间检查
 }
 
 // DownloadResponse 下载响应统一格式

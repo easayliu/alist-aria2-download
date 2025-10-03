@@ -81,7 +81,7 @@ func (s *AppFileService) DownloadDirectory(ctx context.Context, req contracts.Di
 	var downloadRequests []contracts.DownloadRequest
 	for _, file := range listResp.Files {
 		// 动态获取真实的下载URL
-		logger.Info("📂 获取目录中文件的下载URL", "file", file.Name, "path", file.Path)
+		logger.Debug("Getting download URL for file in directory", "file", file.Name, "path", file.Path)
 		internalURL, _ := s.getRealDownloadURLs(file.Path)
 		
 		downloadReq := contracts.DownloadRequest{

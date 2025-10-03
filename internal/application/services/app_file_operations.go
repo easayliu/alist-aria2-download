@@ -10,7 +10,7 @@ import (
 
 // DownloadFile 下载单个文件
 func (s *AppFileService) DownloadFile(ctx context.Context, req contracts.FileDownloadRequest) (*contracts.DownloadResponse, error) {
-	logger.Info("📁 开始下载单个文件", "filePath", req.FilePath)
+	logger.Debug("Downloading single file", "filePath", req.FilePath)
 	
 	// 检查下载服务是否可用
 	if s.downloadService == nil {
@@ -20,11 +20,11 @@ func (s *AppFileService) DownloadFile(ctx context.Context, req contracts.FileDow
 	// 获取文件信息
 	fileInfo, err := s.GetFileInfo(ctx, req.FilePath)
 	if err != nil {
-		logger.Error("❌ 获取文件信息失败", "filePath", req.FilePath, "error", err)
+		logger.Error("Failed to get file info", "filePath", req.FilePath, "error", err)
 		return nil, fmt.Errorf("failed to get file info: %w", err)
 	}
 
-	logger.Info("📋 文件信息获取成功", 
+	logger.Debug("File info retrieved",
 		"fileName", fileInfo.Name,
 		"fileSize", fileInfo.Size,
 		"downloadURL", fileInfo.InternalURL)
@@ -42,7 +42,7 @@ func (s *AppFileService) DownloadFile(ctx context.Context, req contracts.FileDow
 		downloadReq.Directory = s.GenerateDownloadPath(*fileInfo)
 	}
 
-	logger.Info("🚀 准备创建下载任务", 
+	logger.Debug("Creating download task",
 		"url", downloadReq.URL,
 		"filename", downloadReq.Filename,
 		"directory", downloadReq.Directory)

@@ -36,6 +36,25 @@ download:
   min_file_size_mb: 50               # 最小文件大小(MB)，0为不限制
   max_file_size_mb: 0                # 最大文件大小(MB)，0为不限制
 
+  # 路径模板配置（可选，留空则使用智能路径生成）
+  path_config:
+    templates:
+      tv: "{base}/tvs/{show}/{season}"              # 电视剧: /downloads/tvs/节目名/S01
+      movie: "{base}/movies/{title}"                # 电影: /downloads/movies/电影名
+      variety: "{base}/variety/{show}"              # 综艺: /downloads/variety/节目名
+      default: "{base}/others"                      # 其他: /downloads/others
+
+    # 可用变量：
+    # {base} - 基础下载目录
+    # {category} - 自动识别分类(tv/movie/variety/other)
+    # {show} - 节目名称（电视剧/综艺）
+    # {season} - 季度代码(S01, S02...)
+    # {episode} - 集数代码(E01, E02...)
+    # {title} - 电影标题
+    # {movie_year} - 电影年份
+    # {year}/{month}/{day} - 当前日期
+    # {filename} - 原始文件名
+
 # 定时任务配置
 scheduler:
   enabled: false                     # 是否启用定时任务

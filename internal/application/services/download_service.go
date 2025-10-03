@@ -9,6 +9,7 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/domain/entities"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/aria2"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
+	"github.com/easayliu/alist-aria2-download/pkg/utils"
 )
 
 type DownloadService struct {
@@ -200,22 +201,7 @@ func (s *DownloadService) GetSystemStatus() (map[string]interface{}, error) {
 
 // isVideoFile 检查是否为视频文件
 func (s *DownloadService) isVideoFile(filename string) bool {
-	if filename == "" {
-		return false
-	}
-
-	ext := strings.ToLower(filename)
-	if idx := strings.LastIndex(ext, "."); idx != -1 {
-		ext = ext[idx+1:]
-	}
-
-	for _, videoExt := range s.config.Download.VideoExts {
-		if ext == strings.ToLower(videoExt) {
-			return true
-		}
-	}
-
-	return false
+	return utils.IsVideoFile(filename, s.config.Download.VideoExts)
 }
 
 // extractFilename 提取文件名

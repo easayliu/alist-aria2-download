@@ -14,7 +14,7 @@ import (
 
 // ListFiles 获取文件列表 - 统一的业务逻辑
 func (s *AppFileService) ListFiles(ctx context.Context, req contracts.FileListRequest) (*contracts.FileListResponse, error) {
-	logger.Info("Listing files", "path", req.Path, "page", req.Page, "recursive", req.Recursive)
+	logger.Debug("Listing files", "path", req.Path, "page", req.Page, "recursive", req.Recursive)
 
 	// 1. 参数验证和默认值设置
 	if req.Page <= 0 {
@@ -43,18 +43,18 @@ func (s *AppFileService) ListFiles(ctx context.Context, req contracts.FileListRe
 		if item.IsDir {
 			directories = append(directories, fileResp)
 			summary.TotalDirs++
-			logger.Info("Added directory", "name", item.Name)
+			logger.Debug("Added directory", "name", item.Name)
 		} else {
 			// 应用视频过滤
 			if req.VideoOnly && !s.IsVideoFile(item.Name) {
-				logger.Info("File filtered out by VideoOnly", "name", item.Name, "isVideo", s.IsVideoFile(item.Name))
+				logger.Debug("File filtered out by VideoOnly", "name", item.Name)
 				continue
 			}
 
 			files = append(files, fileResp)
 			summary.TotalFiles++
 			summary.TotalSize += item.Size
-			logger.Info("Added file", "name", item.Name, "isVideo", s.IsVideoFile(item.Name))
+			logger.Debug("Added file", "name", item.Name)
 
 			// 媒体分类统计 - 传入完整路径用于路径分类
 			s.updateMediaStats(&summary, fileResp.Path, item.Name)
@@ -184,7 +184,7 @@ func (s *AppFileService) SearchFiles(ctx context.Context, req contracts.FileSear
 
 // GetFilesByTimeRange 根据时间范围获取文件
 func (s *AppFileService) GetFilesByTimeRange(ctx context.Context, req contracts.TimeRangeFileRequest) (*contracts.TimeRangeFileResponse, error) {
-	logger.Info("GetFilesByTimeRange called", 
+	logger.Debug("GetFilesByTimeRange called", 
 		"path", req.Path,
 		"startTime", req.StartTime.Format("2006-01-02 15:04:05 -07:00"), 
 		"endTime", req.EndTime.Format("2006-01-02 15:04:05 -07:00"),
@@ -199,7 +199,7 @@ func (s *AppFileService) GetFilesByTimeRange(ctx context.Context, req contracts.
 		return nil, fmt.Errorf("failed to collect files: %w", err)
 	}
 
-	logger.Info("Time range filtering completed", "filteredCount", len(filteredFiles))
+	logger.Debug("Time range filtering completed", "filteredCount", len(filteredFiles))
 
 	// 重新计算摘要
 	summary := s.calculateFileSummary(filteredFiles)
@@ -216,7 +216,7 @@ func (s *AppFileService) GetFilesByTimeRange(ctx context.Context, req contracts.
 
 // collectFilesInTimeRange 递归收集在时间范围内的文件
 func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path string, startTime, endTime time.Time, videoOnly bool, result *[]contracts.FileResponse) error {
-	logger.Info("Collecting files in path", "path", path)
+	logger.Debug("Collecting files in path", "path", path)
 
 	// 获取当前目录的文件列表（非递归）
 	alistResp, err := s.alistClient.ListFiles(path, 1, 1000)
@@ -230,7 +230,7 @@ func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path strin
 		// 检查时间范围
 		inTimeRange := utils.IsInRange(fileResp.Modified, startTime, endTime)
 		
-		logger.Info("Checking item", 
+		logger.Debug("Checking item", 
 			"name", item.Name, 
 			"isDir", item.IsDir,
 			"modified", fileResp.Modified.Format("2006-01-02 15:04:05 -07:00"),
@@ -240,7 +240,7 @@ func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path strin
 		if item.IsDir {
 			// 对于目录，如果目录修改时间在范围内，则递归搜索
 			if inTimeRange {
-				logger.Info("Directory in time range, recursing", "dir", item.Name)
+				logger.Debug("Directory in time range, recursing", "dir", item.Name)
 				subPath := utils.JoinPath(path, item.Name)
 				err := s.collectFilesInTimeRange(ctx, subPath, startTime, endTime, videoOnly, result)
 				if err != nil {
@@ -248,27 +248,27 @@ func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path strin
 					// 继续处理其他目录，不因单个目录失败而停止
 				}
 			} else {
-				logger.Info("Directory not in time range, skipping", "dir", item.Name)
+				logger.Debug("Directory not in time range, skipping", "dir", item.Name)
 			}
 		} else {
 			// 对于文件，检查时间范围和视频过滤
 			if inTimeRange {
 				if !videoOnly || s.IsVideoFile(item.Name) {
-					logger.Info("File matches criteria, adding", "file", item.Name, "isVideo", s.IsVideoFile(item.Name))
+					logger.Debug("File matches criteria, adding", "file", item.Name)
 					
 					// 为符合条件的文件获取真实的下载URL
 					filePath := utils.JoinPath(path, item.Name)
 					internalURL, externalURL := s.getRealDownloadURLs(filePath)
 					fileResp.InternalURL = internalURL
 					fileResp.ExternalURL = externalURL
-					logger.Info("🎯 已为时间范围文件获取真实下载URL", "file", item.Name, "url", internalURL)
+					logger.Debug("Real download URL obtained", "file", item.Name, "url", internalURL)
 					
 					*result = append(*result, fileResp)
 				} else {
-					logger.Info("File not video, skipping", "file", item.Name)
+					logger.Debug("File not video, skipping", "file", item.Name)
 				}
 			} else {
-				logger.Info("File not in time range, skipping", "file", item.Name)
+				logger.Debug("File not in time range, skipping", "file", item.Name)
 			}
 		}
 	}

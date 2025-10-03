@@ -35,15 +35,15 @@ func (s *FilePathService) ApplyPathMapping(sourcePath, defaultDownloadPath strin
 	// 查找 tvs 目录的位置
 	if idx := strings.Index(dirPath, "/tvs/"); idx != -1 {
 		// 提取 tvs 后面的路径部分
-		tvsPath := dirPath[idx+1:] // 包含 "tvs/" 
-		return "/downloads/" + tvsPath
+		tvsPath := dirPath[idx+1:] // 包含 "tvs/"
+		return filepath.Join("/downloads", tvsPath)
 	}
-	
+
 	// 查找 movies 目录的位置
 	if idx := strings.Index(dirPath, "/movies/"); idx != -1 {
 		// 提取 movies 后面的路径部分
 		moviesPath := dirPath[idx+1:] // 包含 "movies/"
-		return "/downloads/" + moviesPath
+		return filepath.Join("/downloads", moviesPath)
 	}
 	
 	// 对于其他路径，使用默认下载路径

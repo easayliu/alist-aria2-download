@@ -48,11 +48,25 @@ type WebhookConfig struct {
 }
 
 type DownloadConfig struct {
-	VideoOnly   bool     `mapstructure:"video_only"`
-	VideoExts   []string `mapstructure:"video_extensions"`
-	ExcludeExts []string `mapstructure:"exclude_extensions"`
-	MinFileSize int64    `mapstructure:"min_file_size_mb"`
-	MaxFileSize int64    `mapstructure:"max_file_size_mb"`
+	VideoOnly   bool           `mapstructure:"video_only"`
+	VideoExts   []string       `mapstructure:"video_extensions"`
+	ExcludeExts []string       `mapstructure:"exclude_extensions"`
+	MinFileSize int64          `mapstructure:"min_file_size_mb"`
+	MaxFileSize int64          `mapstructure:"max_file_size_mb"`
+	PathConfig  PathConfig     `mapstructure:"path_config"` // 路径配置
+}
+
+// PathConfig 路径配置
+type PathConfig struct {
+	Templates PathTemplates `mapstructure:"templates"` // 路径模板
+}
+
+// PathTemplates 路径模板配置
+type PathTemplates struct {
+	TV      string `mapstructure:"tv"`      // 电视剧路径模板
+	Movie   string `mapstructure:"movie"`   // 电影路径模板
+	Variety string `mapstructure:"variety"` // 综艺路径模板
+	Default string `mapstructure:"default"` // 默认路径模板
 }
 
 type SchedulerConfig struct {
@@ -100,6 +114,12 @@ func LoadConfig() (*Config, error) {
 	})
 	viper.SetDefault("download.min_file_size_mb", 50)
 	viper.SetDefault("download.max_file_size_mb", 0)
+
+	// 路径模板默认值（留空表示使用智能路径生成）
+	viper.SetDefault("download.path_config.templates.tv", "")
+	viper.SetDefault("download.path_config.templates.movie", "")
+	viper.SetDefault("download.path_config.templates.variety", "")
+	viper.SetDefault("download.path_config.templates.default", "")
 
 	// 调度器配置默认值
 	viper.SetDefault("scheduler.enabled", false)

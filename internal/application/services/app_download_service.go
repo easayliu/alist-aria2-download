@@ -16,18 +16,26 @@ import (
 
 // AppDownloadService 应用层下载服务 - 负责业务流程编排
 type AppDownloadService struct {
-	config      *config.Config
-	aria2Client *aria2.Client
-	fileService contracts.FileService
+	config       *config.Config
+	aria2Client  *aria2.Client
+	fileService  contracts.FileService
+	pathStrategy *PathStrategyService // 路径策略服务
 }
 
 // NewAppDownloadService 创建应用下载服务
 func NewAppDownloadService(cfg *config.Config, fileService contracts.FileService) contracts.DownloadService {
-	return &AppDownloadService{
+	service := &AppDownloadService{
 		config:      cfg,
 		aria2Client: aria2.NewClient(cfg.Aria2.RpcURL, cfg.Aria2.Token),
 		fileService: fileService,
 	}
+
+	// 初始化路径策略服务（需要fileService）
+	if fileService != nil {
+		service.pathStrategy = NewPathStrategyService(cfg, fileService)
+	}
+
+	return service
 }
 
 // CreateDownload 创建下载任务 - 统一的业务逻辑
@@ -36,7 +44,7 @@ func (s *AppDownloadService) CreateDownload(ctx context.Context, req contracts.D
 
 	// 1. 参数验证
 	if err := s.validateDownloadRequest(req); err != nil {
-		logger.Error("❌ 下载请求验证失败", "url", req.URL, "filename", req.Filename, "error", err)
+		logger.Error("Download request validation failed", "url", req.URL, "filename", req.Filename, "error", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
@@ -184,6 +192,8 @@ func (s *AppDownloadService) CreateBatchDownload(ctx context.Context, req contra
 	var results []contracts.DownloadResult
 	var successCount, failureCount int
 	summary := contracts.DownloadSummary{}
+
+	// 磁盘空间预检功能已移除，交由 Aria2 处理
 
 	for _, item := range req.Items {
 		// 应用批量下载的全局设置
@@ -365,23 +375,31 @@ func (s *AppDownloadService) prepareDownloadOptions(req contracts.DownloadReques
 	}
 
 	// 设置下载目录
+	downloadDir := ""
 	if req.Directory != "" {
-		options["dir"] = req.Directory
+		downloadDir = req.Directory
 	} else if s.config.Aria2.DownloadDir != "" {
-		options["dir"] = s.config.Aria2.DownloadDir
+		downloadDir = s.config.Aria2.DownloadDir
 	}
+
+	// 路径清理和规范化（如果启用了路径策略服务）
+	if s.pathStrategy != nil && downloadDir != "" {
+		// 清理路径中的特殊字符
+		cleanDir := s.pathStrategy.CleanPath(downloadDir)
+		if cleanDir != downloadDir {
+			logger.Debug("Path cleaned", "original", downloadDir, "cleaned", cleanDir)
+			downloadDir = cleanDir
+		}
+	}
+
+	options["dir"] = downloadDir
 
 	// 设置文件名
 	if req.Filename != "" {
 		options["out"] = req.Filename
 	}
 
-	// 应用自动分类 - 已注释掉，因为 AppFileService 中的 GenerateDownloadPath 已经处理了路径分类
-	// if req.AutoClassify {
-	//     options["dir"] = s.generateClassifiedPath(req.Filename, req.Directory)
-	// }
-	
-	logger.Info("📁 prepareDownloadOptions: 最终下载选项", "dir", options["dir"], "out", options["out"], "autoClassify", req.AutoClassify)
+	logger.Debug("Download options prepared", "dir", options["dir"], "out", options["out"])
 
 	return options
 }
@@ -429,22 +447,7 @@ func (s *AppDownloadService) generateClassifiedPath(filename, baseDir string) st
 
 // isVideoFile 检查是否为视频文件
 func (s *AppDownloadService) isVideoFile(filename string) bool {
-	if filename == "" {
-		return false
-	}
-
-	ext := strings.ToLower(filename)
-	if idx := strings.LastIndex(ext, "."); idx != -1 {
-		ext = ext[idx+1:]
-	}
-
-	for _, videoExt := range s.config.Download.VideoExts {
-		if ext == strings.ToLower(videoExt) {
-			return true
-		}
-	}
-
-	return false
+	return utils.IsVideoFile(filename, s.config.Download.VideoExts)
 }
 
 // isMovieFile 检查是否为电影文件 - 使用智能路径分类
