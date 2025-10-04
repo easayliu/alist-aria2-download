@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/types"
+	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
@@ -115,15 +116,15 @@ func (bc *BasicCommands) HandleStatus(chatID int64) {
 	telegramInfo := status["telegram"].(map[string]interface{})
 	serverInfo := status["server"].(map[string]interface{})
 
-	message := fmt.Sprintf("<b>系统状态</b>\n\n"+
-		"<b>Telegram Bot:</b> %s\n"+
-		"<b>Aria2:</b> %s (版本: %s)\n"+
-		"<b>服务器:</b> 运行中 (端口: %s, 模式: %s)",
-		telegramInfo["status"],
-		aria2Info["status"],
-		aria2Info["version"],
-		serverInfo["port"],
-		serverInfo["mode"])
+	// 使用统一格式化器
+	formatter := bc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatSimpleSystemStatus(utils.SimpleSystemStatusData{
+		TelegramStatus: telegramInfo["status"].(string),
+		Aria2Status:    aria2Info["status"].(string),
+		Aria2Version:   aria2Info["version"].(string),
+		ServerPort:     serverInfo["port"].(string),
+		ServerMode:     serverInfo["mode"].(string),
+	})
 
 	bc.messageUtils.SendMessageHTML(chatID, message)
 }
@@ -159,8 +160,9 @@ func (bc *BasicCommands) HandleList(chatID int64, command string) {
 	files := append(resp.Directories, resp.Files...)
 
 	// 构建消息
+	formatter := bc.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	escapedPath := bc.messageUtils.EscapeHTML(path)
-	message := fmt.Sprintf("<b>目录: %s</b>\n\n", escapedPath)
+	message := formatter.FormatTitle("📁", fmt.Sprintf("目录: %s", escapedPath)) + "\n\n"
 
 	// 统计
 	videoCount := 0
@@ -190,15 +192,15 @@ func (bc *BasicCommands) HandleList(chatID int64, command string) {
 	}
 
 	// 添加统计信息
-	message += fmt.Sprintf("\n<b>统计:</b>\n")
+	message += "\n" + formatter.FormatSection("统计") + "\n"
 	if dirCount > 0 {
-		message += fmt.Sprintf("目录: %d\n", dirCount)
+		message += formatter.FormatListItem("•", fmt.Sprintf("目录: %d", dirCount)) + "\n"
 	}
 	if videoCount > 0 {
-		message += fmt.Sprintf("视频: %d\n", videoCount)
+		message += formatter.FormatListItem("•", fmt.Sprintf("视频: %d", videoCount)) + "\n"
 	}
 	if otherCount > 0 {
-		message += fmt.Sprintf("其他: %d\n", otherCount)
+		message += formatter.FormatListItem("•", fmt.Sprintf("其他: %d", otherCount)) + "\n"
 	}
 
 	bc.messageUtils.SendMessageHTML(chatID, message)

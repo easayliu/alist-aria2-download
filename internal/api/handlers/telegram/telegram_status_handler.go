@@ -2,10 +2,10 @@ package telegram
 
 import (
 	"context"
-	"fmt"
 	"runtime"
 	"time"
 
+	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -46,67 +46,40 @@ func (h *StatusHandler) HandleDownloadStatusAPIWithEdit(chatID int64, messageID 
 		return
 	}
 
-	// 使用contracts返回的结构化数据
-	activeCount := downloads.ActiveCount
-	totalCount := downloads.TotalCount
-	
-	// 从GlobalStats中获取其他统计信息
-	waitingCount := 0
-	stoppedCount := 0
-	if stats := downloads.GlobalStats; stats != nil {
-		if w, ok := stats["waiting_count"].(int); ok {
-			waitingCount = w
+	// 构建下载列表数据
+	var downloadItems []utils.DownloadItemData
+	for _, d := range downloads.Downloads {
+		// 获取状态emoji
+		statusEmoji := "❓"
+		switch string(d.Status) {
+		case "active", "running":
+			statusEmoji = "🔄"
+		case "complete", "completed":
+			statusEmoji = "✅"
+		case "paused":
+			statusEmoji = "⏸️"
+		case "error", "failed":
+			statusEmoji = "❌"
+		case "waiting", "pending":
+			statusEmoji = "⏳"
 		}
-		if s, ok := stats["stopped_count"].(int); ok {
-			stoppedCount = s
-		}
+
+		downloadItems = append(downloadItems, utils.DownloadItemData{
+			StatusEmoji: statusEmoji,
+			ID:          d.ID,
+			Filename:    d.Filename,
+			Progress:    d.Progress,
+		})
 	}
 
-	message := fmt.Sprintf("<b>下载状态总览</b>\n\n"+
-		"<b>统计:</b>\n"+
-		"• 总任务数: %d\n"+
-		"• 活动中: %d\n"+
-		"• 等待中: %d\n"+
-		"• 已停止: %d\n\n",
-		totalCount, activeCount, waitingCount, stoppedCount)
-
-	// 显示活动任务
-	if len(downloads.Downloads) > 0 {
-		message += "<b>活动任务:</b>\n"
-		shownCount := 0
-		for _, download := range downloads.Downloads {
-			if string(download.Status) == "active" && shownCount < 3 {
-				gid := download.ID
-				if len(gid) > 8 {
-					gid = gid[:8] + "..."
-				}
-
-				filename := download.Filename
-				if filename == "" {
-					filename = "未知文件"
-				}
-				if len(filename) > 30 {
-					filename = filename[:30] + "..."
-				}
-
-				message += fmt.Sprintf("• %s - %s\n", gid, h.controller.messageUtils.EscapeHTML(filename))
-				shownCount++
-			}
-		}
-		if activeCount > 3 {
-			message += fmt.Sprintf("• ... 还有 %d 个任务\n", activeCount-3)
-		}
-		message += "\n"
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	listData := utils.DownloadListData{
+		TotalCount:  downloads.TotalCount,
+		ActiveCount: downloads.ActiveCount,
+		Downloads:   downloadItems,
 	}
-
-	// 显示等待和停止任务数量
-	if waitingCount > 0 {
-		message += fmt.Sprintf("<b>等待任务:</b> %d 个\n\n", waitingCount)
-	}
-
-	if stoppedCount > 0 {
-		message += fmt.Sprintf("<b>已停止任务:</b> %d 个\n", stoppedCount)
-	}
+	message := formatter.FormatDownloadList(listData)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -149,33 +122,23 @@ func (h *StatusHandler) HandleAlistLoginWithEdit(chatID int64, messageID int) {
 	// 通过调用API测试连接和登录（客户端会自动处理token刷新）
 	_, err := alistClient.ListFiles("/", 1, 1)
 
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	var message string
+
 	if err != nil {
-		message = fmt.Sprintf("<b>❌ Alist连接失败</b>\n\n"+
-			"<b>错误信息:</b> <code>%s</code>\n\n"+
-			"<b>配置信息:</b>\n"+
-			"• 地址: <code>%s</code>\n"+
-			"• 用户名: <code>%s</code>\n\n"+
-			"请检查配置是否正确",
-			h.controller.messageUtils.EscapeHTML(err.Error()),
-			h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.BaseURL),
-			h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.Username))
+		message = formatter.FormatAlistConnectionResult(utils.AlistConnectionData{
+			Success:  false,
+			URL:      h.controller.config.Alist.BaseURL,
+			Username: h.controller.config.Alist.Username,
+			Error:    err.Error(),
+		})
 	} else {
-		// 获取token状态
-		hasToken, isValid, expiryTime := alistClient.GetTokenStatus()
-		message = fmt.Sprintf("<b>✅ Alist连接成功！</b>\n\n"+
-			"<b>服务器信息:</b>\n"+
-			"• 地址: <code>%s</code>\n"+
-			"• 用户名: <code>%s</code>\n"+
-			"• 有效Token: %v\n"+
-			"• Token有效: %v\n"+
-			"• 过期时间: %s\n"+
-			"• 测试时间: %s",
-			h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.BaseURL),
-			h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.Username),
-			hasToken, isValid,
-			expiryTime.Format("2006-01-02 15:04:05"),
-			time.Now().Format("2006-01-02 15:04:05"))
+		message = formatter.FormatAlistConnectionResult(utils.AlistConnectionData{
+			Success:  true,
+			URL:      h.controller.config.Alist.BaseURL,
+			Username: h.controller.config.Alist.Username,
+		})
 	}
 
 	finalKeyboard := tgbotapi.NewInlineKeyboardMarkup(
@@ -194,53 +157,51 @@ func (h *StatusHandler) HandleAlistLoginWithEdit(chatID int64, messageID int) {
 
 // HandleHealthCheckWithEdit 处理健康检查（支持消息编辑）
 func (h *StatusHandler) HandleHealthCheckWithEdit(chatID int64, messageID int) {
-	// 构建系统健康检查信息
-	message := "<b>🏥 系统健康检查</b>\n\n"
+	// 构建系统健康检查数据
+	var telegramStatus string
+	var telegramUsers, telegramAdmins int
 
-	// 服务状态
-	message += "<b>📊 服务状态:</b> ✅ 正常运行\n"
-	message += fmt.Sprintf("<b>🚪 端口:</b> <code>%s</code>\n", h.controller.config.Server.Port)
-	message += fmt.Sprintf("<b>🔧 模式:</b> <code>%s</code>\n", h.controller.config.Server.Mode)
-
-	// Alist配置信息
-	message += "\n<b>📂 Alist配置:</b>\n"
-	message += fmt.Sprintf("• 地址: <code>%s</code>\n", h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.BaseURL))
-	message += fmt.Sprintf("• 默认路径: <code>%s</code>\n", h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.DefaultPath))
-
-	// Aria2配置信息
-	message += "\n<b>⬇️ Aria2配置:</b>\n"
-	message += fmt.Sprintf("• RPC地址: <code>%s</code>\n", h.controller.messageUtils.EscapeHTML(h.controller.config.Aria2.RpcURL))
-	message += fmt.Sprintf("• 下载目录: <code>%s</code>\n", h.controller.messageUtils.EscapeHTML(h.controller.config.Aria2.DownloadDir))
-
-	// Telegram配置信息
-	message += "\n<b>📱 Telegram配置:</b>\n"
 	if h.controller.config.Telegram.Enabled {
-		message += "• 状态: ✅ 已启用\n"
-		totalUsers := len(h.controller.config.Telegram.ChatIDs) + len(h.controller.config.Telegram.AdminIDs)
-		message += fmt.Sprintf("• 授权用户数: %d\n", totalUsers)
-		message += fmt.Sprintf("• 管理员数: %d\n", len(h.controller.config.Telegram.AdminIDs))
+		telegramStatus = "✅ 已启用"
+		telegramUsers = len(h.controller.config.Telegram.ChatIDs) + len(h.controller.config.Telegram.AdminIDs)
+		telegramAdmins = len(h.controller.config.Telegram.AdminIDs)
 	} else {
-		message += "• 状态: ❌ 未启用\n"
+		telegramStatus = "❌ 未启用"
 	}
 
-	// 系统运行信息
-	message += "\n<b>💻 系统信息:</b>\n"
-	message += fmt.Sprintf("• 操作系统: <code>%s</code>\n", runtime.GOOS)
-	message += fmt.Sprintf("• 系统架构: <code>%s</code>\n", runtime.GOARCH)
-	message += fmt.Sprintf("• Go版本: <code>%s</code>\n", runtime.Version())
-	message += fmt.Sprintf("• CPU核心数: <code>%d</code>\n", runtime.NumCPU())
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	data := utils.SystemStatusData{
+		ServiceStatus:  "✅ 正常运行",
+		Port:           h.controller.config.Server.Port,
+		Mode:           h.controller.config.Server.Mode,
+		AlistURL:       h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.BaseURL),
+		AlistPath:      h.controller.messageUtils.EscapeHTML(h.controller.config.Alist.DefaultPath),
+		Aria2RPC:       h.controller.messageUtils.EscapeHTML(h.controller.config.Aria2.RpcURL),
+		Aria2Dir:       h.controller.messageUtils.EscapeHTML(h.controller.config.Aria2.DownloadDir),
+		TelegramStatus: telegramStatus,
+		TelegramUsers:  telegramUsers,
+		TelegramAdmins: telegramAdmins,
+		OS:             runtime.GOOS,
+		Arch:           runtime.GOARCH,
+	}
 
-	// 内存使用情况
+	message := formatter.FormatSystemStatus(data)
+
+	// 添加运行时信息
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	message += fmt.Sprintf("• 内存使用: <code>%.2f MB</code>\n", float64(m.Alloc)/1024/1024)
-	message += fmt.Sprintf("• 系统内存: <code>%.2f MB</code>\n", float64(m.Sys)/1024/1024)
 
-	// Goroutine数量
-	message += fmt.Sprintf("• Goroutine数: <code>%d</code>\n", runtime.NumGoroutine())
+	runtimeInfo := formatter.FormatRuntimeInfo(utils.RuntimeInfoData{
+		GoVersion:    runtime.Version(),
+		CPUCores:     runtime.NumCPU(),
+		MemoryUsage:  float64(m.Alloc) / 1024 / 1024,
+		SystemMemory: float64(m.Sys) / 1024 / 1024,
+		Goroutines:   runtime.NumGoroutine(),
+		CheckTime:    time.Now().Format("2006-01-02 15:04:05"),
+	})
 
-	// 检查时间
-	message += fmt.Sprintf("\n<b>🕐 检查时间:</b> %s", time.Now().Format("2006-01-02 15:04:05"))
+	message += runtimeInfo
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(

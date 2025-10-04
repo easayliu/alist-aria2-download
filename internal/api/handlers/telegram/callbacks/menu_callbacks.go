@@ -6,6 +6,7 @@ import (
 	"runtime"
 
 	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/types"
+	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -29,6 +30,30 @@ func NewMenuCallbacks(downloadService contracts.DownloadService, config *config.
 
 // HandleStartWithEdit 处理开始命令（支持消息编辑）
 func (mc *MenuCallbacks) HandleStartWithEdit(chatID int64, messageID int) {
+	// 使用统一格式化器
+	if msgUtils, ok := mc.messageUtils.(*utils.MessageUtils); ok {
+		formatter := msgUtils.GetFormatter().(*utils.MessageFormatter)
+		message := formatter.FormatWelcome()
+
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("下载管理", "menu_download"),
+				tgbotapi.NewInlineKeyboardButtonData("文件浏览", "menu_files"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("系统管理", "menu_system"),
+				tgbotapi.NewInlineKeyboardButtonData("状态监控", "menu_status"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("帮助说明", "cmd_help"),
+			),
+		)
+
+		mc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+		return
+	}
+
+	// 回退到原始格式
 	message := "<b>欢迎使用 Alist-Aria2 下载管理器</b>\n\n" +
 		"<b>功能模块:</b>\n" +
 		"• 下载管理 - 创建、监控、控制下载任务\n" +
@@ -118,15 +143,15 @@ func (mc *MenuCallbacks) HandleStatusWithEdit(chatID int64, messageID int) {
 	telegramInfo := status["telegram"].(map[string]interface{})
 	serverInfo := status["server"].(map[string]interface{})
 
-	message := fmt.Sprintf("<b>系统状态</b>\n\n"+
-		"<b>Telegram Bot:</b> %s\n"+
-		"<b>Aria2:</b> %s (版本: %s)\n"+
-		"<b>服务器:</b> 运行中 (端口: %s, 模式: %s)",
-		telegramInfo["status"],
-		aria2Info["status"],
-		aria2Info["version"],
-		serverInfo["port"],
-		serverInfo["mode"])
+	// 使用统一格式化器
+	formatter := mc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatSimpleSystemStatus(utils.SimpleSystemStatusData{
+		TelegramStatus: telegramInfo["status"].(string),
+		Aria2Status:    aria2Info["status"].(string),
+		Aria2Version:   aria2Info["version"].(string),
+		ServerPort:     serverInfo["port"].(string),
+		ServerMode:     serverInfo["mode"].(string),
+	})
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -140,7 +165,14 @@ func (mc *MenuCallbacks) HandleStatusWithEdit(chatID int64, messageID int) {
 
 // HandleManageWithEdit 处理管理面板（支持消息编辑）
 func (mc *MenuCallbacks) HandleManageWithEdit(chatID int64, messageID int) {
-	message := "<b>管理面板</b>\n\n请选择要执行的操作："
+	var message string
+	// 使用统一格式化器
+	if msgUtils, ok := mc.messageUtils.(*utils.MessageUtils); ok {
+		formatter := msgUtils.GetFormatter().(*utils.MessageFormatter)
+		message = formatter.FormatManagePanel()
+	} else {
+		message = "<b>管理面板</b>\n\n请选择要执行的操作："
+	}
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -194,14 +226,21 @@ func (mc *MenuCallbacks) HandleDownloadMenuWithEdit(chatID int64, messageID int)
 
 // HandleFilesMenuWithEdit 处理文件浏览菜单（支持消息编辑）
 func (mc *MenuCallbacks) HandleFilesMenuWithEdit(chatID int64, messageID int) {
-	message := "<b>文件浏览中心</b>\n\n" +
-		"<b>可用功能:</b>\n" +
-		"• 浏览Alist目录结构\n" +
-		"• 搜索和查找文件\n" +
-		"• 查看文件详细信息\n" +
-		"• 从指定路径下载\n" +
-		"• 批量下载操作\n\n" +
-		"选择操作："
+	var message string
+	// 使用统一格式化器
+	if msgUtils, ok := mc.messageUtils.(*utils.MessageUtils); ok {
+		formatter := msgUtils.GetFormatter().(*utils.MessageFormatter)
+		message = formatter.FormatFileBrowseCenter()
+	} else {
+		message = "<b>文件浏览中心</b>\n\n" +
+			"<b>可用功能:</b>\n" +
+			"• 浏览Alist目录结构\n" +
+			"• 搜索和查找文件\n" +
+			"• 查看文件详细信息\n" +
+			"• 从指定路径下载\n" +
+			"• 批量下载操作\n\n" +
+			"选择操作："
+	}
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(

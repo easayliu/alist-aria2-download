@@ -3,6 +3,7 @@ package telegram
 import (
 	"fmt"
 
+	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/utils"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
@@ -67,48 +68,54 @@ func (h *TaskHandler) HandleTasksWithEdit(chatID int64, userID int64, messageID 
 		return
 	}
 
-	message := fmt.Sprintf("<b>您的定时任务 (%d个)</b>\n\n", len(tasks))
-
-	for i, task := range tasks {
+	// 构建任务数据
+	var taskItems []utils.TaskItemData
+	for _, task := range tasks {
+		statusEmoji := "⏸️"
 		status := "禁用"
 		if task.Enabled {
+			statusEmoji = "✅"
 			status = "启用"
 		}
 
 		// 计算时间描述
 		timeDesc := h.formatTaskTimeDescription(task.HoursAgo)
+		schedule := fmt.Sprintf("%s (最近%s)", task.Cron, timeDesc)
 
-		message += fmt.Sprintf(
-			"<b>%d. %s</b> %s\n"+
-				"   ID: <code>%s</code>\n"+
-				"   Cron: <code>%s</code>\n"+
-				"   路径: <code>%s</code>\n"+
-				"   时间范围: 最近<b>%s</b>内修改的文件\n"+
-				"   文件类型: %s\n",
-			i+1, h.controller.messageUtils.EscapeHTML(task.Name), status,
-			task.ID[:8], task.Cron, task.Path,
-			timeDesc,
-			func() string {
-				if task.VideoOnly {
-					return "仅视频"
-				}
-				return "所有文件"
-			}(),
-		)
-
+		lastRun := ""
 		if task.LastRunAt != nil {
-			message += fmt.Sprintf("   上次: %s\n", task.LastRunAt.Format("01-02 15:04"))
+			lastRun = task.LastRunAt.Format("01-02 15:04")
 		}
+
+		nextRun := ""
 		if task.NextRunAt != nil {
-			message += fmt.Sprintf("   下次: %s\n", task.NextRunAt.Format("01-02 15:04"))
+			nextRun = task.NextRunAt.Format("01-02 15:04")
 		}
-		message += "\n"
+
+		taskItems = append(taskItems, utils.TaskItemData{
+			ID:          task.ID[:8],
+			Name:        h.controller.messageUtils.EscapeHTML(task.Name),
+			Schedule:    schedule,
+			Status:      status,
+			StatusEmoji: statusEmoji,
+			LastRun:     lastRun,
+			NextRun:     nextRun,
+		})
 	}
 
-	message += "<b>命令:</b>\n" +
-		"• 立即运行: <code>/runtask ID</code>\n" +
-		"• 删除任务: <code>/deltask ID</code>\n" +
-		"• 添加任务: <code>/addtask</code> 查看帮助"
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	listData := utils.TaskListData{
+		TotalCount: len(tasks),
+		Tasks:      taskItems,
+	}
+	message := formatter.FormatTaskList(listData)
+
+	// 添加命令说明
+	message += "\n\n" + formatter.FormatSection("命令")
+	message += "\n" + formatter.FormatListItem("•", "立即运行: <code>/runtask ID</code>")
+	message += "\n" + formatter.FormatListItem("•", "删除任务: <code>/deltask ID</code>")
+	message += "\n" + formatter.FormatListItem("•", "添加任务: <code>/addtask</code> 查看帮助")
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(

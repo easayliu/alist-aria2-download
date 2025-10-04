@@ -13,13 +13,20 @@ import (
 // MessageUtils 消息处理工具类
 type MessageUtils struct {
 	telegramClient *telegram.Client
+	formatter      *MessageFormatter
 }
 
 // NewMessageUtils 创建消息工具实例
 func NewMessageUtils(telegramClient *telegram.Client) *MessageUtils {
 	return &MessageUtils{
 		telegramClient: telegramClient,
+		formatter:      NewMessageFormatter(),
 	}
+}
+
+// GetFormatter 获取消息格式化器 - 返回interface{}避免循环导入
+func (mu *MessageUtils) GetFormatter() interface{} {
+	return mu.formatter
 }
 
 // SendMessage 发送基础消息
@@ -150,6 +157,9 @@ func (mu *MessageUtils) SplitMessage(text string, maxLength int) []string {
 }
 
 // EscapeHTML 转义HTML特殊字符
+// 遵循 Telegram Bot API HTML 格式规范,仅需转义 4 个字符: & < > "
+// 其他字符(包括 emoji 和中文)无需转义
+// 参考: https://core.telegram.org/bots/api#html-style
 func (mu *MessageUtils) EscapeHTML(text string) string {
 	replacer := strings.NewReplacer(
 		"&", "&amp;",
@@ -278,33 +288,28 @@ type DirectoryDownloadResultData struct {
 
 // FormatDirectoryDownloadResult 格式化目录下载结果消息（与/download命令保持一致）
 func (mu *MessageUtils) FormatDirectoryDownloadResult(data DirectoryDownloadResultData) string {
-	message := fmt.Sprintf(
-		"<b>目录下载任务已创建</b>\n\n"+
-			"<b>目录:</b> <code>%s</code>\n\n"+
-			"<b>文件统计:</b>\n"+
-			"• 总文件: %d 个\n"+
-			"• 总大小: %s\n"+
-			"• 电影: %d 个\n"+
-			"• 剧集: %d 个\n"+
-			"• 其他: %d 个\n\n"+
-			"<b>下载结果:</b>\n"+
-			"• 成功: %d\n"+
-			"• 失败: %d",
-		mu.EscapeHTML(data.DirectoryPath),
-		data.VideoFiles, // 只显示视频文件数量
-		data.TotalSizeStr,
-		data.MovieCount,
-		data.TVCount,
-		data.OtherCount,
-		data.SuccessCount,
-		data.FailedCount)
-
-	if data.FailedCount > 0 {
-		message += fmt.Sprintf("\n\n⚠️ 有 %d 个文件下载失败，请检查日志获取详细信息", data.FailedCount)
+	// 使用统一格式化器
+	batchData := BatchResultData{
+		Title:        "目录下载任务已创建",
+		TotalFiles:   data.TotalFiles,
+		VideoFiles:   data.VideoFiles,
+		SuccessCount: data.SuccessCount,
+		FailureCount: data.FailedCount,
+		MovieCount:   data.MovieCount,
+		TVCount:      data.TVCount,
+		OtherCount:   data.OtherCount,
+		TotalSize:    data.TotalSizeStr,
 	}
 
-	if data.SuccessCount > 0 {
-		message += "\n\n✅ 所有任务已使用自动路径分类功能\n📥 可通过「下载管理」查看任务状态"
+	message := mu.formatter.FormatBatchResult(batchData)
+
+	// 添加目录信息
+	dirInfo := fmt.Sprintf("\n\n<b>目录:</b> <code>%s</code>", mu.EscapeHTML(data.DirectoryPath))
+	// 在标题后插入目录信息
+	lines := strings.Split(message, "\n")
+	if len(lines) > 2 {
+		lines = append(lines[:2], append([]string{dirInfo}, lines[2:]...)...)
+		message = strings.Join(lines, "\n")
 	}
 
 	return message

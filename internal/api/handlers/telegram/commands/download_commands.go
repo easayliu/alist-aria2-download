@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/types"
+	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 )
@@ -92,9 +93,9 @@ func (dc *DownloadCommands) HandleCancel(chatID int64, command string) {
 		return
 	}
 
-	// 发送成功消息
-	escapedID := dc.messageUtils.EscapeHTML(gid)
-	message := fmt.Sprintf("<b>下载已取消</b>\\n\\n下载GID: <code>%s</code>", escapedID)
+	// 使用统一格式化器发送成功消息
+	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatDownloadCancelled(gid)
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
 
@@ -114,12 +115,13 @@ func (dc *DownloadCommands) handleURLDownload(ctx context.Context, chatID int64,
 		return
 	}
 
-	// 发送确认消息 - Telegram格式转换
-	escapedURL := dc.messageUtils.EscapeHTML(url)
-	escapedID := dc.messageUtils.EscapeHTML(response.ID)
-	escapedFilename := dc.messageUtils.EscapeHTML(response.Filename)
-	message := fmt.Sprintf("<b>下载任务已创建</b>\\n\\nURL: <code>%s</code>\\nGID: <code>%s</code>\\n文件名: <code>%s</code>",
-		escapedURL, escapedID, escapedFilename)
+	// 使用统一格式化器发送确认消息
+	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatDownloadCreated(utils.DownloadCreatedData{
+		URL:      url,
+		GID:      response.ID,
+		Filename: response.Filename,
+	})
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
 

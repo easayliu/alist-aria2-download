@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	timeutils "github.com/easayliu/alist-aria2-download/pkg/utils"
@@ -127,7 +128,8 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 	// 解析时间参数
 	timeResult, err := h.parseTimeArguments(timeArgs)
 	if err != nil {
-		message := fmt.Sprintf("<b>时间参数错误</b>\n\n%s\n\n<b>支持的格式：</b>\n• /download - 预览最近24小时\n• /download 48 - 预览最近48小时\n• /download 2025-09-01 2025-09-26 - 预览指定日期范围\n• /download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z - 预览精确时间范围\n\n<b>提示:</b> 在命令后添加 <code>confirm</code> 可直接开始下载", err.Error())
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		message := formatter.FormatTimeRangeHelp(err.Error())
 		h.controller.messageUtils.SendMessageHTML(chatID, message)
 		return
 	}
@@ -137,7 +139,9 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 		modeLabel = "预览"
 	}
 
-	processingMsg := fmt.Sprintf("<b>正在处理手动%s任务</b>\n\n时间范围: %s", modeLabel, timeResult.Description)
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	processingMsg := formatter.FormatTitle("⏳", fmt.Sprintf("正在处理手动%s任务", modeLabel)) + "\n\n" +
+		formatter.FormatField("时间范围", timeResult.Description)
 	h.controller.messageUtils.SendMessageHTML(chatID, processingMsg)
 
 	path := ""
@@ -166,12 +170,14 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 	files := timeRangeResp.Files
 
 	if len(files) == 0 {
-		var message string
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		var title string
 		if preview {
-			message = fmt.Sprintf("<b>手动下载预览</b>\n\n时间范围: %s\n\n<b>结果:</b> 未找到符合条件的文件", timeResult.Description)
+			title = "手动下载预览"
 		} else {
-			message = fmt.Sprintf("<b>手动下载完成</b>\n\n时间范围: %s\n\n<b>结果:</b> 未找到符合条件的文件", timeResult.Description)
+			title = "手动下载完成"
 		}
+		message := formatter.FormatNoFilesFound(title, timeResult.Description)
 		h.controller.messageUtils.SendMessageHTML(chatID, message)
 		return
 	}
@@ -198,45 +204,39 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 			confirmCommand += " " + strings.Join(timeArgs, " ")
 		}
 
-		message := fmt.Sprintf(
-			"<b>手动下载预览</b>\n\n"+
-				"<b>时间范围:</b> %s\n"+
-				"<b>路径:</b> <code>%s</code>\n\n"+
-				"<b>文件统计:</b>\n"+
-				"• 总文件: %d 个\n"+
-				"• 总大小: %s\n"+
-				"• 电影: %d 个\n"+
-				"• 剧集: %d 个\n"+
-				"• 其他: %d 个",
-			timeResult.Description,
-			h.controller.messageUtils.EscapeHTML(path),
-			totalFiles,
-			totalSizeStr,
-			mediaStats.Movie,
-			mediaStats.TV,
-			mediaStats.Other,
-		)
-
-		if len(files) > 0 {
-			message += "\n\n<b>示例文件:</b>\n"
-			// 显示前几个文件作为示例
-			maxExamples := 5
-			if len(files) < maxExamples {
-				maxExamples = len(files)
+		// 准备示例文件
+		var exampleFiles []utils.ExampleFileData
+		maxExamples := 5
+		if len(files) < maxExamples {
+			maxExamples = len(files)
+		}
+		for i := 0; i < maxExamples; i++ {
+			file := files[i]
+			filename := file.Name
+			runes := []rune(filename)
+			if len(runes) > 60 {
+				filename = string(runes[:60]) + "..."
 			}
-			for i := 0; i < maxExamples; i++ {
-				file := files[i]
-				filename := h.controller.messageUtils.EscapeHTML(file.Name)
-				runes := []rune(filename)
-				if len(runes) > 60 {
-					filename = string(runes[:60]) + "..."
-				}
-				downloadPath := h.controller.messageUtils.EscapeHTML(file.DownloadPath)
-				message += fmt.Sprintf("• %s → <code>%s</code>\n", filename, downloadPath)
-			}
+			exampleFiles = append(exampleFiles, utils.ExampleFileData{
+				Name:         filename,
+				DownloadPath: file.DownloadPath,
+			})
 		}
 
-		message += fmt.Sprintf("\n\n⚠️ 预览有效期 10 分钟。也可以发送 <code>%s</code> 开始下载。", confirmCommand)
+		// 使用统一格式化器
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		message := formatter.FormatTimeRangeDownloadPreview(utils.TimeRangeDownloadPreviewData{
+			TimeDescription: timeResult.Description,
+			Path:            path,
+			TotalFiles:      totalFiles,
+			TotalSize:       totalSizeStr,
+			MovieCount:      mediaStats.Movie,
+			TVCount:         mediaStats.TV,
+			OtherCount:      mediaStats.Other,
+			ExampleFiles:    exampleFiles,
+			ConfirmCommand:  confirmCommand,
+			EscapeHTML:      h.controller.messageUtils.EscapeHTML,
+		})
 
 		// 存储预览结果用于确认下载
 		storedReq := manualDownloadRequest{
@@ -294,33 +294,20 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 			successCount++
 		}
 
-		message := fmt.Sprintf(
-			"<b>手动下载任务已创建</b>\n\n"+
-				"<b>时间范围:</b> %s\n"+
-				"<b>路径:</b> <code>%s</code>\n\n"+
-				"<b>文件统计:</b>\n"+
-				"• 总文件: %d 个\n"+
-				"• 总大小: %s\n"+
-				"• 电影: %d 个\n"+
-				"• 剧集: %d 个\n"+
-				"• 其他: %d 个\n\n"+
-				"<b>下载结果:</b>\n"+
-				"• 成功: %d\n"+
-				"• 失败: %d",
-			timeResult.Description,
-			h.controller.messageUtils.EscapeHTML(path),
-			totalFiles,
-			totalSizeStr,
-			mediaStats.Movie,
-			mediaStats.TV,
-			mediaStats.Other,
-			successCount,
-			failCount,
-		)
-
-		if failCount > 0 {
-			message += fmt.Sprintf("\n\n⚠️ 有 %d 个文件下载失败，请检查日志获取详细信息", failCount)
-		}
+		// 使用统一格式化器
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		message := formatter.FormatTimeRangeDownloadResult(utils.TimeRangeDownloadResultData{
+			TimeDescription: timeResult.Description,
+			Path:            path,
+			TotalFiles:      totalFiles,
+			TotalSize:       totalSizeStr,
+			MovieCount:      mediaStats.Movie,
+			TVCount:         mediaStats.TV,
+			OtherCount:      mediaStats.Other,
+			SuccessCount:    successCount,
+			FailCount:       failCount,
+			EscapeHTML:      h.controller.messageUtils.EscapeHTML,
+		})
 
 		h.controller.messageUtils.SendMessageHTML(chatID, message)
 		return
@@ -437,7 +424,8 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 	files := timeRangeResp.Files
 
 	if len(files) == 0 {
-		message := fmt.Sprintf("<b>手动下载完成</b>\n\n时间范围: %s\n\n<b>结果:</b> 未找到符合条件的文件", ctx.Description)
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		message := formatter.FormatNoFilesFound("手动下载完成", ctx.Description)
 		h.controller.messageUtils.SendMessageHTML(chatID, message)
 		return
 	}
@@ -481,33 +469,20 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 		successCount++
 	}
 
-	message := fmt.Sprintf(
-		"<b>手动下载任务已创建</b>\n\n"+
-			"<b>时间范围:</b> %s\n"+
-			"<b>路径:</b> <code>%s</code>\n\n"+
-			"<b>文件统计:</b>\n"+
-			"• 总文件: %d 个\n"+
-			"• 总大小: %s\n"+
-			"• 电影: %d 个\n"+
-			"• 剧集: %d 个\n"+
-			"• 其他: %d 个\n\n"+
-			"<b>下载结果:</b>\n"+
-			"• 成功: %d\n"+
-			"• 失败: %d",
-		ctx.Description,
-		h.controller.messageUtils.EscapeHTML(req.Path),
-		totalFiles,
-		totalSizeStr,
-		mediaStats.Movie,
-		mediaStats.TV,
-		mediaStats.Other,
-		successCount,
-		failCount,
-	)
-
-	if failCount > 0 {
-		message += fmt.Sprintf("\n\n⚠️ 有 %d 个文件下载失败，请检查日志获取详细信息", failCount)
-	}
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatTimeRangeDownloadResult(utils.TimeRangeDownloadResultData{
+		TimeDescription: ctx.Description,
+		Path:            req.Path,
+		TotalFiles:      totalFiles,
+		TotalSize:       totalSizeStr,
+		MovieCount:      mediaStats.Movie,
+		TVCount:         mediaStats.TV,
+		OtherCount:      mediaStats.Other,
+		SuccessCount:    successCount,
+		FailCount:       failCount,
+		EscapeHTML:      h.controller.messageUtils.EscapeHTML,
+	})
 
 	h.controller.messageUtils.SendMessageHTML(chatID, message)
 }
@@ -572,7 +547,8 @@ func (h *DownloadHandler) HandleDownloadControlWithEdit(chatID int64, messageID 
 
 	// 使用contracts返回的结构化数据
 	activeCount := downloads.ActiveCount
-	
+	totalCount := downloads.TotalCount
+
 	// 从GlobalStats中获取其他统计信息
 	waitingCount := 0
 	stoppedCount := 0
@@ -585,16 +561,21 @@ func (h *DownloadHandler) HandleDownloadControlWithEdit(chatID int64, messageID 
 		}
 	}
 
-	message := fmt.Sprintf("<b>下载控制中心</b>\n\n"+
-		"<b>当前状态:</b>\n"+
-		"• 活动任务: %d 个\n"+
-		"• 等待任务: %d 个\n"+
-		"• 已停止: %d 个\n\n"+
-		"<b>控制说明:</b>\n"+
-		"• 使用 /cancel &lt;GID&gt; 取消下载\n"+
-		"• GID 是下载任务的唯一标识符\n"+
-		"• 可以从下载列表中获取 GID",
-		activeCount, waitingCount, stoppedCount)
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	controlData := utils.DownloadControlData{
+		ActiveCount:  activeCount,
+		WaitingCount: waitingCount,
+		PausedCount:  stoppedCount,
+		TotalCount:   totalCount,
+	}
+	message := formatter.FormatDownloadControl(controlData)
+
+	// 添加控制说明
+	message += "\n\n" + formatter.FormatSection("控制说明")
+	message += "\n" + formatter.FormatListItem("•", "使用 <code>/cancel &lt;GID&gt;</code> 取消下载")
+	message += "\n" + formatter.FormatListItem("•", "GID 是下载任务的唯一标识符")
+	message += "\n" + formatter.FormatListItem("•", "可以从下载列表中获取 GID")
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(

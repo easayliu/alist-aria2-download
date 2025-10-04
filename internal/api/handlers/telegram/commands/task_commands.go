@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/types"
+	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 	"github.com/easayliu/alist-aria2-download/internal/domain/entities"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
@@ -54,7 +55,8 @@ func (tc *TaskCommands) HandleTasks(chatID int64, userID int64) {
 		return
 	}
 
-	message := fmt.Sprintf("<b>您的定时任务 (%d个)</b>\n\n", len(tasks))
+	formatter := tc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatTitle("⏰", fmt.Sprintf("定时任务 (%d个)", len(tasks))) + "\n\n"
 
 	for i, task := range tasks {
 		status := "禁用"

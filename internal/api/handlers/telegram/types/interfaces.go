@@ -43,7 +43,8 @@ type MessageSender interface {
 	FormatFileSize(size int64) string
 	SplitMessage(text string, maxLength int) []string
 	GetDefaultReplyKeyboard() tgbotapi.ReplyKeyboardMarkup
-	
+	GetFormatter() interface{} // 返回 *MessageFormatter，避免循环导入
+
 	// 下载结果格式化方法 - 统一格式
 	FormatDownloadDirectoryResult(summary DownloadResultSummary) string
 	FormatDownloadSingleFileResult(fileName, filePath, downloadPath string, success bool, errorMsg string) string

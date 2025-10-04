@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	timeutils "github.com/easayliu/alist-aria2-download/pkg/utils"
 )
@@ -43,37 +44,39 @@ func (dc *DownloadCommands) HandleYesterdayFiles(chatID int64) {
 		return
 	}
 
-	// 构建消息 - Telegram格式转换
-	message := fmt.Sprintf("<b>昨天的文件 (%d个):</b>\\n\\n", len(response.Files))
-
-	// 统计
-	var totalSize int64
-	for i, file := range response.Files {
-		if i < 10 { // 只显示前10个文件
-			message += fmt.Sprintf("[%s] %s (%s)\\n", 
-				file.MediaType, 
-				dc.messageUtils.EscapeHTML(file.Name), 
-				file.SizeFormatted)
-		}
-		totalSize += file.Size
+	// 准备显示的文件列表
+	var displayFiles []utils.YesterdayFileItem
+	maxDisplay := 10
+	if len(response.Files) < maxDisplay {
+		maxDisplay = len(response.Files)
+	}
+	for i := 0; i < maxDisplay; i++ {
+		file := response.Files[i]
+		displayFiles = append(displayFiles, utils.YesterdayFileItem{
+			MediaType:     file.MediaType,
+			Name:          file.Name,
+			SizeFormatted: file.SizeFormatted,
+		})
 	}
 
+	// 计算剩余文件数
+	remainingCount := 0
 	if len(response.Files) > 10 {
-		message += fmt.Sprintf("\\n... 还有 %d 个文件未显示\\n", len(response.Files)-10)
+		remainingCount = len(response.Files) - 10
 	}
 
-	// 添加统计信息
-	message += fmt.Sprintf("\\n<b>统计信息:</b>\\n")
-	message += fmt.Sprintf("总大小: %s\\n", response.Summary.TotalSizeFormatted)
-	if response.Summary.TVFiles > 0 {
-		message += fmt.Sprintf("电视剧: %d\\n", response.Summary.TVFiles)
-	}
-	if response.Summary.MovieFiles > 0 {
-		message += fmt.Sprintf("电影: %d\\n", response.Summary.MovieFiles)
-	}
-	if response.Summary.OtherFiles > 0 {
-		message += fmt.Sprintf("其他: %d\\n", response.Summary.OtherFiles)
-	}
+	// 使用统一格式化器
+	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatYesterdayFiles(utils.YesterdayFilesData{
+		TotalCount:     len(response.Files),
+		DisplayFiles:   displayFiles,
+		TotalSize:      response.Summary.TotalSizeFormatted,
+		TVCount:        response.Summary.TVFiles,
+		MovieCount:     response.Summary.MovieFiles,
+		OtherCount:     response.Summary.OtherFiles,
+		RemainingCount: remainingCount,
+		EscapeHTML:     dc.messageUtils.EscapeHTML,
+	})
 
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
@@ -128,13 +131,13 @@ func (dc *DownloadCommands) HandleYesterdayDownload(chatID int64) {
 		return
 	}
 
-	// 发送结果 - Telegram格式转换
-	message := fmt.Sprintf("<b>下载任务创建完成</b>\\n\\n")
-	message += fmt.Sprintf("成功: %d\\n", batchResponse.SuccessCount)
-	if batchResponse.FailureCount > 0 {
-		message += fmt.Sprintf("失败: %d\\n", batchResponse.FailureCount)
-	}
-	message += fmt.Sprintf("总计: %d\\n", len(response.Files))
+	// 使用统一格式化器发送结果
+	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatBatchDownloadResult2(utils.BatchDownloadResult2Data{
+		SuccessCount: batchResponse.SuccessCount,
+		FailCount:    batchResponse.FailureCount,
+		TotalCount:   len(response.Files),
+	})
 
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
@@ -144,7 +147,8 @@ func (dc *DownloadCommands) handleManualDownload(ctx context.Context, chatID int
 	// 解析时间参数
 	timeResult, err := dc.parseTimeArguments(timeArgs)
 	if err != nil {
-		message := fmt.Sprintf("<b>时间参数错误</b>\n\n%s\n\n<b>支持的格式：</b>\n• /download - 预览最近24小时\n• /download 48 - 预览最近48小时\n• /download 2025-09-01 2025-09-26 - 预览指定日期范围\n• /download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z - 预览精确时间范围\n\n<b>提示:</b> 在命令后添加 <code>confirm</code> 可直接开始下载", err.Error())
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		message := formatter.FormatTimeRangeHelp(err.Error())
 		dc.messageUtils.SendMessageHTML(chatID, message)
 		return
 	}
@@ -154,7 +158,9 @@ func (dc *DownloadCommands) handleManualDownload(ctx context.Context, chatID int
 		modeLabel = "预览"
 	}
 
-	processingMsg := fmt.Sprintf("<b>正在处理手动%s任务</b>\n\n时间范围: %s", modeLabel, timeResult.Description)
+	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	processingMsg := formatter.FormatTitle("⏳", fmt.Sprintf("正在处理手动%s任务", modeLabel)) + "\n\n" +
+		formatter.FormatField("时间范围", timeResult.Description)
 	dc.messageUtils.SendMessageHTML(chatID, processingMsg)
 
 	// 获取配置的默认路径
@@ -181,12 +187,14 @@ func (dc *DownloadCommands) handleManualDownload(ctx context.Context, chatID int
 	}
 
 	if len(response.Files) == 0 {
-		var message string
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		var title string
 		if preview {
-			message = fmt.Sprintf("<b>手动下载预览</b>\n\n时间范围: %s\n\n<b>结果:</b> 未找到符合条件的文件", timeResult.Description)
+			title = "手动下载预览"
 		} else {
-			message = fmt.Sprintf("<b>手动下载完成</b>\n\n时间范围: %s\n\n<b>结果:</b> 未找到符合条件的文件", timeResult.Description)
+			title = "手动下载完成"
 		}
+		message := formatter.FormatNoFilesFound(title, timeResult.Description)
 		dc.messageUtils.SendMessageHTML(chatID, message)
 		return
 	}
@@ -328,7 +336,8 @@ func (dc *DownloadCommands) sendManualDownloadPreview(chatID int64, response *co
 // executeManualDownload 执行手动下载
 func (dc *DownloadCommands) executeManualDownload(ctx context.Context, chatID int64, response *contracts.TimeRangeFileResponse, timeResult *TimeParseResult) {
 	if len(response.Files) == 0 {
-		message := fmt.Sprintf("<b>手动下载完成</b>\n\n时间范围: %s\n\n<b>结果:</b> 未找到符合条件的文件", timeResult.Description)
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		message := formatter.FormatNoFilesFound("手动下载完成", timeResult.Description)
 		dc.messageUtils.SendMessageHTML(chatID, message)
 		return
 	}

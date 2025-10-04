@@ -62,10 +62,35 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 		return
 	}
 
-	// 构建消息
-	message := fmt.Sprintf("<b>文件浏览器</b>\n\n")
-	message += fmt.Sprintf("<b>当前路径:</b> <code>%s</code>\n", h.controller.messageUtils.EscapeHTML(path))
-	message += fmt.Sprintf("<b>第 %d 页</b>\n\n", page)
+	// 统计文件信息
+	dirCount := 0
+	fileCount := 0
+	videoCount := 0
+	for _, file := range files {
+		if file.IsDir {
+			dirCount++
+		} else {
+			fileCount++
+			if h.controller.fileService.IsVideoFile(file.Name) {
+				videoCount++
+			}
+		}
+	}
+
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	browserData := utils.FileBrowserData{
+		Path:       path,
+		Page:       page,
+		TotalPages: 1, // 暂时设为1,如果需要可以计算总页数
+		TotalFiles: len(files),
+		DirCount:   dirCount,
+		FileCount:  fileCount,
+		VideoCount: videoCount,
+		EscapeHTML: h.controller.messageUtils.EscapeHTML,
+	}
+	message := formatter.FormatFileBrowser(browserData)
+	message += "\n"
 
 	// 构建内联键盘
 	var keyboard [][]tgbotapi.InlineKeyboardButton
@@ -122,14 +147,17 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 		}
 
 		fileName := file.Name
-		// 为文件列表中的快捷下载按钮预留空间，缩短显示长度
-		maxLen := 22
+		// 使用智能截断，考虑中英文字符宽度
+		// 确保按钮宽度与消息内容宽度一致（42字符）
+		// emoji (📁/📄) 约占 2 字符
+		maxWidth := 38  // 目录行: emoji(2) + 空格(1) + 文件名(38) = 41字符
 		if !file.IsDir {
-			maxLen = 18 // 文件行需要预留下载按钮空间
+			maxWidth = 30 // 文件行: emoji(2) + 空格(1) + 文件名(30) + 按钮(📥约2) = 35字符
 		}
-		if len(fileName) > maxLen {
-			fileName = fileName[:maxLen-3] + "..."
-		}
+
+		// 使用 formatter 的 TruncateButtonText 方法，考虑 emoji 占用
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		fileName = formatter.TruncateButtonText(fileName, maxWidth)
 
 		button := tgbotapi.NewInlineKeyboardButtonData(
 			fmt.Sprintf("%s %s", prefix, fileName),
@@ -241,13 +269,22 @@ func (h *FileHandler) HandleFileMenuWithEdit(chatID int64, filePath string, mess
 		fileIcon = "📄"
 	}
 
-	message := fmt.Sprintf("%s <b>文件操作</b>\n\n", fileIcon)
-	message += fmt.Sprintf("<b>文件:</b> <code>%s</code>\n", h.controller.messageUtils.EscapeHTML(fileName))
-	message += fmt.Sprintf("<b>路径:</b> <code>%s</code>\n", h.controller.messageUtils.EscapeHTML(filepath.Dir(filePath)))
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	fileType := ""
 	if fileExt != "" {
-		message += fmt.Sprintf("<b>类型:</b> <code>%s</code>\n", strings.ToUpper(fileExt[1:]))
+		fileType = strings.ToUpper(fileExt[1:])
 	}
-	message += "\n请选择操作："
+
+	opData := utils.FileOperationData{
+		Icon:       fileIcon,
+		FileName:   fileName,
+		FilePath:   filepath.Dir(filePath),
+		FileType:   fileType,
+		Prompt:     "请选择操作：",
+		EscapeHTML: h.controller.messageUtils.EscapeHTML,
+	}
+	message := formatter.FormatFileOperation(opData)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -342,19 +379,19 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 		return
 	}
 
-	// 发送成功消息
-	message := fmt.Sprintf(
-		"✅ <b>文件下载任务已创建</b>\n\n"+
-			"<b>文件:</b> <code>%s</code>\n"+
-			"<b>路径:</b> <code>%s</code>\n"+
-			"<b>下载路径:</b> <code>%s</code>\n"+
-			"<b>任务ID:</b> <code>%s</code>\n"+
-			"<b>大小:</b> %s",
-		h.controller.messageUtils.EscapeHTML(targetFileInfo.Name),
-		h.controller.messageUtils.EscapeHTML(filePath),
-		h.controller.messageUtils.EscapeHTML(targetFileInfo.DownloadPath),
-		h.controller.messageUtils.EscapeHTML(download.ID),
-		h.controller.messageUtils.FormatFileSize(targetFileInfo.Size))
+	// 使用统一格式化器发送成功消息
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	var lines []string
+
+	lines = append(lines, formatter.FormatTitle("✅", "文件下载任务已创建"))
+	lines = append(lines, "")
+	lines = append(lines, formatter.FormatFieldCode("文件", h.controller.messageUtils.EscapeHTML(targetFileInfo.Name)))
+	lines = append(lines, formatter.FormatFieldCode("路径", h.controller.messageUtils.EscapeHTML(filePath)))
+	lines = append(lines, formatter.FormatFieldCode("下载路径", h.controller.messageUtils.EscapeHTML(targetFileInfo.DownloadPath)))
+	lines = append(lines, formatter.FormatFieldCode("任务ID", h.controller.messageUtils.EscapeHTML(download.ID)))
+	lines = append(lines, formatter.FormatField("大小", h.controller.messageUtils.FormatFileSize(targetFileInfo.Size)))
+
+	message := strings.Join(lines, "\n")
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -426,23 +463,27 @@ func (h *FileHandler) HandleFileInfoWithEdit(chatID int64, filePath string, mess
 	// 使用文件的修改时间
 	modTime := targetFile.Modified
 
+	// 判断文件类型
+	fileType := "其他文件"
+	if h.controller.fileService.IsVideoFile(targetFile.Name) {
+		fileType = "视频文件"
+	}
+
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	infoData := utils.FileInfoData{
+		Icon:       "ℹ️",
+		Name:       targetFile.Name,
+		Path:       filePath,
+		Type:       fileType,
+		Size:       h.controller.messageUtils.FormatFileSize(targetFile.Size),
+		Modified:   modTime.Format("2006-01-02 15:04:05"),
+		IsDir:      targetFile.IsDir,
+		EscapeHTML: h.controller.messageUtils.EscapeHTML,
+	}
+
 	// 构建信息消息
-	message := fmt.Sprintf("<b>文件信息</b>\n\n"+
-		"<b>名称:</b> <code>%s</code>\n"+
-		"<b>路径:</b> <code>%s</code>\n"+
-		"<b>大小:</b> %s\n"+
-		"<b>修改时间:</b> %s\n"+
-		"<b>类型:</b> %s",
-		h.controller.messageUtils.EscapeHTML(targetFile.Name),
-		h.controller.messageUtils.EscapeHTML(filePath),
-		h.controller.messageUtils.FormatFileSize(targetFile.Size),
-		modTime.Format("2006-01-02 15:04:05"),
-		func() string {
-			if h.controller.fileService.IsVideoFile(targetFile.Name) {
-				return "视频文件"
-			}
-			return "其他文件"
-		}())
+	message := formatter.FormatFileInfo(infoData)
 
 	// 添加返回按钮
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
@@ -473,12 +514,23 @@ func (h *FileHandler) HandleFileLinkWithEdit(chatID int64, filePath string, mess
 	// 获取文件下载链接
 	downloadURL := h.getFileDownloadURL(filepath.Dir(filePath), filepath.Base(filePath))
 
-	// 构建消息
-	message := fmt.Sprintf("<b>文件链接</b>\n\n"+
-		"<b>文件:</b> <code>%s</code>\n\n"+
-		"<b>下载链接:</b>\n<code>%s</code>",
-		h.controller.messageUtils.EscapeHTML(filepath.Base(filePath)),
-		h.controller.messageUtils.EscapeHTML(downloadURL))
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	var lines []string
+
+	// 标题
+	lines = append(lines, formatter.FormatTitle("🔗", "文件链接"))
+	lines = append(lines, "")
+
+	// 文件信息
+	lines = append(lines, formatter.FormatFieldCode("文件", h.controller.messageUtils.EscapeHTML(filepath.Base(filePath))))
+	lines = append(lines, "")
+
+	// 下载链接
+	lines = append(lines, formatter.FormatField("下载链接", ""))
+	lines = append(lines, fmt.Sprintf("<code>%s</code>", h.controller.messageUtils.EscapeHTML(downloadURL)))
+
+	message := strings.Join(lines, "\n")
 
 	// 添加返回按钮
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
@@ -540,50 +592,61 @@ func (h *FileHandler) sendBatchDownloadResult(chatID int64, dirPath string, resu
 		h.controller.messageUtils.SendMessage(chatID, "❌ 批量下载结果为空")
 		return
 	}
-	
-	// 构建结果消息
-	message := fmt.Sprintf(
-		"📊 <b>目录下载任务创建完成</b>\n\n"+
-			"<b>目录:</b> <code>%s</code>\n"+
-			"<b>扫描文件:</b> %d 个\n"+
-			"<b>视频文件:</b> %d 个\n"+
-			"<b>成功创建:</b> %d 个任务\n"+
-			"<b>失败:</b> %d 个任务\n\n",
-		h.controller.messageUtils.EscapeHTML(dirPath),
-		result.Summary.TotalFiles,
-		result.Summary.VideoFiles,
-		result.SuccessCount,
-		result.FailureCount)
 
-	if result.Summary.MovieFiles > 0 {
-		message += fmt.Sprintf("<b>电影:</b> %d 个\n", result.Summary.MovieFiles)
-	}
-	if result.Summary.TVFiles > 0 {
-		message += fmt.Sprintf("<b>电视剧:</b> %d 个\n", result.Summary.TVFiles)
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	var lines []string
+
+	// 标题
+	lines = append(lines, formatter.FormatTitle("📊", "目录下载任务创建完成"))
+	lines = append(lines, "")
+
+	// 基本信息
+	lines = append(lines, formatter.FormatFieldCode("目录", h.controller.messageUtils.EscapeHTML(dirPath)))
+	lines = append(lines, formatter.FormatField("扫描文件", fmt.Sprintf("%d 个", result.Summary.TotalFiles)))
+	lines = append(lines, formatter.FormatField("视频文件", fmt.Sprintf("%d 个", result.Summary.VideoFiles)))
+	lines = append(lines, formatter.FormatField("成功创建", fmt.Sprintf("%d 个任务", result.SuccessCount)))
+	lines = append(lines, formatter.FormatField("失败", fmt.Sprintf("%d 个任务", result.FailureCount)))
+
+	// 分类统计
+	if result.Summary.MovieFiles > 0 || result.Summary.TVFiles > 0 {
+		lines = append(lines, "")
+		if result.Summary.MovieFiles > 0 {
+			lines = append(lines, formatter.FormatField("电影", fmt.Sprintf("%d 个", result.Summary.MovieFiles)))
+		}
+		if result.Summary.TVFiles > 0 {
+			lines = append(lines, formatter.FormatField("电视剧", fmt.Sprintf("%d 个", result.Summary.TVFiles)))
+		}
 	}
 
+	// 失败文件详情
 	if result.FailureCount > 0 && len(result.Results) <= 3 {
-		message += "\n<b>失败的文件:</b>\n"
+		lines = append(lines, "")
+		lines = append(lines, formatter.FormatSection("失败的文件"))
 		failedCount := 0
 		for _, downloadResult := range result.Results {
 			if !downloadResult.Success && failedCount < 3 {
-				// 安全地获取文件名，避免空指针解引用
 				filename := "未知文件"
 				if downloadResult.Request.Filename != "" {
 					filename = downloadResult.Request.Filename
 				}
-				message += fmt.Sprintf("• <code>%s</code>\n", h.controller.messageUtils.EscapeHTML(filename))
+				lines = append(lines, formatter.FormatListItem("•", fmt.Sprintf("<code>%s</code>", h.controller.messageUtils.EscapeHTML(filename))))
 				failedCount++
 			}
 		}
 	} else if result.FailureCount > 3 {
-		message += fmt.Sprintf("\n<b>有 %d 个文件下载失败</b>\n", result.FailureCount)
+		lines = append(lines, "")
+		lines = append(lines, fmt.Sprintf("⚠️ 有 %d 个文件下载失败", result.FailureCount))
 	}
 
+	// 成功提示
 	if result.SuccessCount > 0 {
-		message += "\n✅ 所有任务已使用自动路径分类功能\n📥 可通过「下载管理」查看任务状态"
+		lines = append(lines, "")
+		lines = append(lines, "✅ 所有任务已使用自动路径分类功能")
+		lines = append(lines, "📥 可通过「下载管理」查看任务状态")
 	}
 
+	message := strings.Join(lines, "\n")
 	h.controller.messageUtils.SendMessageHTML(chatID, message)
 }
 
@@ -637,14 +700,30 @@ func (h *FileHandler) HandleFilesBrowseWithEdit(chatID int64, messageID int) {
 
 // HandleFilesSearchWithEdit 处理文件搜索（支持消息编辑）
 func (h *FileHandler) HandleFilesSearchWithEdit(chatID int64, messageID int) {
-	message := "<b>文件搜索功能</b>\n\n" +
-		"<b>搜索说明:</b>\n" +
-		"• 支持文件名关键词搜索\n" +
-		"• 支持路径模糊匹配\n" +
-		"• 支持文件类型过滤\n\n" +
-		"<b>请输入搜索关键词:</b>\n" +
-		"格式: /search <关键词>\n\n" +
-		"<b>快速搜索:</b>"
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	var lines []string
+
+	// 标题
+	lines = append(lines, formatter.FormatTitle("🔍", "文件搜索功能"))
+	lines = append(lines, "")
+
+	// 搜索说明
+	lines = append(lines, formatter.FormatSection("搜索说明"))
+	lines = append(lines, formatter.FormatListItem("•", "支持文件名关键词搜索"))
+	lines = append(lines, formatter.FormatListItem("•", "支持路径模糊匹配"))
+	lines = append(lines, formatter.FormatListItem("•", "支持文件类型过滤"))
+	lines = append(lines, "")
+
+	// 使用说明
+	lines = append(lines, formatter.FormatSection("请输入搜索关键词"))
+	lines = append(lines, "格式: <code>/search &lt;关键词&gt;</code>")
+	lines = append(lines, "")
+
+	// 快速搜索
+	lines = append(lines, formatter.FormatSection("快速搜索"))
+
+	message := strings.Join(lines, "\n")
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -661,13 +740,26 @@ func (h *FileHandler) HandleFilesSearchWithEdit(chatID int64, messageID int) {
 
 // HandleFilesInfoWithEdit 处理文件信息查看（支持消息编辑）
 func (h *FileHandler) HandleFilesInfoWithEdit(chatID int64, messageID int) {
-	message := "<b>文件信息查看</b>\n\n" +
-		"<b>可查看信息:</b>\n" +
-		"• 文件基本属性\n" +
-		"• 文件大小和修改时间\n" +
-		"• 下载链接和路径\n" +
-		"• 媒体类型识别\n\n" +
-		"<b>请选择操作方式:</b>"
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	var lines []string
+
+	// 标题
+	lines = append(lines, formatter.FormatTitle("ℹ️", "文件信息查看"))
+	lines = append(lines, "")
+
+	// 可查看信息
+	lines = append(lines, formatter.FormatSection("可查看信息"))
+	lines = append(lines, formatter.FormatListItem("•", "文件基本属性"))
+	lines = append(lines, formatter.FormatListItem("•", "文件大小和修改时间"))
+	lines = append(lines, formatter.FormatListItem("•", "下载链接和路径"))
+	lines = append(lines, formatter.FormatListItem("•", "媒体类型识别"))
+	lines = append(lines, "")
+
+	// 操作提示
+	lines = append(lines, formatter.FormatSection("请选择操作方式"))
+
+	message := strings.Join(lines, "\n")
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -684,15 +776,31 @@ func (h *FileHandler) HandleFilesInfoWithEdit(chatID int64, messageID int) {
 
 // HandleFilesDownloadWithEdit 处理路径下载功能（支持消息编辑）
 func (h *FileHandler) HandleFilesDownloadWithEdit(chatID int64, messageID int) {
-	message := "<b>路径下载功能</b>\n\n" +
-		"<b>下载选项:</b>\n" +
-		"• 指定路径批量下载\n" +
-		"• 递归下载子目录\n" +
-		"• 预览模式（不下载）\n" +
-		"• 过滤文件类型\n\n" +
-		"<b>使用格式:</b>\n" +
-		"<code>/path_download /movies/2024</code>\n\n" +
-		"<b>快速下载:</b>"
+	// 使用统一格式化器
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	var lines []string
+
+	// 标题
+	lines = append(lines, formatter.FormatTitle("📥", "路径下载功能"))
+	lines = append(lines, "")
+
+	// 下载选项
+	lines = append(lines, formatter.FormatSection("下载选项"))
+	lines = append(lines, formatter.FormatListItem("•", "指定路径批量下载"))
+	lines = append(lines, formatter.FormatListItem("•", "递归下载子目录"))
+	lines = append(lines, formatter.FormatListItem("•", "预览模式（不下载）"))
+	lines = append(lines, formatter.FormatListItem("•", "过滤文件类型"))
+	lines = append(lines, "")
+
+	// 使用格式
+	lines = append(lines, formatter.FormatSection("使用格式"))
+	lines = append(lines, "<code>/path_download /movies/2024</code>")
+	lines = append(lines, "")
+
+	// 快速下载
+	lines = append(lines, formatter.FormatSection("快速下载"))
+
+	message := strings.Join(lines, "\n")
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
