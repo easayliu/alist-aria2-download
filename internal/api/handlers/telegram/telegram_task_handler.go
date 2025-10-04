@@ -38,7 +38,8 @@ func (h *TaskHandler) HandleTasksWithEdit(chatID int64, userID int64, messageID 
 
 	tasks, err := h.controller.schedulerService.GetUserTasks(userID)
 	if err != nil {
-		message := fmt.Sprintf("获取任务失败: %v", err)
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		message := formatter.FormatError("获取任务", err)
 		keyboard := tgbotapi.NewInlineKeyboardMarkup(
 			tgbotapi.NewInlineKeyboardRow(
 				tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),

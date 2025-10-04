@@ -2,7 +2,6 @@ package commands
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/types"
@@ -89,7 +88,8 @@ func (dc *DownloadCommands) HandleCancel(chatID int64, command string) {
 	// 调用应用服务取消下载
 	downloadService := dc.container.GetDownloadService()
 	if err := downloadService.CancelDownload(ctx, gid); err != nil {
-		dc.messageUtils.SendMessage(chatID, "取消下载失败: "+err.Error())
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatError("取消下载", err))
 		return
 	}
 
@@ -111,7 +111,8 @@ func (dc *DownloadCommands) handleURLDownload(ctx context.Context, chatID int64,
 	downloadService := dc.container.GetDownloadService()
 	response, err := downloadService.CreateDownload(ctx, req)
 	if err != nil {
-		dc.messageUtils.SendMessage(chatID, "创建下载任务失败: "+err.Error())
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatError("创建下载任务", err))
 		return
 	}
 
@@ -127,8 +128,6 @@ func (dc *DownloadCommands) handleURLDownload(ctx context.Context, chatID int64,
 
 // handleDownloadFileByPath 通过路径下载单个文件
 func (dc *DownloadCommands) handleDownloadFileByPath(ctx context.Context, chatID int64, filePath string) {
-	dc.messageUtils.SendMessage(chatID, "📥 正在创建文件下载任务...")
-
 	// 构建文件下载请求
 	req := contracts.FileDownloadRequest{
 		FilePath:     filePath,
@@ -139,27 +138,27 @@ func (dc *DownloadCommands) handleDownloadFileByPath(ctx context.Context, chatID
 	fileService := dc.container.GetFileService()
 	response, err := fileService.DownloadFile(ctx, req)
 	if err != nil {
-		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 创建文件下载任务失败: %v", err))
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatError("创建文件下载任务", err))
 		return
 	}
 
-	// 发送成功消息 - Telegram格式转换
-	message := fmt.Sprintf(
-		"✅ <b>文件下载任务已创建</b>\\n\\n"+
-			"<b>文件:</b> <code>%s</code>\\n"+
-			"<b>路径:</b> <code>%s</code>\\n"+
-			"<b>任务ID:</b> <code>%s</code>\\n",
-		dc.messageUtils.EscapeHTML(response.Filename),
-		dc.messageUtils.EscapeHTML(filePath),
-		dc.messageUtils.EscapeHTML(response.ID))
+	// 发送成功消息 - 使用统一格式化器
+	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatFileDownloadSuccess(utils.FileDownloadSuccessData{
+		Filename:     response.Filename,
+		FilePath:     filePath,
+		DownloadPath: response.Directory,
+		TaskID:       response.ID,
+		Size:         dc.messageUtils.FormatFileSize(response.TotalSize),
+		EscapeHTML:   dc.messageUtils.EscapeHTML,
+	})
 
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
 
 // handleDownloadDirectoryByPath 通过路径下载目录
 func (dc *DownloadCommands) handleDownloadDirectoryByPath(ctx context.Context, chatID int64, dirPath string) {
-	dc.messageUtils.SendMessage(chatID, "📂 正在创建目录下载任务...")
-
 	// 构建目录下载请求
 	req := contracts.DirectoryDownloadRequest{
 		DirectoryPath: dirPath,
@@ -172,12 +171,14 @@ func (dc *DownloadCommands) handleDownloadDirectoryByPath(ctx context.Context, c
 	fileService := dc.container.GetFileService()
 	response, err := fileService.DownloadDirectory(ctx, req)
 	if err != nil {
-		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 扫描目录失败: %v", err))
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatError("扫描目录", err))
 		return
 	}
 
 	if response.SuccessCount == 0 {
-		dc.messageUtils.SendMessage(chatID, "📁 目录中没有可下载的文件")
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatSimpleError("目录中没有可下载的文件"))
 		return
 	}
 

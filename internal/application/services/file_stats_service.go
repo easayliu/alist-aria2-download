@@ -2,6 +2,8 @@ package services
 
 import (
 	"time"
+
+	"github.com/easayliu/alist-aria2-download/pkg/utils"
 )
 
 // FileStatsService 文件统计服务
@@ -173,27 +175,9 @@ func (s *FileStatsService) GetSizeDistribution(stats FileStats) map[string]float
 }
 
 // FormatFileSize 格式化文件大小
+// 使用统一的工具函数
 func (s *FileStatsService) FormatFileSize(size int64) string {
-	const (
-		B  = 1
-		KB = 1024 * B
-		MB = 1024 * KB
-		GB = 1024 * MB
-		TB = 1024 * GB
-	)
-
-	switch {
-	case size >= TB:
-		return formatFloat(float64(size)/TB) + " TB"
-	case size >= GB:
-		return formatFloat(float64(size)/GB) + " GB"
-	case size >= MB:
-		return formatFloat(float64(size)/MB) + " MB"
-	case size >= KB:
-		return formatFloat(float64(size)/KB) + " KB"
-	default:
-		return formatInt(size) + " B"
-	}
+	return utils.FormatFileSize(size)
 }
 
 // formatFloat 格式化浮点数

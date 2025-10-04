@@ -3,10 +3,11 @@ package utils
 import (
 	"fmt"
 	"strings"
-	
+
 	"github.com/easayliu/alist-aria2-download/internal/api/handlers/telegram/types"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/telegram"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
+	pkgutils "github.com/easayliu/alist-aria2-download/pkg/utils"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
@@ -157,31 +158,15 @@ func (mu *MessageUtils) SplitMessage(text string, maxLength int) []string {
 }
 
 // EscapeHTML 转义HTML特殊字符
-// 遵循 Telegram Bot API HTML 格式规范,仅需转义 4 个字符: & < > "
-// 其他字符(包括 emoji 和中文)无需转义
-// 参考: https://core.telegram.org/bots/api#html-style
+// 使用统一的工具函数
 func (mu *MessageUtils) EscapeHTML(text string) string {
-	replacer := strings.NewReplacer(
-		"&", "&amp;",
-		"<", "&lt;",
-		">", "&gt;",
-		"\"", "&quot;",
-	)
-	return replacer.Replace(text)
+	return pkgutils.EscapeHTML(text)
 }
 
 // FormatFileSize 格式化文件大小
+// 使用统一的工具函数
 func (mu *MessageUtils) FormatFileSize(size int64) string {
-	const unit = 1024
-	if size < unit {
-		return fmt.Sprintf("%d B", size)
-	}
-	div, exp := int64(unit), 0
-	for n := size / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+	return pkgutils.FormatFileSize(size)
 }
 
 // GetDefaultReplyKeyboard 获取默认的回复键盘
@@ -268,7 +253,8 @@ func (mu *MessageUtils) FormatDownloadSingleFileResult(fileName, filePath, downl
 			mu.EscapeHTML(filePath),
 			mu.EscapeHTML(downloadPath))
 	} else {
-		return fmt.Sprintf("❌ 创建下载任务失败: %s", errorMsg)
+		formatter := mu.GetFormatter().(*MessageFormatter)
+		return formatter.FormatSimpleError(fmt.Sprintf("创建下载任务失败: %s", errorMsg))
 	}
 }
 

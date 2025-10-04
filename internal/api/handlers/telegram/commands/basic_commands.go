@@ -108,7 +108,8 @@ func (bc *BasicCommands) HandleStatus(chatID int64) {
 	ctx := context.Background()
 	status, err := bc.downloadService.GetSystemStatus(ctx)
 	if err != nil {
-		bc.messageUtils.SendMessage(chatID, "获取系统状态失败: "+err.Error())
+		formatter := bc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		bc.messageUtils.SendMessage(chatID, formatter.FormatError("获取系统状态", err))
 		return
 	}
 
@@ -152,7 +153,8 @@ func (bc *BasicCommands) HandleList(chatID int64, command string) {
 	ctx := context.Background()
 	resp, err := bc.fileService.ListFiles(ctx, req)
 	if err != nil {
-		bc.messageUtils.SendMessage(chatID, fmt.Sprintf("获取文件列表失败: %v", err))
+		formatter := bc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		bc.messageUtils.SendMessage(chatID, formatter.FormatError("获取文件列表", err))
 		return
 	}
 	
@@ -247,7 +249,8 @@ func (bc *BasicCommands) HandleAlistLogin(chatID int64) {
 	// 通过调用API测试连接和登录（客户端会自动处理token刷新）
 	_, err := alistClient.ListFiles("/", 1, 1)
 	if err != nil {
-		bc.messageUtils.SendMessage(chatID, fmt.Sprintf("Alist连接失败: %v", err))
+		formatter := bc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		bc.messageUtils.SendMessage(chatID, formatter.FormatError("Alist连接", err))
 		return
 	}
 

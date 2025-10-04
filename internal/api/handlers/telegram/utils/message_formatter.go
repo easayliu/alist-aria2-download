@@ -1212,3 +1212,38 @@ func (mf *MessageFormatter) FormatDownloadCancelled(gid string) string {
 	message := strings.Join(lines, "\n")
 	return message
 }
+
+// FileDownloadSuccessData 文件下载成功数据
+type FileDownloadSuccessData struct {
+	Filename     string
+	FilePath     string
+	DownloadPath string
+	TaskID       string
+	Size         string
+	EscapeHTML   func(string) string
+}
+
+// FormatFileDownloadSuccess 格式化文件下载成功消息
+func (mf *MessageFormatter) FormatFileDownloadSuccess(data FileDownloadSuccessData) string {
+	var lines []string
+
+	lines = append(lines, mf.FormatTitle("✅", "文件下载任务已创建"))
+	lines = append(lines, "")
+	lines = append(lines, mf.FormatFieldCode("文件", data.EscapeHTML(data.Filename)))
+	lines = append(lines, mf.FormatFieldCode("路径", data.EscapeHTML(data.FilePath)))
+	lines = append(lines, mf.FormatFieldCode("下载路径", data.EscapeHTML(data.DownloadPath)))
+	lines = append(lines, mf.FormatFieldCode("任务ID", data.EscapeHTML(data.TaskID)))
+	lines = append(lines, mf.FormatField("大小", data.Size))
+
+	return strings.Join(lines, "\n")
+}
+
+// FormatError 格式化错误消息
+func (mf *MessageFormatter) FormatError(action string, err error) string {
+	return fmt.Sprintf("❌ %s失败: %v", action, err)
+}
+
+// FormatSimpleError 格式化简单错误消息（只有错误描述）
+func (mf *MessageFormatter) FormatSimpleError(message string) string {
+	return fmt.Sprintf("❌ %s", message)
+}

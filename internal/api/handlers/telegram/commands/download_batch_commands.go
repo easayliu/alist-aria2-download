@@ -35,12 +35,14 @@ func (dc *DownloadCommands) HandleYesterdayFiles(chatID int64) {
 	fileService := dc.container.GetFileService()
 	response, err := fileService.GetYesterdayFiles(ctx, path)
 	if err != nil {
-		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("获取昨天文件失败: %v", err))
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatError("获取昨天文件", err))
 		return
 	}
 
 	if len(response.Files) == 0 {
-		dc.messageUtils.SendMessage(chatID, "昨天没有新文件")
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatSimpleError("昨天没有新文件"))
 		return
 	}
 
@@ -97,7 +99,8 @@ func (dc *DownloadCommands) HandleYesterdayDownload(chatID int64) {
 	fileService := dc.container.GetFileService()
 	response, err := fileService.GetYesterdayFiles(ctx, path)
 	if err != nil {
-		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("获取昨天文件失败: %v", err))
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatError("获取昨天文件", err))
 		return
 	}
 
@@ -127,7 +130,8 @@ func (dc *DownloadCommands) HandleYesterdayDownload(chatID int64) {
 	downloadService := dc.container.GetDownloadService()
 	batchResponse, err := downloadService.CreateBatchDownload(ctx, batchRequest)
 	if err != nil {
-		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("批量下载失败: %v", err))
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatError("批量下载", err))
 		return
 	}
 
@@ -182,7 +186,8 @@ func (dc *DownloadCommands) handleManualDownload(ctx context.Context, chatID int
 	fileService := dc.container.GetFileService()
 	response, err := fileService.GetFilesByTimeRange(ctx, req)
 	if err != nil {
-		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("处理失败: %s", err.Error()))
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatError("处理", err))
 		return
 	}
 
@@ -364,7 +369,8 @@ func (dc *DownloadCommands) executeManualDownload(ctx context.Context, chatID in
 	downloadService := dc.container.GetDownloadService()
 	batchResponse, err := downloadService.CreateBatchDownload(ctx, batchRequest)
 	if err != nil {
-		dc.messageUtils.SendMessage(chatID, fmt.Sprintf("批量下载失败: %v", err))
+		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		dc.messageUtils.SendMessage(chatID, formatter.FormatError("批量下载", err))
 		return
 	}
 

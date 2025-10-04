@@ -37,7 +37,8 @@ func (tc *TaskCommands) HandleTasks(chatID int64, userID int64) {
 
 	tasks, err := tc.schedulerService.GetUserTasks(userID)
 	if err != nil {
-		tc.messageUtils.SendMessage(chatID, fmt.Sprintf("获取任务失败: %v", err))
+		formatter := tc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		tc.messageUtils.SendMessage(chatID, formatter.FormatError("获取任务", err))
 		return
 	}
 
@@ -159,7 +160,8 @@ func (tc *TaskCommands) HandleAddTask(chatID int64, userID int64, command string
 	}
 
 	if err := tc.schedulerService.CreateTask(task); err != nil {
-		tc.messageUtils.SendMessage(chatID, fmt.Sprintf("创建任务失败: %v", err))
+		formatter := tc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		tc.messageUtils.SendMessage(chatID, formatter.FormatError("创建任务", err))
 		return
 	}
 
@@ -251,7 +253,8 @@ func (tc *TaskCommands) HandleQuickTask(chatID int64, userID int64, command stri
 	}
 
 	if err := tc.schedulerService.CreateTask(task); err != nil {
-		tc.messageUtils.SendMessage(chatID, fmt.Sprintf("创建任务失败: %v", err))
+		formatter := tc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		tc.messageUtils.SendMessage(chatID, formatter.FormatError("创建任务", err))
 		return
 	}
 
@@ -312,7 +315,8 @@ func (tc *TaskCommands) HandleDeleteTask(chatID int64, userID int64, command str
 	}
 
 	if err := tc.schedulerService.DeleteTask(fullTaskID); err != nil {
-		tc.messageUtils.SendMessage(chatID, fmt.Sprintf("删除任务失败: %v", err))
+		formatter := tc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		tc.messageUtils.SendMessage(chatID, formatter.FormatError("删除任务", err))
 		return
 	}
 
@@ -352,7 +356,8 @@ func (tc *TaskCommands) HandleRunTask(chatID int64, userID int64, command string
 	}
 
 	if err := tc.schedulerService.RunTaskNow(fullTaskID); err != nil {
-		tc.messageUtils.SendMessage(chatID, fmt.Sprintf("运行任务失败: %v", err))
+		formatter := tc.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		tc.messageUtils.SendMessage(chatID, formatter.FormatError("运行任务", err))
 		return
 	}
 

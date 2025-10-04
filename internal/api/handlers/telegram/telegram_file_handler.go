@@ -53,7 +53,8 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 	// 获取文件列表 (每页显示8个文件，为按钮布局留出空间)
 	files, err := h.listFilesSimple(path, page, 8)
 	if err != nil {
-		h.controller.messageUtils.SendMessage(chatID, fmt.Sprintf("获取文件列表失败: %v", err))
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("获取文件列表", err))
 		return
 	}
 
@@ -317,15 +318,14 @@ func (h *FileHandler) HandleFileDownload(chatID int64, filePath string) {
 
 // handleDownloadFileByPath 通过路径下载单个文件
 func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
-	h.controller.messageUtils.SendMessage(chatID, "📥 正在通过/downloads命令创建文件下载任务...")
-
 	// 使用文件服务获取文件信息
 	parentDir := filepath.Dir(filePath)
 	fileName := filepath.Base(filePath)
 
 	files, err := h.listFilesSimple(parentDir, 1, 1000)
 	if err != nil {
-		h.controller.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 获取文件信息失败: %v", err))
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("获取文件信息", err))
 		return
 	}
 
@@ -339,14 +339,16 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 	}
 
 	if targetFile == nil {
-		h.controller.messageUtils.SendMessage(chatID, "❌ 文件未找到")
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatSimpleError("文件未找到"))
 		return
 	}
 
 	// 使用文件服务的智能分类功能
 	fileInfo, err := h.getFilesFromPath(parentDir, false)
 	if err != nil {
-		h.controller.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 获取文件详细信息失败: %v", err))
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("获取文件详细信息", err))
 		return
 	}
 
@@ -360,7 +362,8 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 	}
 
 	if targetFileInfo == nil {
-		h.controller.messageUtils.SendMessage(chatID, "❌ 获取文件分类信息失败")
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatSimpleError("获取文件分类信息失败"))
 		return
 	}
 
@@ -375,23 +378,21 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 	ctx := context.Background()
 	download, err := h.controller.downloadService.CreateDownload(ctx, downloadReq)
 	if err != nil {
-		h.controller.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 创建下载任务失败: %v", err))
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("创建下载任务", err))
 		return
 	}
 
 	// 使用统一格式化器发送成功消息
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-	var lines []string
-
-	lines = append(lines, formatter.FormatTitle("✅", "文件下载任务已创建"))
-	lines = append(lines, "")
-	lines = append(lines, formatter.FormatFieldCode("文件", h.controller.messageUtils.EscapeHTML(targetFileInfo.Name)))
-	lines = append(lines, formatter.FormatFieldCode("路径", h.controller.messageUtils.EscapeHTML(filePath)))
-	lines = append(lines, formatter.FormatFieldCode("下载路径", h.controller.messageUtils.EscapeHTML(targetFileInfo.DownloadPath)))
-	lines = append(lines, formatter.FormatFieldCode("任务ID", h.controller.messageUtils.EscapeHTML(download.ID)))
-	lines = append(lines, formatter.FormatField("大小", h.controller.messageUtils.FormatFileSize(targetFileInfo.Size)))
-
-	message := strings.Join(lines, "\n")
+	message := formatter.FormatFileDownloadSuccess(utils.FileDownloadSuccessData{
+		Filename:     targetFileInfo.Name,
+		FilePath:     filePath,
+		DownloadPath: targetFileInfo.DownloadPath,
+		TaskID:       download.ID,
+		Size:         h.controller.messageUtils.FormatFileSize(targetFileInfo.Size),
+		EscapeHTML:   h.controller.messageUtils.EscapeHTML,
+	})
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -554,8 +555,6 @@ func (h *FileHandler) HandleDownloadDirectory(chatID int64, dirPath string) {
 
 // handleDownloadDirectoryByPath 通过路径下载目录 - 使用重构后的新架构
 func (h *FileHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string) {
-	h.controller.messageUtils.SendMessage(chatID, "📂 正在创建目录下载任务...")
-
 	ctx := context.Background()
 	
 	// 使用新架构的目录下载服务
@@ -568,15 +567,17 @@ func (h *FileHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string
 	
 	result, err := h.controller.fileService.DownloadDirectory(ctx, req)
 	if err != nil {
-		h.controller.messageUtils.SendMessage(chatID, fmt.Sprintf("❌ 扫描目录失败: %v", err))
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("扫描目录", err))
 		return
 	}
 	
 	if result.SuccessCount == 0 {
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 		if result.Summary.VideoFiles == 0 {
 			h.controller.messageUtils.SendMessage(chatID, "🎬 目录中没有找到视频文件")
 		} else {
-			h.controller.messageUtils.SendMessage(chatID, "❌ 所有文件下载创建失败，请检查日志")
+			h.controller.messageUtils.SendMessage(chatID, formatter.FormatSimpleError("所有文件下载创建失败，请检查日志"))
 		}
 		return
 	}

@@ -163,7 +163,8 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 	ctx := context.Background()
 	timeRangeResp, err := h.controller.fileService.GetFilesByTimeRange(ctx, timeRangeReq)
 	if err != nil {
-		h.controller.messageUtils.SendMessage(chatID, fmt.Sprintf("处理失败: %s", err.Error()))
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("处理", err))
 		return
 	}
 	
@@ -397,12 +398,14 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 	// 使用统一的时间解析工具
 	startTime, err := timeutils.ParseTime(req.StartTime)
 	if err != nil {
-		h.controller.messageUtils.SendMessage(chatID, fmt.Sprintf("时间解析失败: %v", err))
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("时间解析", err))
 		return
 	}
 	endTime, err := timeutils.ParseTime(req.EndTime)
 	if err != nil {
-		h.controller.messageUtils.SendMessage(chatID, fmt.Sprintf("时间解析失败: %v", err))
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("时间解析", err))
 		return
 	}
 
@@ -417,7 +420,8 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 	requestCtx := context.Background()
 	timeRangeResp, err := h.controller.fileService.GetFilesByTimeRange(requestCtx, timeRangeReq)
 	if err != nil {
-		h.controller.messageUtils.SendMessage(chatID, fmt.Sprintf("创建下载任务失败: %v", err))
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("创建下载任务", err))
 		return
 	}
 	
