@@ -8,7 +8,7 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
-	"github.com/easayliu/alist-aria2-download/pkg/utils"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 )
 
 // VariableExtractor 变量提取器 - 从文件信息中提取可用于模板的变量
@@ -113,14 +113,14 @@ func (e *VariableExtractor) extractShowName(path string) string {
 
 // cleanShowName 清理节目名称（使用公共工具函数）
 func (e *VariableExtractor) cleanShowName(name string) string {
-	cleaned := utils.CleanShowName(name)
+	cleaned := strutil.CleanShowName(name)
 	logger.Debug("✅ 节目名清理完成", "原名", name, "清理后", cleaned)
 	return cleaned
 }
 
 // extractSeason 提取季度信息（使用公共工具函数）
 func (e *VariableExtractor) extractSeason(path string) string {
-	return utils.ExtractSeason(path)
+	return strutil.ExtractSeason(path)
 }
 
 // extractEpisode 提取集数信息
@@ -128,20 +128,20 @@ func (e *VariableExtractor) extractEpisode(filename string) string {
 	filenameLower := strings.ToLower(filename)
 
 	// 模式1: E01, E02 格式
-	if matches := utils.EpisodePattern.FindStringSubmatch(filenameLower); len(matches) > 1 {
+	if matches := strutil.EpisodePattern.FindStringSubmatch(filenameLower); len(matches) > 1 {
 		episodeNum, _ := strconv.Atoi(matches[1])
 		return "E" + padZero(episodeNum, 2)
 	}
 
 	// 模式2: EP01, EP02 格式
-	if matches := utils.EpisodeEPPattern.FindStringSubmatch(filenameLower); len(matches) > 1 {
+	if matches := strutil.EpisodeEPPattern.FindStringSubmatch(filenameLower); len(matches) > 1 {
 		episodeNum, _ := strconv.Atoi(matches[1])
 		return "E" + padZero(episodeNum, 2)
 	}
 
 	// 模式3: 第X集
-	if matches := utils.ChineseEpisodePattern.FindStringSubmatch(filename); len(matches) > 1 {
-		episodeNum := utils.ChineseToNumber(matches[1])
+	if matches := strutil.ChineseEpisodePattern.FindStringSubmatch(filename); len(matches) > 1 {
+		episodeNum := strutil.ChineseToNumber(matches[1])
 		if episodeNum > 0 {
 			return "E" + padZero(episodeNum, 2)
 		}
@@ -189,16 +189,10 @@ func (e *VariableExtractor) cleanMovieTitle(title string) string {
 // extractMovieYear 提取电影年份
 func (e *VariableExtractor) extractMovieYear(path string) string {
 	// 查找年份：(2009), [2014], 2020 等格式
-	if matches := utils.YearPattern.FindStringSubmatch(path); len(matches) > 1 {
+	if matches := strutil.YearPattern.FindStringSubmatch(path); len(matches) > 1 {
 		return matches[1]
 	}
 	return ""
-}
-
-// chineseToNumber 中文数字转阿拉伯数字（已废弃，使用 utils.ChineseToNumber）
-// Deprecated: 使用 utils.ChineseToNumber 代替
-func (e *VariableExtractor) chineseToNumber(chinese string) int {
-	return utils.ChineseToNumber(chinese)
 }
 
 // padZero 数字补零

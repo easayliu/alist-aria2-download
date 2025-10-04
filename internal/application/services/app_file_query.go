@@ -9,7 +9,8 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
-	"github.com/easayliu/alist-aria2-download/pkg/utils"
+	timeutil "github.com/easayliu/alist-aria2-download/pkg/utils/time"
+	pathutil "github.com/easayliu/alist-aria2-download/pkg/utils/path"
 )
 
 // ListFiles 获取文件列表 - 统一的业务逻辑
@@ -228,7 +229,7 @@ func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path strin
 		fileResp := s.convertToFileResponse(item, path)
 		
 		// 检查时间范围
-		inTimeRange := utils.IsInRange(fileResp.Modified, startTime, endTime)
+		inTimeRange := timeutil.IsInRange(fileResp.Modified, startTime, endTime)
 		
 		logger.Debug("Checking item", 
 			"name", item.Name, 
@@ -241,7 +242,7 @@ func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path strin
 			// 对于目录，如果目录修改时间在范围内，则递归搜索
 			if inTimeRange {
 				logger.Debug("Directory in time range, recursing", "dir", item.Name)
-				subPath := utils.JoinPath(path, item.Name)
+				subPath := pathutil.JoinPath(path, item.Name)
 				err := s.collectFilesInTimeRange(ctx, subPath, startTime, endTime, videoOnly, result)
 				if err != nil {
 					logger.Warn("Failed to recurse into directory", "dir", item.Name, "error", err)
@@ -257,7 +258,7 @@ func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path strin
 					logger.Debug("File matches criteria, adding", "file", item.Name)
 					
 					// 为符合条件的文件获取真实的下载URL
-					filePath := utils.JoinPath(path, item.Name)
+					filePath := pathutil.JoinPath(path, item.Name)
 					internalURL, externalURL := s.getRealDownloadURLs(filePath)
 					fileResp.InternalURL = internalURL
 					fileResp.ExternalURL = externalURL
@@ -279,7 +280,7 @@ func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path strin
 // GetRecentFiles 获取最近文件
 func (s *AppFileService) GetRecentFiles(ctx context.Context, req contracts.RecentFilesRequest) (*contracts.FileListResponse, error) {
 	// 使用时间工具创建时间范围
-	timeRange := utils.CreateTimeRangeFromHours(req.HoursAgo)
+	timeRange := timeutil.CreateTimeRangeFromHours(req.HoursAgo)
 
 	timeRangeReq := contracts.TimeRangeFileRequest{
 		Path:      req.Path,
@@ -310,7 +311,7 @@ func (s *AppFileService) GetRecentFiles(ctx context.Context, req contracts.Recen
 // GetYesterdayFiles 获取昨天的文件
 func (s *AppFileService) GetYesterdayFiles(ctx context.Context, path string) (*contracts.FileListResponse, error) {
 	// 使用时间工具创建昨天的时间范围
-	yesterdayRange := utils.CreateYesterdayRange()
+	yesterdayRange := timeutil.CreateYesterdayRange()
 
 	timeRangeReq := contracts.TimeRangeFileRequest{
 		Path:      path,

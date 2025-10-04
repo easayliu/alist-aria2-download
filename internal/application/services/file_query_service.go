@@ -7,7 +7,7 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
-	"github.com/easayliu/alist-aria2-download/pkg/utils"
+	timeutil "github.com/easayliu/alist-aria2-download/pkg/utils/time"
 )
 
 // FileQueryService 文件查询服务
@@ -53,7 +53,7 @@ func (s *FileQueryService) fetchFilesRecursiveByTime(path string, startTime, end
 	}
 
 	for _, file := range fileList.Data.Content {
-		fileTime := utils.ParseTimeOrZero(file.Modified)
+		fileTime := timeutil.ParseTimeOrZero(file.Modified)
 
 		if file.IsDir {
 			// 递归处理子目录
@@ -64,7 +64,7 @@ func (s *FileQueryService) fetchFilesRecursiveByTime(path string, startTime, end
 			s.fetchFilesRecursiveByTime(subPath, startTime, endTime, videoOnly, files)
 		} else {
 			// 检查文件时间和类型
-			if utils.IsInRange(fileTime, startTime, endTime) {
+			if timeutil.IsInRange(fileTime, startTime, endTime) {
 				if !videoOnly || (videoOnly && s.filterSvc.IsVideoFile(file.Name)) {
 					*files = append(*files, file)
 				}
@@ -80,7 +80,7 @@ func (s *FileQueryService) GetYesterdayFiles(basePath string) ([]YesterdayFileIn
 	var allYesterdayFiles []YesterdayFileInfo
 
 	// 使用时间工具创建昨天的时间范围
-	yesterdayRange := utils.CreateYesterdayRange()
+	yesterdayRange := timeutil.CreateYesterdayRange()
 
 	// 递归获取文件
 	if err := s.fetchYesterdayFilesRecursive(basePath, yesterdayRange.Start, yesterdayRange.End, &allYesterdayFiles); err != nil {
@@ -117,7 +117,7 @@ func (s *FileQueryService) fetchFilesRecursiveWithInfo(path string, startTime, e
 		// 处理每个文件/目录
 		for _, file := range fileList.Data.Content {
 			// 解析修改时间
-			modTime := utils.ParseTimeOrZero(file.Modified)
+			modTime := timeutil.ParseTimeOrZero(file.Modified)
 			if modTime.IsZero() {
 				continue
 			}
@@ -144,7 +144,7 @@ func (s *FileQueryService) fetchFilesRecursiveWithInfo(path string, startTime, e
 				}
 
 				// 检查是否在时间范围内
-				if utils.IsInRange(modTime, startTime, endTime) {
+				if timeutil.IsInRange(modTime, startTime, endTime) {
 					// 获取文件详细信息（包含下载链接）
 					fileInfo, err := s.alistClient.GetFileInfo(fullPath)
 					if err != nil {
@@ -206,7 +206,7 @@ func (s *FileQueryService) fetchYesterdayFilesRecursive(path string, yesterdaySt
 		// 处理每个文件/目录
 		for _, file := range fileList.Data.Content {
 			// 解析修改时间
-			modTime := utils.ParseTimeOrZero(file.Modified)
+			modTime := timeutil.ParseTimeOrZero(file.Modified)
 			if modTime.IsZero() {
 				continue
 			}
@@ -233,7 +233,7 @@ func (s *FileQueryService) fetchYesterdayFilesRecursive(path string, yesterdaySt
 				}
 
 				// 检查是否是昨天修改的
-				if utils.IsInRange(modTime, yesterdayStart, yesterdayEnd) {
+				if timeutil.IsInRange(modTime, yesterdayStart, yesterdayEnd) {
 					// 获取文件详细信息（包含下载链接）
 					fileInfo, err := s.alistClient.GetFileInfo(fullPath)
 					if err != nil {
@@ -319,7 +319,7 @@ func (s *FileQueryService) fetchFilesFromDirectory(path string, result *[]FileIn
 			}
 
 			// 解析修改时间
-			modTime := utils.ParseTimeOrNow(file.Modified)
+			modTime := timeutil.ParseTimeOrNow(file.Modified)
 
 			// 构建完整路径
 			fullPath := file.Path
@@ -385,7 +385,7 @@ func (s *FileQueryService) fetchFilesRecursive(path string, result *[]FileInfo) 
 		// 处理每个文件/目录
 		for _, file := range fileList.Data.Content {
 			// 解析修改时间
-			modTime := utils.ParseTimeOrNow(file.Modified)
+			modTime := timeutil.ParseTimeOrNow(file.Modified)
 
 			// 构建完整路径
 			fullPath := file.Path

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	httputil "github.com/easayliu/alist-aria2-download/pkg/http"
+	httputil "github.com/easayliu/alist-aria2-download/pkg/httpclient"
 )
 
 // Client Aria2客户端

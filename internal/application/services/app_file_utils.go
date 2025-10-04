@@ -6,12 +6,14 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
-	"github.com/easayliu/alist-aria2-download/pkg/utils"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
+	pathutil "github.com/easayliu/alist-aria2-download/pkg/utils/path"
+	fileutil "github.com/easayliu/alist-aria2-download/pkg/utils/file"
 )
 
 // IsVideoFile 检查是否为视频文件（使用公共工具函数）
 func (s *AppFileService) IsVideoFile(filename string) bool {
-	return utils.IsVideoFile(filename, s.config.Download.VideoExts)
+	return fileutil.IsVideoFile(filename, s.config.Download.VideoExts)
 }
 
 // GetFileCategory 获取文件分类
@@ -67,7 +69,7 @@ func (s *AppFileService) GetMediaType(filePath string) string {
 	}
 
 	// 回退到基于文件名的分类
-	filename := utils.GetFileName(filePath)
+	filename := pathutil.GetFileName(filePath)
 	category := s.GetFileCategory(filename)
 	switch category {
 	case "movie":
@@ -83,7 +85,7 @@ func (s *AppFileService) GetMediaType(filePath string) string {
 
 // FormatFileSize 格式化文件大小
 func (s *AppFileService) FormatFileSize(size int64) string {
-	return utils.FormatFileSize(size)
+	return strutil.FormatFileSize(size)
 }
 
 // GenerateDownloadPath 生成下载路径
@@ -140,7 +142,7 @@ func (s *AppFileService) generateDownloadPathLegacy(file contracts.FileResponse)
 	}
 
 	// 如果路径分类失败，直接使用默认目录
-	defaultDir := utils.JoinPath(baseDir, "others")
+	defaultDir := pathutil.JoinPath(baseDir, "others")
 	logger.Debug("Path categorization failed, using default", "file", file.Name, "path", defaultDir)
 	return defaultDir
 }
@@ -289,18 +291,18 @@ func (s *AppFileService) extractPathStructure(filePath, pathCategory, baseDir st
 	logger.Debug("Extracted path segment", "keywordFound", keywordFound, "afterKeyword", afterKeyword)
 
 	// 获取文件的父目录（去掉文件名）
-	parentDir := utils.GetParentPath(afterKeyword)
+	parentDir := pathutil.GetParentPath(afterKeyword)
 
 	// 关键步骤：过滤掉路径中的其他分类关键词
 	if parentDir != "" && parentDir != "/" {
 		parentDir = s.filterCategoryKeywords(parentDir, allCategoryKeywords)
-		logger.Debug("Category keywords filtered", "originalParentDir", utils.GetParentPath(afterKeyword), "filteredParentDir", parentDir)
+		logger.Debug("Category keywords filtered", "originalParentDir", pathutil.GetParentPath(afterKeyword), "filteredParentDir", parentDir)
 	}
 
 	// 构建最终路径：baseDir + 分类目录 + 过滤后的目录结构
 	if parentDir == "" || parentDir == "/" {
 		// 如果没有子目录，直接使用分类目录
-		targetDir := utils.JoinPath(baseDir, targetCategoryDir)
+		targetDir := pathutil.JoinPath(baseDir, targetCategoryDir)
 		logger.Debug("No subdirectory, using category root", "targetDir", targetDir)
 		return targetDir
 	} else {
@@ -311,11 +313,11 @@ func (s *AppFileService) extractPathStructure(filePath, pathCategory, baseDir st
 			cleanedShowName := s.cleanShowName(pathParts[0])
 			pathParts[0] = cleanedShowName
 			parentDir = strings.Join(pathParts, "/")
-			logger.Debug("Show name cleaned", "original", utils.GetParentPath(afterKeyword), "cleaned", parentDir)
+			logger.Debug("Show name cleaned", "original", pathutil.GetParentPath(afterKeyword), "cleaned", parentDir)
 		}
 
 		// 保留过滤后的子目录结构
-		targetDir := utils.JoinPath(baseDir, targetCategoryDir, parentDir)
+		targetDir := pathutil.JoinPath(baseDir, targetCategoryDir, parentDir)
 		logger.Debug("Final download path", "path", targetDir)
 		return targetDir
 	}
@@ -414,7 +416,7 @@ func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
 			// 检查是否是"宝藏行"或其他特殊系列（包含更多信息）
 			if strings.Contains(extractedShowName, "宝藏行") || strings.Contains(extractedShowName, "公益季") {
 				// 对于特殊系列，直接使用完整节目名
-				smartPath = utils.JoinPath(baseDir, "tvs", extractedShowName)
+				smartPath = pathutil.JoinPath(baseDir, "tvs", extractedShowName)
 				logger.Debug("Using complete special show name",
 					"originalPath", filePath,
 					"完整节目名", extractedShowName,
@@ -429,7 +431,7 @@ func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
 			// 使用第一层目录作为基础节目名，并清理年份等信息
 			baseShowName := s.cleanShowName(pathParts[0])
 			seasonCode := fmt.Sprintf("S%02d", seasonNumber)
-			smartPath = utils.JoinPath(baseDir, "tvs", baseShowName, seasonCode)
+			smartPath = pathutil.JoinPath(baseDir, "tvs", baseShowName, seasonCode)
 			
 			logger.Info("✅ 从目录生成季度路径", 
 				"原路径", filePath,
@@ -445,7 +447,7 @@ func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
 		// 最后检查其他完整节目名
 		if extractedShowName != "" {
 			// 直接使用提取的完整节目名作为最终目录
-			smartPath = utils.JoinPath(baseDir, "tvs", extractedShowName)
+			smartPath = pathutil.JoinPath(baseDir, "tvs", extractedShowName)
 			
 			logger.Info("✅ 使用完整节目名生成路径", 
 				"原路径", filePath,
@@ -468,7 +470,7 @@ func (s *AppFileService) generateSmartTVPath(filePath, baseDir string) string {
 	if seasonNumber > 0 {
 		// 构建规范化路径：/downloads/tvs/节目名/S##
 		seasonCode := fmt.Sprintf("S%02d", seasonNumber)
-		smartPath = utils.JoinPath(baseDir, "tvs", showName, seasonCode)
+		smartPath = pathutil.JoinPath(baseDir, "tvs", showName, seasonCode)
 		
 		logger.Info("✅ 传统方法生成路径", 
 			"原路径", filePath,
@@ -490,7 +492,7 @@ func (s *AppFileService) extractSeasonNumber(dirName string) int {
 		return 0
 	}
 
-	seasonNum := utils.ExtractSeasonNumber(dirName)
+	seasonNum := strutil.ExtractSeasonNumber(dirName)
 	if seasonNum > 0 {
 		logger.Debug("Season number extracted", "dir", dirName, "season", seasonNum)
 	} else {
@@ -535,14 +537,8 @@ func (s *AppFileService) extractFullShowName(dirName string) string {
 
 // cleanShowName 清理节目名（使用公共工具函数）
 func (s *AppFileService) cleanShowName(showName string) string {
-	cleaned := utils.CleanShowName(showName)
+	cleaned := strutil.CleanShowName(showName)
 	logger.Info("✅ 节目名清理完成", "原名", showName, "清理后", cleaned)
 	return cleaned
 }
 
-// chineseOrArabicToNumber 转换中文数字或阿拉伯数字为整数
-// chineseOrArabicToNumber 已废弃，使用 utils.ChineseToNumber
-// Deprecated: 使用 utils.ChineseToNumber 代替
-func chineseOrArabicToNumber(str string) int {
-	return utils.ChineseToNumber(str)
-}

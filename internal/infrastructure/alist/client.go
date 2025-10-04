@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/ratelimit"
-	httputil "github.com/easayliu/alist-aria2-download/pkg/http"
+	httputil "github.com/easayliu/alist-aria2-download/pkg/httpclient"
 )
 
 // Client Alist客户端

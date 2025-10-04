@@ -10,7 +10,8 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
-	"github.com/easayliu/alist-aria2-download/pkg/utils"
+	timeutil "github.com/easayliu/alist-aria2-download/pkg/utils/time"
+	pathutil "github.com/easayliu/alist-aria2-download/pkg/utils/path"
 )
 
 // AppFileService 应用层文件服务 - 负责文件业务流程编排
@@ -49,8 +50,8 @@ func (s *AppFileService) SetDownloadService(downloadService contracts.DownloadSe
 // GetFileInfo 获取文件详细信息
 func (s *AppFileService) GetFileInfo(ctx context.Context, path string) (*contracts.FileResponse, error) {
 	// 从路径中提取目录和文件名
-	parentDir := utils.GetParentPath(path)
-	fileName := utils.GetFileName(path)
+	parentDir := pathutil.GetParentPath(path)
+	fileName := pathutil.GetFileName(path)
 
 	// 获取父目录列表
 	listResp, err := s.alistClient.ListFiles(parentDir, 1, 1000)
@@ -108,12 +109,12 @@ func (s *AppFileService) GetStorageInfo(ctx context.Context, path string) (map[s
 
 // convertToFileResponse 转换AList文件对象到响应格式
 func (s *AppFileService) convertToFileResponse(item alist.FileItem, basePath string) contracts.FileResponse {
-	fullPath := utils.JoinPath(basePath, item.Name)
+	fullPath := pathutil.JoinPath(basePath, item.Name)
 	
 	// 解析修改时间
 	logger.Debug("Parsing time", "file", item.Name, "modifiedString", item.Modified)
 
-	modifiedTime, err := utils.ParseTime(item.Modified)
+	modifiedTime, err := timeutil.ParseTime(item.Modified)
 	if err != nil {
 		logger.Warn("Failed to parse time, using zero time", "file", item.Name, "modifiedString", item.Modified, "error", err)
 		modifiedTime = time.Time{} // 零值时间
@@ -231,5 +232,5 @@ func (s *AppFileService) getParentPath(path string) string {
 	if path == "/" || path == "" {
 		return ""
 	}
-	return utils.GetParentPath(path)
+	return pathutil.GetParentPath(path)
 }

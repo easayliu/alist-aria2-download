@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/easayliu/alist-aria2-download/pkg/utils"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
+	pathutil "github.com/easayliu/alist-aria2-download/pkg/utils/path"
 )
 
 // MediaType 媒体类型
@@ -431,11 +432,11 @@ func (s *FileMediaService) extractTVShowInfo(fullPath string) (showName, seasonI
 // extractSeasonFromFileName 从文件名提取季度信息（S##E##格式）
 func (s *FileMediaService) extractSeasonFromFileName(fileName string) string {
 	// 匹配 S01E01, S##E## 格式（使用预编译正则）
-	matches := utils.SeasonEpisodePattern.FindStringSubmatch(fileName)
+	matches := strutil.SeasonEpisodePattern.FindStringSubmatch(fileName)
 
 	if len(matches) > 1 {
 		if seasonNum, err := strconv.Atoi(matches[1]); err == nil {
-			return utils.FormatSeason(seasonNum)
+			return strutil.FormatSeason(seasonNum)
 		}
 	}
 
@@ -444,7 +445,7 @@ func (s *FileMediaService) extractSeasonFromFileName(fileName string) string {
 
 // isSeasonDirectory 检查是否为季度目录（使用公共工具函数）
 func (s *FileMediaService) isSeasonDirectory(dir string) bool {
-	return utils.IsSeasonDirectory(dir)
+	return strutil.IsSeasonDirectory(dir)
 }
 
 // extractShowNameFromPath 从路径部分提取剧集名称
@@ -455,7 +456,7 @@ func (s *FileMediaService) extractShowNameFromPath(parts []string, seasonIndex i
 	for i := seasonIndex - 1; i >= 0; i-- {
 		part := parts[i]
 		// 跳过系统目录及通用分类目录（使用公共工具）
-		if utils.ShouldSkipDirectory(part) {
+		if pathutil.ShouldSkipDirectory(part) {
 			continue
 		}
 		
@@ -502,7 +503,7 @@ func (s *FileMediaService) extractShowNameFromFullPath(fullPath string) string {
 	// 从路径中找到最可能是剧名的部分，跳过系统目录和通用目录名
 	for _, part := range parts {
 		// 跳过系统目录、空目录和通用目录名（使用公共工具）
-		if utils.ShouldSkipDirectory(part) {
+		if pathutil.ShouldSkipDirectory(part) {
 			continue
 		}
 
@@ -591,20 +592,11 @@ func (s *FileMediaService) standardizeShowName(name string) string {
 
 // extractSeasonFromChinese 从中文格式提取季度（使用公共工具）
 func (s *FileMediaService) extractSeasonFromChinese(part string) string {
-	season := utils.ExtractSeason(part)
+	season := strutil.ExtractSeason(part)
 	if season == "S01" && !strings.Contains(part, "第") {
 		return "S1" // 兼容原逻辑
 	}
 	return season
-}
-
-// parseChineseNumber 解析中文数字或阿拉伯数字（使用公共工具）
-func (s *FileMediaService) parseChineseNumber(str string) int {
-	num := utils.ChineseToNumber(str)
-	if num == 0 && str != "零" && str != "0" {
-		return -1 // 保持原逻辑，未匹配返回-1
-	}
-	return num
 }
 
 // parseSeasonNumber 从季度字符串中解析出数字（如 "S08" -> 8, "S1" -> 1）
@@ -624,11 +616,11 @@ func (s *FileMediaService) extractSeasonNumber(part string) string {
 	lowerPart := strings.ToLower(part)
 
 	// 只从简单的季度目录中提取，避免从复杂格式中提取
-	matches := utils.SeasonStrictPattern.FindStringSubmatch(lowerPart)
+	matches := strutil.SeasonStrictPattern.FindStringSubmatch(lowerPart)
 
 	if len(matches) > 1 {
 		if seasonNum, err := strconv.Atoi(matches[1]); err == nil {
-			return utils.FormatSeason(seasonNum)
+			return strutil.FormatSeason(seasonNum)
 		}
 	}
 

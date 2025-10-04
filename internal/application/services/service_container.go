@@ -21,7 +21,6 @@ type ServiceContainer struct {
 	
 	// 基础设施服务（非contracts）
 	taskRepo        *repository.TaskRepository
-	schedulerService *SchedulerService
 	oldNotificationSvc *NotificationService // 兼容旧版本的通知服务
 }
 

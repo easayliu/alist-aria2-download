@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
-	"github.com/easayliu/alist-aria2-download/pkg/utils"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 )
 
 // FileService 文件服务
@@ -147,5 +147,5 @@ func (s *FileService) CalculateYesterdayFileStats(files []YesterdayFileInfo) Fil
 // FormatFileSize 格式化文件大小
 // 使用统一的工具函数
 func (s *FileService) FormatFileSize(size int64) string {
-	return utils.FormatFileSize(size)
+	return strutil.FormatFileSize(size)
 }

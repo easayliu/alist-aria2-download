@@ -6,7 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/easayliu/alist-aria2-download/pkg/utils"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
+	fileutil "github.com/easayliu/alist-aria2-download/pkg/utils/file"
 )
 
 // FileFilterService 文件过滤服务
@@ -19,7 +20,7 @@ func NewFileFilterService() *FileFilterService {
 
 // IsVideoFile 检查文件名是否是视频文件（使用公共工具函数）
 func (s *FileFilterService) IsVideoFile(fileName string) bool {
-	return utils.IsVideoFile(fileName)
+	return fileutil.IsVideoFile(fileName)
 }
 
 // IsTVShow 判断是否为电视剧
@@ -234,7 +235,7 @@ func (s *FileFilterService) hasExplicitTVFeatures(path string) bool {
 // hasSeasonPattern 检查是否包含季度模式（使用预编译正则）
 func (s *FileFilterService) hasSeasonPattern(str string) bool {
 	// 使用预编译正则匹配季度格式
-	matches := utils.SeasonPatternCI.FindStringSubmatch(str)
+	matches := strutil.SeasonPatternCI.FindStringSubmatch(str)
 	if len(matches) > 2 {
 		// 提取季度数字
 		if seasonNum, err := strconv.Atoi(matches[2]); err == nil {
@@ -249,7 +250,7 @@ func (s *FileFilterService) hasSeasonPattern(str string) bool {
 // hasEpisodePattern 检查是否包含集数模式（E01, EP01, E74等）（使用预编译正则）
 func (s *FileFilterService) hasEpisodePattern(path string) bool {
 	// 使用预编译正则匹配集数格式
-	matches := utils.EpisodePatternCI.FindStringSubmatch(path)
+	matches := strutil.EpisodePatternCI.FindStringSubmatch(path)
 	if len(matches) > 3 {
 		// 提取集数（第3个捕获组是数字）
 		if episodeNum, err := strconv.Atoi(matches[3]); err == nil {
@@ -350,7 +351,7 @@ func (s *FileFilterService) isKnownTVShow(path string) bool {
 	// 检查日期格式的节目（如 20240628, 20250919）（使用预编译正则）
 	// 这种格式通常是综艺节目
 	fileName := filepath.Base(path)
-	if utils.DatePattern.MatchString(fileName) {
+	if strutil.DatePattern.MatchString(fileName) {
 		// 如果文件名包含8位日期格式（YYYYMMDD），很可能是综艺节目
 		return true
 	}
@@ -409,7 +410,7 @@ func (s *FileFilterService) IsVarietyShow(path string) bool {
 	
 	// 检查日期格式的节目（如 20240628, 20250919）（使用预编译正则）
 	fileName := filepath.Base(path)
-	if utils.DatePattern.MatchString(fileName) {
+	if strutil.DatePattern.MatchString(fileName) {
 		return true
 	}
 	

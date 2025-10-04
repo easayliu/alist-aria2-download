@@ -3,7 +3,7 @@ package services
 import (
 	"time"
 
-	"github.com/easayliu/alist-aria2-download/pkg/utils"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 )
 
 // FileStatsService 文件统计服务
@@ -177,62 +177,5 @@ func (s *FileStatsService) GetSizeDistribution(stats FileStats) map[string]float
 // FormatFileSize 格式化文件大小
 // 使用统一的工具函数
 func (s *FileStatsService) FormatFileSize(size int64) string {
-	return utils.FormatFileSize(size)
-}
-
-// formatFloat 格式化浮点数
-func formatFloat(f float64) string {
-	if f == float64(int64(f)) {
-		return formatInt(int64(f))
-	}
-	return sprintf("%.1f", f)
-}
-
-// formatInt 格式化整数
-func formatInt(i int64) string {
-	return sprintf("%d", i)
-}
-
-// sprintf 简单的格式化函数
-func sprintf(format string, args ...interface{}) string {
-	// 这里应该使用 fmt.Sprintf，但为了避免导入 fmt 包，简化实现
-	// 在实际使用中，应该导入 fmt 包并使用 fmt.Sprintf
-	switch format {
-	case "%.1f":
-		if len(args) > 0 {
-			if f, ok := args[0].(float64); ok {
-				// 简化的浮点数格式化
-				intPart := int64(f)
-				fracPart := int64((f - float64(intPart)) * 10)
-				return formatInt(intPart) + "." + formatInt(fracPart)
-			}
-		}
-	case "%d":
-		if len(args) > 0 {
-			if i, ok := args[0].(int64); ok {
-				// 简化的整数格式化
-				if i == 0 {
-					return "0"
-				}
-				
-				negative := i < 0
-				if negative {
-					i = -i
-				}
-				
-				var result string
-				for i > 0 {
-					digit := i % 10
-					result = string(rune('0'+digit)) + result
-					i /= 10
-				}
-				
-				if negative {
-					result = "-" + result
-				}
-				return result
-			}
-		}
-	}
-	return ""
+	return strutil.FormatFileSize(size)
 }

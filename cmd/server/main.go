@@ -7,7 +7,7 @@ import (
 	"syscall"
 
 	_ "github.com/easayliu/alist-aria2-download/docs"
-	"github.com/easayliu/alist-aria2-download/internal/api/routes"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/http/routes"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"

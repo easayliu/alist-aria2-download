@@ -11,7 +11,8 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/aria2"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
-	"github.com/easayliu/alist-aria2-download/pkg/utils"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
+	fileutil "github.com/easayliu/alist-aria2-download/pkg/utils/file"
 )
 
 // AppDownloadService 应用层下载服务 - 负责业务流程编排
@@ -428,26 +429,9 @@ func (s *AppDownloadService) extractFilename(filename, url string) string {
 	return "unknown_file"
 }
 
-// generateClassifiedPath 生成分类路径
-func (s *AppDownloadService) generateClassifiedPath(filename, baseDir string) string {
-	if baseDir == "" {
-		baseDir = s.config.Aria2.DownloadDir
-	}
-
-	if s.isMovieFile(filename) {
-		return utils.JoinPath(baseDir, "movies")
-	} else if s.isTVFile(filename) {
-		return utils.JoinPath(baseDir, "tv")
-	} else if s.isVideoFile(filename) {
-		return utils.JoinPath(baseDir, "videos")
-	}
-
-	return baseDir
-}
-
 // isVideoFile 检查是否为视频文件
 func (s *AppDownloadService) isVideoFile(filename string) bool {
-	return utils.IsVideoFile(filename, s.config.Download.VideoExts)
+	return fileutil.IsVideoFile(filename, s.config.Download.VideoExts)
 }
 
 // isMovieFile 检查是否为电影文件 - 使用智能路径分类
@@ -472,30 +456,6 @@ func (s *AppDownloadService) isTVFile(filepath string) bool {
 	return mediaType == "tv"
 }
 
-// isMovieFileSimple 简单的电影文件检查（回退方法）
-func (s *AppDownloadService) isMovieFileSimple(filename string) bool {
-	filename = strings.ToLower(filename)
-	movieKeywords := []string{"movie", "film", "电影", "mp4", "mkv"}
-	for _, keyword := range movieKeywords {
-		if strings.Contains(filename, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-// isTVFileSimple 简单的电视剧文件检查（回退方法）
-func (s *AppDownloadService) isTVFileSimple(filename string) bool {
-	filename = strings.ToLower(filename)
-	tvKeywords := []string{"tv", "series", "episode", "ep", "s01", "s02", "电视剧"}
-	for _, keyword := range tvKeywords {
-		if strings.Contains(filename, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
 // convertToDownloadResponse 转换Aria2状态到下载响应
 func (s *AppDownloadService) convertToDownloadResponse(status *aria2.StatusResult) *contracts.DownloadResponse {
 	// 这里需要根据实际的aria2.StatusResult结构进行转换
@@ -507,13 +467,13 @@ func (s *AppDownloadService) convertToDownloadResponse(status *aria2.StatusResul
 	}
 
 	// 解析数值字段
-	if totalLength, err := utils.ParseInt64(status.TotalLength); err == nil {
+	if totalLength, err := strutil.ParseInt64(status.TotalLength); err == nil {
 		response.TotalSize = totalLength
 	}
-	if completedLength, err := utils.ParseInt64(status.CompletedLength); err == nil {
+	if completedLength, err := strutil.ParseInt64(status.CompletedLength); err == nil {
 		response.CompletedSize = completedLength
 	}
-	if downloadSpeed, err := utils.ParseInt64(status.DownloadSpeed); err == nil {
+	if downloadSpeed, err := strutil.ParseInt64(status.DownloadSpeed); err == nil {
 		response.Speed = downloadSpeed
 	}
 

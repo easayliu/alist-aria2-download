@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/domain/entities"
-	httputil "github.com/easayliu/alist-aria2-download/pkg/http"
+	httputil "github.com/easayliu/alist-aria2-download/pkg/httpclient"
 	"github.com/google/uuid"
 )
 
@@ -54,13 +54,6 @@ func (r *TaskRepository) load() error {
 	}
 
 	return nil
-}
-
-// save 保存任务到文件
-func (r *TaskRepository) save() error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.saveUnlocked()
 }
 
 // saveUnlocked 保存任务到文件（内部使用，调用时必须已经持有锁）
