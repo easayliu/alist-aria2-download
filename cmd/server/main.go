@@ -9,7 +9,6 @@ import (
 	_ "github.com/easayliu/alist-aria2-download/docs"
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/http/routes"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
-	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	"github.com/gin-gonic/gin"
@@ -42,27 +41,19 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// 初始化服务
-	notificationService := services.NewNotificationService(cfg)
-
-	// 初始化Alist客户端和文件服务
-	alistClient := alist.NewClientWithQPS(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password, cfg.Alist.QPS)
-	fileService := services.NewFileService(alistClient)
-
-	// 初始化路由
-	router, telegramHandler, schedulerService := routes.SetupRoutes(cfg, notificationService, fileService)
-
-	// 启动Telegram轮询（如果启用且未使用webhook）
-	if cfg.Telegram.Enabled && !cfg.Telegram.Webhook.Enabled {
-		telegramHandler.StartPolling()
-		logger.Info("Telegram polling started")
+	// 初始化服务容器
+	container, err := services.NewServiceContainer(cfg)
+	if err != nil {
+		log.Fatal("Failed to initialize service container:", err)
 	}
 
-	// 启动调度服务
-	if err := schedulerService.Start(); err != nil {
-		logger.Error("Failed to start scheduler service:", err)
-	} else {
-		logger.Info("Scheduler service started")
+	// 初始化路由
+	router, telegramHandler := routes.SetupRoutesWithContainer(cfg, container)
+
+	// 启动Telegram轮询模式
+	if cfg.Telegram.Enabled && !cfg.Telegram.Webhook.Enabled && telegramHandler != nil {
+		telegramHandler.StartPolling()
+		logger.Info("Telegram polling started successfully")
 	}
 
 	// 设置信号处理
@@ -84,11 +75,7 @@ func main() {
 	// 停止Telegram轮询
 	if telegramHandler != nil {
 		telegramHandler.StopPolling()
-	}
-
-	// 停止调度服务
-	if schedulerService != nil {
-		schedulerService.Stop()
+		logger.Info("Telegram polling stopped")
 	}
 
 	logger.Info("Server stopped")

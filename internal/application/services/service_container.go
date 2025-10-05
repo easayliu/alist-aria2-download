@@ -1,27 +1,66 @@
 package services
 
 import (
-	"context"
 	"fmt"
-	
+
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
+	"github.com/easayliu/alist-aria2-download/internal/application/services/download"
+	"github.com/easayliu/alist-aria2-download/internal/application/services/file"
+	"github.com/easayliu/alist-aria2-download/internal/application/services/notification"
+	"github.com/easayliu/alist-aria2-download/internal/application/services/task"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/repository"
 )
 
+// 向后兼容的类型别名 - 用于渐进式迁移
+type (
+	YesterdayFileInfo = file.YesterdayFileInfo
+	SchedulerService  = task.SchedulerService
+	NotificationService = notification.AppNotificationService
+	FileService       = file.AppFileService
+)
+
+// 向后兼容的构造函数
+func NewFileService(client interface{}) *file.AppFileService {
+	// 这是一个临时的兼容函数,新代码应该使用ServiceContainer
+	cfg, _ := config.LoadConfig()
+	svc := file.NewAppFileService(cfg, nil)
+	if appSvc, ok := svc.(*file.AppFileService); ok {
+		return appSvc
+	}
+	// 理论上不会到这里,但保险起见返回一个新的实例
+	return &file.AppFileService{}
+}
+
+func NewDownloadService(cfg *config.Config) contracts.DownloadService {
+	return download.NewAppDownloadService(cfg, nil)
+}
+
+func NewNotificationService(cfg *config.Config) *notification.AppNotificationService {
+	svc := notification.NewAppNotificationService(cfg)
+	if appSvc, ok := svc.(*notification.AppNotificationService); ok {
+		return appSvc
+	}
+	return &notification.AppNotificationService{}
+}
+
+func NewSchedulerService(taskRepo *repository.TaskRepository, fileService contracts.FileService, notificationService contracts.NotificationService, downloadService contracts.DownloadService) *task.SchedulerService {
+	return task.NewSchedulerService(taskRepo, fileService, notificationService, downloadService)
+}
+
 // ServiceContainer 应用服务容器 - 实现依赖注入
 type ServiceContainer struct {
 	config   *config.Config
-	
+
 	// 应用服务缓存
 	downloadService     contracts.DownloadService
 	fileService        contracts.FileService
 	taskService        contracts.TaskService
 	notificationService contracts.NotificationService
-	
+	schedulerService    *task.SchedulerService  // 新增: 调度服务
+
 	// 基础设施服务（非contracts）
 	taskRepo        *repository.TaskRepository
-	oldNotificationSvc *NotificationService // 兼容旧版本的通知服务
 }
 
 // NewServiceContainer 创建服务容器
@@ -40,24 +79,39 @@ func NewServiceContainer(cfg *config.Config) (*ServiceContainer, error) {
 	
 	// 2. 初始化应用服务 - 注意依赖顺序
 	// 先初始化不依赖其他服务的服务
-	container.notificationService = NewAppNotificationService(cfg)
-	container.fileService = NewAppFileService(cfg, nil) // 暂时传nil，稍后会设置downloadService
-	container.downloadService = NewAppDownloadService(cfg, container.fileService)
-	
+	container.notificationService = notification.NewAppNotificationService(cfg)
+	container.fileService = file.NewAppFileService(cfg, nil) // 暂时传nil，稍后会设置downloadService
+	container.downloadService = download.NewAppDownloadService(cfg, container.fileService)
+
 	// 更新fileService的downloadService依赖
 	// 注意：由于字段私有，需要添加setter方法
-	if appFileService, ok := container.fileService.(*AppFileService); ok {
+	if appFileService, ok := container.fileService.(*file.AppFileService); ok {
 		appFileService.SetDownloadService(container.downloadService)
 	}
-	
-	// 3. 初始化需要复杂依赖的服务
-	// 创建兼容性的旧版本服务用于SchedulerService
-	container.oldNotificationSvc = NewNotificationService(cfg)
-	
-	// 这里需要创建兼容的旧版本服务，暂时跳过SchedulerService和TaskService的完整初始化
-	// container.schedulerService = NewSchedulerService(container.taskRepo, oldFileService, container.oldNotificationSvc, oldDownloadService)
-	// container.taskService = NewAppTaskService(cfg, container.taskRepo, container.schedulerService, container.downloadService, container.fileService)
-	
+
+	// 3. 初始化TaskService和SchedulerService
+	// 创建SchedulerService
+	container.schedulerService = task.NewSchedulerService(
+		container.taskRepo,
+		container.fileService,
+		container.notificationService,
+		container.downloadService,
+	)
+
+	// 创建TaskService
+	container.taskService = task.NewAppTaskService(
+		cfg,
+		container.taskRepo,
+		container.schedulerService,
+		container.downloadService,
+		container.fileService,
+	)
+
+	// 启动调度器
+	if err := container.schedulerService.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start scheduler: %w", err)
+	}
+
 	return container, nil
 }
 
@@ -73,10 +127,6 @@ func (c *ServiceContainer) GetFileService() contracts.FileService {
 
 // GetTaskService 获取任务服务
 func (c *ServiceContainer) GetTaskService() contracts.TaskService {
-	// 如果TaskService还没有初始化，返回一个临时的空实现
-	if c.taskService == nil {
-		return &EmptyTaskService{}
-	}
 	return c.taskService
 }
 
@@ -98,76 +148,7 @@ func (c *ServiceContainer) GetConfig() *config.Config {
 	return c.config
 }
 
-// ========== 临时实现 ==========
-
-// EmptyTaskService 空的任务服务实现 - 避免nil指针错误
-type EmptyTaskService struct{}
-
-func (e *EmptyTaskService) CreateTask(ctx context.Context, req contracts.TaskRequest) (*contracts.TaskResponse, error) {
-	return nil, fmt.Errorf("task service not available")
-}
-
-func (e *EmptyTaskService) GetTask(ctx context.Context, id string) (*contracts.TaskResponse, error) {
-	return nil, fmt.Errorf("task service not available")
-}
-
-func (e *EmptyTaskService) UpdateTask(ctx context.Context, id string, req contracts.TaskUpdateRequest) (*contracts.TaskResponse, error) {
-	return nil, fmt.Errorf("task service not available")
-}
-
-func (e *EmptyTaskService) DeleteTask(ctx context.Context, id string) error {
-	return fmt.Errorf("task service not available")
-}
-
-func (e *EmptyTaskService) ListTasks(ctx context.Context, req contracts.TaskListRequest) (*contracts.TaskListResponse, error) {
-	return &contracts.TaskListResponse{
-		Tasks:      []contracts.TaskResponse{},
-		TotalCount: 0,
-		Summary:    contracts.TaskSummary{},
-	}, nil
-}
-
-func (e *EmptyTaskService) EnableTask(ctx context.Context, id string) error {
-	return fmt.Errorf("task service not available")
-}
-
-func (e *EmptyTaskService) DisableTask(ctx context.Context, id string) error {
-	return fmt.Errorf("task service not available")
-}
-
-func (e *EmptyTaskService) RunTaskNow(ctx context.Context, req contracts.TaskRunRequest) (*contracts.TaskRunResponse, error) {
-	return nil, fmt.Errorf("task service not available")
-}
-
-func (e *EmptyTaskService) StopTask(ctx context.Context, id string) error {
-	return fmt.Errorf("task service not available")
-}
-
-func (e *EmptyTaskService) PreviewTask(ctx context.Context, req contracts.TaskPreviewRequest) (*contracts.TaskPreviewResponse, error) {
-	return nil, fmt.Errorf("task service not available")
-}
-
-func (e *EmptyTaskService) CreateQuickTask(ctx context.Context, req contracts.QuickTaskRequest) (*contracts.TaskResponse, error) {
-	return nil, fmt.Errorf("task service not available")
-}
-
-func (e *EmptyTaskService) GetUserTasks(ctx context.Context, userID int64) (*contracts.TaskListResponse, error) {
-	return &contracts.TaskListResponse{
-		Tasks:      []contracts.TaskResponse{},
-		TotalCount: 0,
-		Summary:    contracts.TaskSummary{},
-	}, nil
-}
-
-func (e *EmptyTaskService) GetTaskStatistics(ctx context.Context) (map[string]interface{}, error) {
-	return map[string]interface{}{
-		"message": "task service not available",
-	}, nil
-}
-
-func (e *EmptyTaskService) GetSchedulerStatus(ctx context.Context) (map[string]interface{}, error) {
-	return map[string]interface{}{
-		"status":  "disabled",
-		"message": "task service not available",
-	}, nil
+// GetSchedulerService 获取调度服务
+func (c *ServiceContainer) GetSchedulerService() *task.SchedulerService {
+	return c.schedulerService
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/easayliu/alist-aria2-download/internal/application/services"
+	fileservices "github.com/easayliu/alist-aria2-download/internal/application/services/file"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/aria2"
 )
 
@@ -45,7 +45,7 @@ type BatchDownloadResult struct {
 }
 
 // Execute 执行批量下载
-func (e *BatchDownloadExecutor) Execute(files []services.FileInfo) *BatchDownloadResult {
+func (e *BatchDownloadExecutor) Execute(files []fileservices.FileInfo) *BatchDownloadResult {
 	result := &BatchDownloadResult{
 		TotalCount: len(files),
 		Results:    make([]DownloadResult, 0, len(files)),
@@ -62,7 +62,7 @@ func (e *BatchDownloadExecutor) Execute(files []services.FileInfo) *BatchDownloa
 
 	for _, file := range files {
 		wg.Add(1)
-		go func(f services.FileInfo) {
+		go func(f fileservices.FileInfo) {
 			defer wg.Done()
 
 			// 获取信号量
@@ -89,7 +89,7 @@ func (e *BatchDownloadExecutor) Execute(files []services.FileInfo) *BatchDownloa
 }
 
 // downloadSingleFile 下载单个文件
-func (e *BatchDownloadExecutor) downloadSingleFile(file services.FileInfo) DownloadResult {
+func (e *BatchDownloadExecutor) downloadSingleFile(file fileservices.FileInfo) DownloadResult {
 	options := map[string]interface{}{
 		"dir": file.DownloadPath,
 		"out": file.Name,
@@ -118,7 +118,7 @@ func (e *BatchDownloadExecutor) downloadSingleFile(file services.FileInfo) Downl
 }
 
 // ExecuteSequential 串行执行批量下载(用于需要严格顺序的场景)
-func (e *BatchDownloadExecutor) ExecuteSequential(files []services.FileInfo) *BatchDownloadResult {
+func (e *BatchDownloadExecutor) ExecuteSequential(files []fileservices.FileInfo) *BatchDownloadResult {
 	result := &BatchDownloadResult{
 		TotalCount: len(files),
 		Results:    make([]DownloadResult, 0, len(files)),

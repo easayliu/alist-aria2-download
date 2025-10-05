@@ -1,7 +1,7 @@
 package formatter
 
 import (
-	"github.com/easayliu/alist-aria2-download/internal/application/services"
+	fileservices "github.com/easayliu/alist-aria2-download/internal/application/services/file"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,7 +26,7 @@ type PreviewResult struct {
 }
 
 // FormatPreviewResultsFromFileInfo 从FileInfo格式化预览结果列表
-func (f *PreviewFormatter) FormatPreviewResultsFromFileInfo(files []services.FileInfo) []PreviewResult {
+func (f *PreviewFormatter) FormatPreviewResultsFromFileInfo(files []fileservices.FileInfo) []PreviewResult {
 	results := make([]PreviewResult, 0, len(files))
 	for _, file := range files {
 		results = append(results, PreviewResult{
@@ -44,7 +44,7 @@ func (f *PreviewFormatter) FormatPreviewResultsFromFileInfo(files []services.Fil
 }
 
 // FormatPreviewResultsFromYesterdayFileInfo 从YesterdayFileInfo格式化预览结果列表
-func (f *PreviewFormatter) FormatPreviewResultsFromYesterdayFileInfo(files []services.YesterdayFileInfo) []PreviewResult {
+func (f *PreviewFormatter) FormatPreviewResultsFromYesterdayFileInfo(files []fileservices.YesterdayFileInfo) []PreviewResult {
 	results := make([]PreviewResult, 0, len(files))
 	for _, file := range files {
 		results = append(results, PreviewResult{
@@ -64,7 +64,7 @@ func (f *PreviewFormatter) FormatPreviewResultsFromYesterdayFileInfo(files []ser
 // BuildDirectoryPreviewResponse 构建目录预览响应
 func (f *PreviewFormatter) BuildDirectoryPreviewResponse(
 	path string,
-	files []services.FileInfo,
+	files []fileservices.FileInfo,
 	recursive bool,
 	mediaStats gin.H,
 ) gin.H {
@@ -82,7 +82,7 @@ func (f *PreviewFormatter) BuildDirectoryPreviewResponse(
 // BuildYesterdayPreviewResponse 构建昨日文件预览响应
 func (f *PreviewFormatter) BuildYesterdayPreviewResponse(
 	path string,
-	files []services.YesterdayFileInfo,
+	files []fileservices.YesterdayFileInfo,
 	mediaStats gin.H,
 ) gin.H {
 	return gin.H{
@@ -99,7 +99,7 @@ func (f *PreviewFormatter) BuildYesterdayPreviewResponse(
 // BuildTimeRangePreviewResponse 构建时间范围预览响应
 func (f *PreviewFormatter) BuildTimeRangePreviewResponse(
 	path string,
-	files []services.YesterdayFileInfo,
+	files []fileservices.YesterdayFileInfo,
 	startTime, endTime string,
 	mediaStats gin.H,
 ) gin.H {

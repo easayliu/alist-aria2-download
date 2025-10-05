@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/easayliu/alist-aria2-download/internal/domain/entities"
+	"github.com/easayliu/alist-aria2-download/internal/domain/valueobjects"
 )
 
 // DownloadRequest 下载请求统一参数
@@ -24,7 +24,7 @@ type DownloadResponse struct {
 	URL          string                 `json:"url"`
 	Filename     string                 `json:"filename"`
 	Directory    string                 `json:"directory"`
-	Status       entities.DownloadStatus `json:"status"`
+	Status       valueobjects.DownloadStatus `json:"status"`
 	Progress     float64                `json:"progress"`
 	Speed        int64                  `json:"speed"`
 	TotalSize    int64                  `json:"total_size"`
@@ -36,7 +36,7 @@ type DownloadResponse struct {
 
 // DownloadListRequest 下载列表查询参数
 type DownloadListRequest struct {
-	Status    entities.DownloadStatus `json:"status,omitempty"`
+	Status    valueobjects.DownloadStatus `json:"status,omitempty"`
 	Limit     int                    `json:"limit,omitempty"`
 	Offset    int                    `json:"offset,omitempty"`
 	SortBy    string                 `json:"sort_by,omitempty"`

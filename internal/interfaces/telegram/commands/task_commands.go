@@ -7,20 +7,20 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
-	"github.com/easayliu/alist-aria2-download/internal/application/services"
+	"github.com/easayliu/alist-aria2-download/internal/application/services/task"
 	"github.com/easayliu/alist-aria2-download/internal/domain/entities"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 )
 
 // TaskCommands 定时任务命令处理器
 type TaskCommands struct {
-	schedulerService *services.SchedulerService
+	schedulerService *task.SchedulerService
 	config           *config.Config
 	messageUtils     types.MessageSender
 }
 
 // NewTaskCommands 创建定时任务命令处理器
-func NewTaskCommands(schedulerService *services.SchedulerService, config *config.Config, messageUtils types.MessageSender) *TaskCommands {
+func NewTaskCommands(schedulerService *task.SchedulerService, config *config.Config, messageUtils types.MessageSender) *TaskCommands {
 	return &TaskCommands{
 		schedulerService: schedulerService,
 		config:           config,

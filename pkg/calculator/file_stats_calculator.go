@@ -1,7 +1,7 @@
 package calculator
 
 import (
-	"github.com/easayliu/alist-aria2-download/internal/application/services"
+	fileservices "github.com/easayliu/alist-aria2-download/internal/application/services/file"
 	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 	"github.com/gin-gonic/gin"
 )
@@ -24,7 +24,7 @@ type FileStats struct {
 }
 
 // CalculateFromFileInfo 从FileInfo计算统计信息
-func (c *FileStatsCalculator) CalculateFromFileInfo(files []services.FileInfo) *FileStats {
+func (c *FileStatsCalculator) CalculateFromFileInfo(files []fileservices.FileInfo) *FileStats {
 	stats := &FileStats{
 		TotalCount: len(files),
 	}
@@ -46,7 +46,7 @@ func (c *FileStatsCalculator) CalculateFromFileInfo(files []services.FileInfo) *
 }
 
 // CalculateFromYesterdayFileInfo 从YesterdayFileInfo计算统计信息
-func (c *FileStatsCalculator) CalculateFromYesterdayFileInfo(files []services.YesterdayFileInfo) *FileStats {
+func (c *FileStatsCalculator) CalculateFromYesterdayFileInfo(files []fileservices.YesterdayFileInfo) *FileStats {
 	stats := &FileStats{
 		TotalCount: len(files),
 	}

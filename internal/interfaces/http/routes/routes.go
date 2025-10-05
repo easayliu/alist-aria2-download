@@ -35,33 +35,34 @@ func (rc *RoutesConfig) SetupRoutes(router *gin.Engine) {
 		// 健康检查
 		api.GET("/health", handlers.HealthCheck)
 
-		// 下载相关路由
-		downloads := api.Group("/downloads")
-		{
-			downloads.POST("/", handlers.CreateDownload)
-			downloads.GET("/", handlers.ListDownloads)
-			downloads.GET("/:id", handlers.GetDownload)
-			downloads.DELETE("/:id", handlers.DeleteDownload)
-			downloads.POST("/:id/pause", handlers.PauseDownload)
-			downloads.POST("/:id/resume", handlers.ResumeDownload)
-		}
+		// TODO: 下载相关路由 - 需要重构为使用新架构
+		// downloads := api.Group("/downloads")
+		// {
+		// 	downloads.POST("/", handlers.CreateDownload)
+		// 	downloads.GET("/", handlers.ListDownloads)
+		// 	downloads.GET("/:id", handlers.GetDownload)
+		// 	downloads.DELETE("/:id", handlers.DeleteDownload)
+		// 	downloads.POST("/:id/pause", handlers.PauseDownload)
+		// 	downloads.POST("/:id/resume", handlers.ResumeDownload)
+		// }
 
-		// Alist相关路由
-		alist := api.Group("/alist")
-		{
-			alist.GET("/files", handlers.ListFiles)
-			alist.GET("/file", handlers.GetFileInfo)
-			alist.POST("/login", handlers.AlistLogin)
-		}
+		// TODO: Alist相关路由 - 需要重构为使用新架构
+		// alist := api.Group("/alist")
+		// {
+		// 	alist.GET("/files", handlers.ListFiles)
+		// 	alist.GET("/file", handlers.GetFileInfo)
+		// 	alist.POST("/login", handlers.AlistLogin)
+		// }
 
 		// 文件管理相关路由
+		fileHandler := handlers.NewFileHandler(rc.container)
 		files := api.Group("/files")
 		{
-			files.GET("/yesterday", handlers.GetYesterdayFiles)
-			files.POST("/yesterday/download", handlers.DownloadYesterdayFiles)
-			files.POST("/download", handlers.DownloadFilesFromPath)
-			files.POST("/list", handlers.ListFilesHandler)
-			files.POST("/manual-download", handlers.ManualDownloadFiles)
+			files.GET("/yesterday", fileHandler.GetYesterdayFiles)
+			files.POST("/yesterday/download", fileHandler.DownloadYesterdayFiles)
+			files.POST("/download", fileHandler.DownloadFilesFromPath)
+			files.POST("/list", fileHandler.ListFilesHandler)
+			files.POST("/manual-download", fileHandler.ManualDownloadFiles)
 		}
 
 		// 定时任务相关路由 - 使用TaskHandler实例方法
@@ -138,15 +139,15 @@ func SetupRoutes(cfg *config.Config, notificationService *services.NotificationS
 			alist.POST("/login", handlers.AlistLogin)
 		}
 
-		// 文件管理相关路由
-		files := api.Group("/files")
-		{
-			files.GET("/yesterday", handlers.GetYesterdayFiles)
-			files.POST("/yesterday/download", handlers.DownloadYesterdayFiles)
-			files.POST("/download", handlers.DownloadFilesFromPath)
-			files.POST("/list", handlers.ListFilesHandler)
-			files.POST("/manual-download", handlers.ManualDownloadFiles)
-		}
+		// 文件管理相关路由 - 已废弃,需要使用新的SetupRoutesWithContainer
+		// files := api.Group("/files")
+		// {
+		// 	files.GET("/yesterday", handlers.GetYesterdayFiles)
+		// 	files.POST("/yesterday/download", handlers.DownloadYesterdayFiles)
+		// 	files.POST("/download", handlers.DownloadFilesFromPath)
+		// 	files.POST("/list", handlers.ListFilesHandler)
+		// 	files.POST("/manual-download", handlers.ManualDownloadFiles)
+		// }
 
 		// 定时任务相关路由 - 旧版本已废弃
 		// 请使用新的RoutesConfig.SetupRoutes方法设置路由
@@ -164,4 +165,50 @@ func SetupRoutes(cfg *config.Config, notificationService *services.NotificationS
 	}
 
 	return router, telegramHandler, schedulerService
+}
+
+// SetupRoutesWithContainer 使用ServiceContainer设置路由 - 新架构
+func SetupRoutesWithContainer(cfg *config.Config, container *services.ServiceContainer) (*gin.Engine, *telegram.TelegramHandler) {
+	router := gin.Default()
+
+	// 全局中间件
+	router.Use(middleware.CORSMiddleware())
+	router.Use(middleware.LoggerMiddleware())
+	router.Use(middleware.ContainerMiddleware(container))
+
+	// Swagger文档路由
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	// 初始化Telegram Handler
+	var telegramHandler *telegram.TelegramHandler
+	if cfg.Telegram.Enabled {
+		// 从容器获取服务
+		notificationSvc := container.GetNotificationService()
+		fileService := container.GetFileService()
+		schedulerService := container.GetSchedulerService()
+
+		// 类型断言为具体类型(因为TelegramHandler构造函数需要具体类型)
+		notificationAppSvc, ok1 := notificationSvc.(*services.NotificationService)
+		fileAppSvc, ok2 := fileService.(*services.FileService)
+
+		if ok1 && ok2 {
+			telegramHandler = telegram.NewTelegramHandler(
+				cfg,
+				notificationAppSvc,
+				fileAppSvc,
+				schedulerService,
+			)
+
+			// 注册Webhook路由
+			if cfg.Telegram.Webhook.Enabled {
+				router.POST("/telegram/webhook", telegramHandler.Webhook)
+			}
+		}
+	}
+
+	// 创建路由配置并设置路由
+	routesConfig := NewRoutesConfig(container)
+	routesConfig.SetupRoutes(router)
+
+	return router, telegramHandler
 }
