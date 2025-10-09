@@ -243,15 +243,21 @@ func isAuthError(err error) bool {
 		return false
 	}
 	errStr := strings.ToLower(err.Error())
-	return strings.Contains(errStr, "401") || 
-		   strings.Contains(errStr, "unauthorized") || 
-		   strings.Contains(errStr, "invalid token") || 
-		   strings.Contains(errStr, "token expired")
+	return strings.Contains(errStr, "401") ||
+		   strings.Contains(errStr, "unauthorized") ||
+		   strings.Contains(errStr, "invalid token") ||
+		   strings.Contains(errStr, "token expired") ||
+		   strings.Contains(errStr, "token is invalidated") ||
+		   strings.Contains(errStr, "invalidated")
 }
 
 // ListFiles 获取文件列表
 func (c *Client) ListFiles(path string, page, perPage int) (*FileListResponse, error) {
+	return c.ListFilesWithContext(context.Background(), path, page, perPage)
+}
 
+// ListFilesWithContext 获取文件列表（带上下文和自动重试）
+func (c *Client) ListFilesWithContext(ctx context.Context, path string, page, perPage int) (*FileListResponse, error) {
 	// 构建请求参数
 	reqData := FileListRequest{
 		Path:    path,
@@ -262,11 +268,27 @@ func (c *Client) ListFiles(path string, page, perPage int) (*FileListResponse, e
 
 	// 发送请求
 	var listResp FileListResponse
-	if err := c.makeRequest("POST", "/api/fs/list", reqData, &listResp); err != nil {
+	if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/list", reqData, &listResp); err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
-	// 检查响应状态
+	// 检查响应状态，如果是认证错误则清除token并重试一次
+	if listResp.Code == 401 {
+		// 清除token
+		c.ClearToken()
+
+		// 重新获取token并重试
+		if err := c.ensureValidToken(ctx); err != nil {
+			return nil, fmt.Errorf("failed to refresh token after 401: %w", err)
+		}
+
+		// 重试请求
+		if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/list", reqData, &listResp); err != nil {
+			return nil, fmt.Errorf("failed to send request after token refresh: %w", err)
+		}
+	}
+
+	// 再次检查响应状态
 	if listResp.Code != 200 && listResp.Code != 0 {
 		return nil, fmt.Errorf("list files failed: code=%d, message=%s", listResp.Code, listResp.Message)
 	}
@@ -276,7 +298,11 @@ func (c *Client) ListFiles(path string, page, perPage int) (*FileListResponse, e
 
 // GetFileInfo 获取文件信息
 func (c *Client) GetFileInfo(path string) (*FileGetResponse, error) {
+	return c.GetFileInfoWithContext(context.Background(), path)
+}
 
+// GetFileInfoWithContext 获取文件信息（带上下文和自动重试）
+func (c *Client) GetFileInfoWithContext(ctx context.Context, path string) (*FileGetResponse, error) {
 	// 构建请求参数
 	reqData := FileGetRequest{
 		Path: path,
@@ -284,11 +310,27 @@ func (c *Client) GetFileInfo(path string) (*FileGetResponse, error) {
 
 	// 发送请求
 	var getResp FileGetResponse
-	if err := c.makeRequest("POST", "/api/fs/get", reqData, &getResp); err != nil {
+	if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/get", reqData, &getResp); err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
-	// 检查响应状态
+	// 检查响应状态，如果是认证错误则清除token并重试一次
+	if getResp.Code == 401 {
+		// 清除token
+		c.ClearToken()
+
+		// 重新获取token并重试
+		if err := c.ensureValidToken(ctx); err != nil {
+			return nil, fmt.Errorf("failed to refresh token after 401: %w", err)
+		}
+
+		// 重试请求
+		if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/get", reqData, &getResp); err != nil {
+			return nil, fmt.Errorf("failed to send request after token refresh: %w", err)
+		}
+	}
+
+	// 再次检查响应状态
 	if getResp.Code != 200 && getResp.Code != 0 {
 		return nil, fmt.Errorf("get file info failed: code=%d, message=%s", getResp.Code, getResp.Message)
 	}
