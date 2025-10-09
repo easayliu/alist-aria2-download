@@ -54,6 +54,18 @@ func (mu *MessageUtils) SendMessageHTML(chatID int64, text string) {
 	}
 }
 
+// SendMessageHTMLWithAutoDelete 发送HTML格式消息并在指定时间后自动删除
+func (mu *MessageUtils) SendMessageHTMLWithAutoDelete(chatID int64, text string, deleteAfterSeconds int) {
+	if mu.telegramClient != nil {
+		messages := mu.SplitMessage(text, 4000) // 留一些余量
+		for _, msg := range messages {
+			if err := mu.telegramClient.SendMessageWithAutoDelete(chatID, msg, "HTML", deleteAfterSeconds); err != nil {
+				logger.Error("Failed to send telegram HTML message with auto delete:", err)
+			}
+		}
+	}
+}
+
 // SendMessageMarkdown 发送Markdown格式消息
 func (mu *MessageUtils) SendMessageMarkdown(chatID int64, text string) {
 	if mu.telegramClient != nil {

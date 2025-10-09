@@ -648,7 +648,8 @@ func (h *FileHandler) sendBatchDownloadResult(chatID int64, dirPath string, resu
 	}
 
 	message := strings.Join(lines, "\n")
-	h.controller.messageUtils.SendMessageHTML(chatID, message)
+	// 发送消息，20秒后自动删除
+	h.controller.messageUtils.SendMessageHTMLWithAutoDelete(chatID, message, 20)
 }
 
 // ================================

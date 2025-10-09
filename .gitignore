@@ -62,3 +62,5 @@ alist-aria2-download-*
 release/
 dist/
 data/
+bin/
+build/

@@ -3,6 +3,7 @@ package telegram
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
@@ -86,6 +87,55 @@ func (c *Client) SendMessageWithKeyboard(chatID int64, text, parseMode string, k
 	}
 
 	return nil
+}
+
+// SendMessageWithAutoDelete 发送消息并在指定时间后自动删除
+// chatID: 目标聊天ID
+// text: 消息文本
+// parseMode: 解析模式(如 "HTML", "Markdown")
+// deleteAfterSeconds: 多少秒后删除消息
+func (c *Client) SendMessageWithAutoDelete(chatID int64, text, parseMode string, deleteAfterSeconds int) error {
+	if c.bot == nil {
+		return fmt.Errorf("telegram bot not initialized")
+	}
+
+	// 清理文本确保UTF-8编码有效
+	cleanText := cleanUTF8(text)
+
+	msg := tgbotapi.NewMessage(chatID, cleanText)
+	if parseMode != "" {
+		msg.ParseMode = parseMode
+	}
+
+	// 发送消息
+	sentMsg, err := c.bot.Send(msg)
+	if err != nil {
+		return fmt.Errorf("failed to send telegram message: %w", err)
+	}
+
+	// 启动协程，延迟删除消息
+	go c.deleteMessageAfterDelay(chatID, sentMsg.MessageID, deleteAfterSeconds)
+
+	return nil
+}
+
+// deleteMessageAfterDelay 延迟删除消息
+func (c *Client) deleteMessageAfterDelay(chatID int64, messageID int, delaySeconds int) {
+	if delaySeconds <= 0 {
+		return
+	}
+
+	// 等待指定时间
+	time.Sleep(time.Duration(delaySeconds) * time.Second)
+
+	// 删除消息
+	deleteConfig := tgbotapi.NewDeleteMessage(chatID, messageID)
+	_, err := c.bot.Request(deleteConfig)
+	if err != nil {
+		logger.Warn("Failed to delete message", "chatID", chatID, "messageID", messageID, "error", err)
+	} else {
+		logger.Debug("Message deleted successfully", "chatID", chatID, "messageID", messageID)
+	}
 }
 
 func (c *Client) SendNotification(msg *NotificationMessage) error {
