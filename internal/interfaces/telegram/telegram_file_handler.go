@@ -318,37 +318,15 @@ func (h *FileHandler) HandleFileDownload(chatID int64, filePath string) {
 
 // handleDownloadFileByPath 通过路径下载单个文件
 func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
-	// 使用文件服务获取文件信息
+	// 使用文件服务获取文件信息（统一使用getFilesFromPath确保路径一致性）
 	parentDir := filepath.Dir(filePath)
 	fileName := filepath.Base(filePath)
 
-	files, err := h.listFilesSimple(parentDir, 1, 1000)
-	if err != nil {
-		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("获取文件信息", err))
-		return
-	}
-
-	// 查找目标文件
-	var targetFile *contracts.FileResponse
-	for _, file := range files {
-		if file.Name == fileName {
-			targetFile = &file
-			break
-		}
-	}
-
-	if targetFile == nil {
-		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-		h.controller.messageUtils.SendMessage(chatID, formatter.FormatSimpleError("文件未找到"))
-		return
-	}
-
-	// 使用文件服务的智能分类功能
+	// 使用文件服务的智能分类功能获取文件信息
 	fileInfo, err := h.getFilesFromPath(parentDir, false)
 	if err != nil {
 		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("获取文件详细信息", err))
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("获取文件信息", err))
 		return
 	}
 
@@ -363,7 +341,7 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 
 	if targetFileInfo == nil {
 		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-		h.controller.messageUtils.SendMessage(chatID, formatter.FormatSimpleError("获取文件分类信息失败"))
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatSimpleError("文件未找到"))
 		return
 	}
 
@@ -374,7 +352,7 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 		Directory:   targetFileInfo.DownloadPath,
 		AutoClassify: true,
 	}
-	
+
 	ctx := context.Background()
 	download, err := h.controller.downloadService.CreateDownload(ctx, downloadReq)
 	if err != nil {
