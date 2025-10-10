@@ -231,36 +231,35 @@ func (s *PathGenerationService) generateSmartTVPath(filePath, baseDir string) st
 	}
 
 	pathParts := strings.Split(afterTvs, "/")
-	if len(pathParts) < 2 {
+	if len(pathParts) < 1 {
 		logger.Warn("TV路径结构不完整", "afterTvs", afterTvs, "parts", pathParts)
 		return ""
 	}
 
+	// 第一个目录总是节目名
+	baseShowName := strutil.CleanShowName(pathParts[0])
 
-	// 寻找包含季度信息的目录
+	// 如果只有一个目录级别，直接返回
+	if len(pathParts) == 1 {
+		return pathutil.JoinPath(baseDir, "tvs", baseShowName)
+	}
+
+	// 从第二个目录开始寻找季度信息
 	var smartPath string
 	lastIndex := len(pathParts) - 1
 
+	// 如果最后一个部分是文件（包含扩展名），跳过它
 	if strings.Contains(pathParts[lastIndex], ".") {
 		lastIndex--
 	}
 
-	for i := lastIndex; i >= 0; i-- {
+	// 从后往前遍历，寻找季度信息
+	for i := 1; i <= lastIndex; i++ {
 		currentDir := pathParts[i]
-
-		// 检查完整节目名
-		extractedShowName := s.extractFullShowName(currentDir)
-		if extractedShowName != "" {
-			if strings.Contains(extractedShowName, "宝藏行") || strings.Contains(extractedShowName, "公益季") {
-				smartPath = pathutil.JoinPath(baseDir, "tvs", extractedShowName)
-				return smartPath
-			}
-		}
 
 		// 提取季度信息
 		seasonNumber := strutil.ExtractSeasonNumber(currentDir)
 		if seasonNumber > 0 {
-			baseShowName := strutil.CleanShowName(pathParts[0])
 			seasonCode := fmt.Sprintf("S%02d", seasonNumber)
 			smartPath = pathutil.JoinPath(baseDir, "tvs", baseShowName, seasonCode)
 
@@ -274,60 +273,34 @@ func (s *PathGenerationService) generateSmartTVPath(filePath, baseDir string) st
 
 			return smartPath
 		}
-
-		if extractedShowName != "" {
-			smartPath = pathutil.JoinPath(baseDir, "tvs", extractedShowName)
-			logger.Info("使用完整节目名生成路径",
-				"原路径", filePath,
-				"目标目录", currentDir,
-				"提取节目名", extractedShowName,
-				"智能路径", smartPath)
-			return smartPath
-		}
 	}
 
-	// 回退到传统解析
-	showName := strutil.CleanShowName(pathParts[0])
-	seasonDir := pathParts[1]
+	// 如果没有找到季度信息，检查是否是特殊节目（如宝藏行、公益季等）
+	for i := 1; i <= lastIndex; i++ {
+		currentDir := pathParts[i]
 
-	logger.Info("回退到传统解析", "showName", showName, "seasonDir", seasonDir)
-
-	seasonNumber := strutil.ExtractSeasonNumber(seasonDir)
-	if seasonNumber > 0 {
-		seasonCode := fmt.Sprintf("S%02d", seasonNumber)
-		smartPath = pathutil.JoinPath(baseDir, "tvs", showName, seasonCode)
-
-		logger.Info("传统方法生成路径",
-			"原路径", filePath,
-			"节目名", showName,
-			"季度", seasonNumber,
-			"季度代码", seasonCode,
-			"智能路径", smartPath)
-
-		return smartPath
-	}
-
-	logger.Info("未能解析季度信息，使用原始逻辑", "seasonDir", seasonDir)
-	return ""
-}
-
-// extractFullShowName 提取完整的节目名
-func (s *PathGenerationService) extractFullShowName(dirName string) string {
-	if dirName == "" {
-		return ""
-	}
-
-	seasonKeywords := []string{"第", "季", "season", "宝藏行", "公益季"}
-	dirLower := strings.ToLower(dirName)
-
-	for _, keyword := range seasonKeywords {
-		if strings.Contains(dirLower, strings.ToLower(keyword)) {
-			cleanName := strutil.CleanShowName(dirName)
-			if cleanName != "" {
-				return cleanName
+		// 检查是否包含特殊关键词
+		if strings.Contains(currentDir, "宝藏行") || strings.Contains(currentDir, "公益季") {
+			extractedShowName := strutil.CleanShowName(currentDir)
+			if extractedShowName != "" {
+				smartPath = pathutil.JoinPath(baseDir, "tvs", baseShowName, extractedShowName)
+				logger.Info("使用特殊节目名生成路径",
+					"原路径", filePath,
+					"基础节目名", baseShowName,
+					"特殊节目", extractedShowName,
+					"智能路径", smartPath)
+				return smartPath
 			}
 		}
 	}
 
-	return ""
+	// 没有找到季度信息，返回基础节目名路径
+	smartPath = pathutil.JoinPath(baseDir, "tvs", baseShowName)
+	logger.Info("未找到季度信息，使用基础节目名",
+		"原路径", filePath,
+		"节目名", baseShowName,
+		"智能路径", smartPath)
+
+	return smartPath
 }
+
