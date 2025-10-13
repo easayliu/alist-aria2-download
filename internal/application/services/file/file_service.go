@@ -45,8 +45,13 @@ func NewAppFileService(cfg *config.Config, downloadService contracts.DownloadSer
 		mediaClassifier: mediaClassifier,
 	}
 
-	// 延迟初始化 pathStrategy 和 pathGenerator（避免循环依赖）
-	// 将在 SetDownloadService 中初始化
+	// 立即初始化 pathStrategy（不需要依赖 downloadService）
+	service.pathStrategy = pathservices.NewPathStrategyService(cfg, service)
+	logger.Debug("PathStrategyService已初始化（NewAppFileService）")
+
+	// 立即初始化 pathGenerator
+	service.pathGenerator = pathservices.NewPathGenerationService(cfg, service.pathStrategy, pathCategory, mediaClassifier)
+	logger.Debug("PathGenerationService已初始化（NewAppFileService）")
 
 	return service
 }

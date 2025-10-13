@@ -170,20 +170,17 @@ func (e *VariableExtractor) extractMovieTitle(path string) string {
 
 // cleanMovieTitle 清理电影标题
 func (e *VariableExtractor) cleanMovieTitle(title string) string {
-	// 移除质量标记
-	qualityPatterns := []string{
-		"1080p", "720p", "480p", "4K", "2160p",
-		"BluRay", "WEB-DL", "HDRip", "BDRip",
-		"x264", "x265", "HEVC", "H264", "H265",
-	}
-
-	titleLower := strings.ToLower(title)
-	for _, pattern := range qualityPatterns {
-		titleLower = strings.ReplaceAll(titleLower, strings.ToLower(pattern), "")
-	}
-
-	// 恢复原始大小写结构（简单处理）
-	return strings.TrimSpace(title)
+	// 直接使用 CleanShowName，它已经包含了所有清理逻辑：
+	// - 移除网站水印（【xxx】[xxx]）
+	// - 移除视频质量信息（1080p, WEB-DL等）
+	// - 移除编码信息（H265, x264等）
+	// - 移除音频信息（DDP5.1等）
+	// - 移除发布组名
+	// - 移除季度信息
+	// - 提取中文部分
+	cleaned := strutil.CleanShowName(title)
+	logger.Debug("电影标题清理完成", "原标题", title, "清理后", cleaned)
+	return cleaned
 }
 
 // extractMovieYear 提取电影年份

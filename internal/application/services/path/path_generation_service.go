@@ -153,6 +153,42 @@ func (s *PathGenerationService) extractPathStructure(filePath, pathCategory, bas
 	// 获取文件的父目录（去掉文件名）
 	parentDir := pathutil.GetParentPath(afterKeyword)
 
+	// 如果父目录是 "." 说明afterKeyword本身就是一个目录名，需要清理它
+	if parentDir == "." || parentDir == "" {
+		// 对于电视剧类型，特殊处理季度信息
+		if pathCategory == "tv" {
+			// 提取季度信息
+			seasonNumber := strutil.ExtractSeasonNumber(afterKeyword)
+			if seasonNumber > 0 {
+				// 清理节目名
+				cleanedShowName := strutil.CleanShowName(afterKeyword)
+				seasonCode := strutil.FormatSeason(seasonNumber)
+				targetDir := pathutil.JoinPath(baseDir, targetCategoryDir, cleanedShowName, seasonCode)
+				logger.Info("从目录名提取季度信息",
+					"原始名称", afterKeyword,
+					"节目名", cleanedShowName,
+					"季度", seasonCode,
+					"目标路径", targetDir)
+				return targetDir
+			}
+		}
+
+		// 非电视剧或无季度信息，常规清理
+		cleanedDirName := strutil.CleanShowName(afterKeyword)
+		if cleanedDirName != "" && cleanedDirName != afterKeyword {
+			// 清理成功，使用清理后的名称
+			targetDir := pathutil.JoinPath(baseDir, targetCategoryDir, cleanedDirName)
+			logger.Info("清理目录名",
+				"原始名称", afterKeyword,
+				"清理后", cleanedDirName,
+				"目标路径", targetDir)
+			return targetDir
+		}
+		// 如果清理失败，使用默认目录
+		targetDir := pathutil.JoinPath(baseDir, targetCategoryDir)
+		return targetDir
+	}
+
 	// 过滤掉路径中的其他分类关键词
 	if parentDir != "" && parentDir != "/" {
 		parentDir = s.filterCategoryKeywords(parentDir, allCategoryKeywords)
@@ -167,8 +203,13 @@ func (s *PathGenerationService) extractPathStructure(filePath, pathCategory, bas
 	// 清理节目名
 	pathParts := strings.Split(strings.Trim(parentDir, "/"), "/")
 	if len(pathParts) > 0 {
-		cleanedShowName := strutil.CleanShowName(pathParts[0])
-		pathParts[0] = cleanedShowName
+		// 清理每一级目录名
+		for i, part := range pathParts {
+			cleanedShowName := strutil.CleanShowName(part)
+			if cleanedShowName != "" {
+				pathParts[i] = cleanedShowName
+			}
+		}
 		parentDir = strings.Join(pathParts, "/")
 	}
 
