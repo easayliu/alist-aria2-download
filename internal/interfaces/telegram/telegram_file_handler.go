@@ -534,8 +534,12 @@ func (h *FileHandler) HandleDownloadDirectory(chatID int64, dirPath string) {
 // handleDownloadDirectoryByPath 通过路径下载目录 - 使用重构后的新架构
 func (h *FileHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string) {
 	ctx := context.Background()
-	
-	// 使用新架构的目录下载服务
+
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	processingMsg := formatter.FormatTitle("⏳", "正在处理手动下载任务") + "\n\n" +
+		formatter.FormatField("目录路径", dirPath)
+	h.controller.messageUtils.SendMessageHTML(chatID, processingMsg)
+
 	req := contracts.DirectoryDownloadRequest{
 		DirectoryPath: dirPath,
 		Recursive:     true,
@@ -545,23 +549,34 @@ func (h *FileHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string
 	
 	result, err := h.controller.fileService.DownloadDirectory(ctx, req)
 	if err != nil {
-		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("扫描目录", err))
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("处理", err))
 		return
 	}
-	
+
 	if result.SuccessCount == 0 {
-		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 		if result.Summary.VideoFiles == 0 {
-			h.controller.messageUtils.SendMessage(chatID, "🎬 目录中没有找到视频文件")
+			message := formatter.FormatNoFilesFound("手动下载完成", dirPath)
+			h.controller.messageUtils.SendMessageHTML(chatID, message)
 		} else {
 			h.controller.messageUtils.SendMessage(chatID, formatter.FormatSimpleError("所有文件下载创建失败，请检查日志"))
 		}
 		return
 	}
-	
-	// 发送结果消息（使用新架构的结果格式）
-	h.sendBatchDownloadResult(chatID, dirPath, result)
+
+	message := formatter.FormatTimeRangeDownloadResult(utils.TimeRangeDownloadResultData{
+		TimeDescription: dirPath,
+		Path:            dirPath,
+		TotalFiles:      result.Summary.TotalFiles,
+		TotalSize:       h.controller.messageUtils.FormatFileSize(result.Summary.TotalSize),
+		MovieCount:      result.Summary.MovieFiles,
+		TVCount:         result.Summary.TVFiles,
+		OtherCount:      result.Summary.OtherFiles,
+		SuccessCount:    result.SuccessCount,
+		FailCount:       result.FailureCount,
+		EscapeHTML:      h.controller.messageUtils.EscapeHTML,
+	})
+
+	h.controller.messageUtils.SendMessageHTMLWithAutoDelete(chatID, message, 30)
 }
 
 // sendBatchDownloadResult 发送批量下载结果消息 - 新架构格式
