@@ -538,7 +538,7 @@ func (h *FileHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	processingMsg := formatter.FormatTitle("⏳", "正在处理手动下载任务") + "\n\n" +
 		formatter.FormatField("目录路径", dirPath)
-	h.controller.messageUtils.SendMessageHTML(chatID, processingMsg)
+	h.controller.messageUtils.SendMessageHTMLWithAutoDelete(chatID, processingMsg, 30)
 
 	req := contracts.DirectoryDownloadRequest{
 		DirectoryPath: dirPath,
