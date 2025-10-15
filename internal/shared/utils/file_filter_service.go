@@ -27,7 +27,23 @@ func (s *FileFilterService) IsVideoFile(fileName string) bool {
 func (s *FileFilterService) IsTVShow(path string) bool {
 	lowerPath := strings.ToLower(path)
 
-	// 最明确的TV特征：S##格式（如S01, S02等）
+	// ⭐ 最强判断1：路径目录强制分类
+	// 如果在 /tvs/ 目录下，直接判定为TV剧集（优先级最高）
+	if strings.Contains(lowerPath, "/tvs/") {
+		return true
+	}
+
+	// ⭐ 最强判断2：如果在 /movies/ 目录下，直接排除（不是TV剧集）
+	if strings.Contains(lowerPath, "/movies/") {
+		return false
+	}
+
+	// 🔥 明确的TV特征：集数标记（E01-E999）
+	if s.hasEpisodePattern(path) {
+		return true
+	}
+
+	// 🔥 明确的TV特征：S##格式（如S01, S02等）
 	if s.hasSeasonPattern(lowerPath) {
 		return true
 	}
@@ -37,10 +53,16 @@ func (s *FileFilterService) IsTVShow(path string) bool {
 		return true
 	}
 
+	// 如果是电影系列/合集，但没有上述明确的TV特征，才排除
+	if s.IsMovieSeries(path) {
+		return false
+	}
+
 	// TV剧集的常见特征
+	// 🔥 移除 "集" 关键词，避免与"合集"混淆
 	tvKeywords := []string{
-		"tvs", "tv", "series", "season", "episode",
-		"剧集", "集", "话", "动画", "番剧", "连续剧", "电视剧",
+		"tvs", "tv", "season", "episode",
+		"剧集", "话", "动画", "番剧", "连续剧", "电视剧",
 	}
 
 	for _, keyword := range tvKeywords {
@@ -82,6 +104,18 @@ func (s *FileFilterService) IsMovie(path string) bool {
 
 	// 首先检查是否为视频文件
 	if !s.IsVideoFile(fileName) {
+		return false
+	}
+
+	lowerPath := strings.ToLower(path)
+
+	// ⭐ 最强判断1：如果在 /movies/ 目录下，直接判定为电影（优先级最高）
+	if strings.Contains(lowerPath, "/movies/") {
+		return true
+	}
+
+	// ⭐ 最强判断2：如果在 /tvs/ 目录下，直接排除（不是电影）
+	if strings.Contains(lowerPath, "/tvs/") {
 		return false
 	}
 
@@ -175,8 +209,9 @@ func (s *FileFilterService) hasStrongTVIndicators(path string) bool {
 	}
 
 	// 其他强TV特征需要多个指示符组合
+	// 🔥 移除 "集" 关键词，避免与"合集"混淆
 	strongIndicators := []string{
-		"集", "话", "episode", "ep01", "ep02", "ep03", "e01", "e02", "e03",
+		"话", "episode", "ep01", "ep02", "ep03", "e01", "e02", "e03",
 	}
 
 	matchCount := 0
@@ -218,8 +253,9 @@ func (s *FileFilterService) hasExplicitTVFeatures(path string) bool {
 	}
 
 	// 检查明确的剧集关键词
+	// 🔥 移除 "集" 关键词，避免与"合集"混淆
 	explicitTVKeywords := []string{
-		"集", "话", "episode", "ep01", "ep02", "ep03", "e01", "e02", "e03",
+		"话", "episode", "ep01", "ep02", "ep03", "e01", "e02", "e03",
 		"/tvs/", "/series/", "剧集", "连续剧", "电视剧", "番剧",
 	}
 

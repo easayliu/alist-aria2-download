@@ -8,6 +8,7 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
+	pathutil "github.com/easayliu/alist-aria2-download/pkg/utils/path"
 	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 )
 
@@ -95,20 +96,42 @@ func (e *VariableExtractor) extractShowName(path string) string {
 	// 优先从路径中提取
 	pathLower := strings.ToLower(path)
 
-	// 查找 /tvs/ 或 /variety/ 后的第一个目录作为节目名
+	// 查找 /tvs/ 或 /variety/ 后的第一个有意义的目录作为节目名
 	patterns := []string{"/tvs/", "/variety/", "/综艺/"}
 	for _, pattern := range patterns {
 		if idx := strings.Index(pathLower, pattern); idx != -1 {
 			afterPattern := path[idx+len(pattern):]
 			parts := strings.Split(afterPattern, "/")
-			if len(parts) > 0 && parts[0] != "" {
-				return e.cleanShowName(parts[0])
+
+			// 🔥 新逻辑：跳过常见分类目录和年份目录
+			for _, part := range parts {
+				if part == "" {
+					continue
+				}
+
+				// 使用增强的跳过检测（包含年份）
+				if pathutil.ShouldSkipDirectoryAdvanced(part) {
+					logger.Debug("跳过节目分类目录", "目录", part)
+					continue
+				}
+
+				// 找到第一个非分类目录，作为节目名
+				cleaned := e.cleanShowName(part)
+				logger.Debug("节目名称提取成功",
+					"原始路径", path,
+					"提取部分", part,
+					"清理后", cleaned)
+				return cleaned
 			}
 		}
 	}
 
 	// 回退：使用父目录名
-	return filepath.Base(filepath.Dir(path))
+	baseName := filepath.Base(filepath.Dir(path))
+	logger.Debug("节目名称使用回退逻辑",
+		"原始路径", path,
+		"父目录", baseName)
+	return baseName
 }
 
 // cleanShowName 清理节目名称（使用公共工具函数）
@@ -152,20 +175,43 @@ func (e *VariableExtractor) extractEpisode(filename string) string {
 
 // extractMovieTitle 提取电影标题
 func (e *VariableExtractor) extractMovieTitle(path string) string {
-	// 查找 /movies/ 后的第一个目录作为电影名
+	// 查找 /movies/ 后的第一个有意义的目录作为电影名
 	pathLower := strings.ToLower(path)
 	if idx := strings.Index(pathLower, "/movies/"); idx != -1 {
 		afterMovies := path[idx+8:] // "/movies/" 长度为8
 		parts := strings.Split(afterMovies, "/")
-		if len(parts) > 0 && parts[0] != "" {
-			return e.cleanMovieTitle(parts[0])
+
+		// 🔥 新逻辑：跳过常见分类目录和年份目录
+		for _, part := range parts {
+			if part == "" {
+				continue
+			}
+
+			// 使用增强的跳过检测（包含年份）
+			if pathutil.ShouldSkipDirectoryAdvanced(part) {
+				logger.Debug("跳过电影分类目录", "目录", part)
+				continue
+			}
+
+			// 找到第一个非分类目录，作为电影名
+			cleaned := e.cleanMovieTitle(part)
+			logger.Debug("电影标题提取成功",
+				"原始路径", path,
+				"提取部分", part,
+				"清理后", cleaned)
+			return cleaned
 		}
 	}
 
 	// 回退：使用文件名（去除扩展名和年份）
 	basename := filepath.Base(path)
 	basename = strings.TrimSuffix(basename, filepath.Ext(basename))
-	return e.cleanMovieTitle(basename)
+	cleaned := e.cleanMovieTitle(basename)
+	logger.Debug("电影标题使用回退逻辑",
+		"原始路径", path,
+		"文件名", basename,
+		"清理后", cleaned)
+	return cleaned
 }
 
 // cleanMovieTitle 清理电影标题

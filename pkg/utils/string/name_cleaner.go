@@ -6,6 +6,46 @@ import (
 	"unicode"
 )
 
+// 预编译正则表达式以提升性能
+var (
+	// 网站水印模式
+	websitePattern1 = regexp.MustCompile(`【[^】]*(?:www\.|\.com|\.cn|\.org|发布|高清|影视|字幕组|下载)[^】]*】`)
+	websitePattern2 = regexp.MustCompile(`\[[^\]]*(?:www\.|\.com|\.cn|\.org|发布|高清|影视|字幕组|下载)[^\]]*\]`)
+	websitePattern3 = regexp.MustCompile(`【[^】]+】`) // 移除所有【】括号内容
+	websitePattern4 = regexp.MustCompile(`\[[^\]]+\]`) // 移除所有[]括号内容
+
+	// 视频质量和编码信息（按从复杂到简单的顺序，避免部分匹配）
+	qualityPattern1 = regexp.MustCompile(`(?i)\d{3,4}p`)                                                    // 1080p, 2160p, 4K, 8K
+	qualityPattern2 = regexp.MustCompile(`(?i)WEB-DL|WEB-RIP|WEBRip|BluRay|Blu-ray|BDRip|HDTV|DVDRip|REMUX`) // 🔥 片源（增加REMUX）
+	qualityPattern3 = regexp.MustCompile(`(?i)H\.?264|H\.?265|H\.?266|x264|x265|HEVC|AVC|AV1|VP9`)         // 🔥 编码（增加AV1, VP9, H266）
+
+	// 🔥 版本标记（REPACK, PROPER, EXTENDED等）
+	versionPattern = regexp.MustCompile(`(?i)\b(REPACK|PROPER|EXTENDED|UNRATED|DC|DIRECTORS?\.CUT|LIMITED|ANNIVERSARY\.EDITION|REMASTERED)\b`)
+
+	// 🔥 复杂音频格式必须先匹配（避免被简单DTS规则部分清理）
+	qualityPattern6 = regexp.MustCompile(`(?i)DTS-HD(MA)?[\d.]*|DTS:?-?X[\d.]*|Atmos|TrueHD[\d.]*|LPCM[\d.]*|FLAC[\d.]*|EAC3|E-AC3|DD\+[\d.]*|OPUS[\d.]*`) // 🔥 音频格式（修复DTS-X匹配）
+	qualityPattern4 = regexp.MustCompile(`(?i)HDR\d*|SDR|DTS|DD[\d.]*|AAC|AC3|DDP\d+\.\d+|MP3|DV`)                                                         // 🔥 基础音视频格式（增加DV）
+
+	// 🔥 声道信息（7.1, 5.1, 2.0等）
+	channelPattern = regexp.MustCompile(`\.?[\d]+\.[\d]`)
+
+	qualityPattern5 = regexp.MustCompile(`(?i)-[A-Z][a-zA-Z0-9]+$`)                           // 发布组名
+	qualityPattern7 = regexp.MustCompile(`(?i)\d+bit`)                                        // 位深（10bit, 8bit）
+	qualityPattern8 = regexp.MustCompile(`(?i)\d+Audio`)                                      // 多音轨（2Audio等）
+	otherQualityPattern = regexp.MustCompile(`(?i)UHD|4K|8K`)                                 // 超高清标记
+
+	// 🔥 年份模式（独立的4位数年份：1900-2099）
+	yearPattern = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
+	// 🔥 年份范围模式（如1997-2012, 2002-2003）
+	yearRangePattern = regexp.MustCompile(`\d{4}-\d{4}`)
+
+	// 中文提取模式
+	chineseExtractPattern = regexp.MustCompile(`^[A-Za-z0-9.\s-]+(.*)$`)
+
+	// 季度后缀模式
+	seasonSuffixPattern = regexp.MustCompile(`[.\s]*(?:第[零一二三四五六七八九十百\d]+季|[Ss]eason[\s_-]?\d+|[Ss]\d{1,2}).*$`)
+)
+
 // CleanShowName 清理节目名称 - 提取中文名，移除特殊字符和后缀
 // 用于统一处理电视剧、电影、综艺等媒体名称
 func CleanShowName(name string) string {
@@ -15,39 +55,42 @@ func CleanShowName(name string) string {
 
 	cleaned := name
 
-	// 1. 移除网站水印和发布信息（最高优先级）
-	// 匹配模式：【网站信息】 或 [网站信息]
-	websitePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`【[^】]*(?:www\.|\.com|\.cn|\.org|发布|高清|影视|字幕组|下载)[^】]*】`),
-		regexp.MustCompile(`\[[^\]]*(?:www\.|\.com|\.cn|\.org|发布|高清|影视|字幕组|下载)[^\]]*\]`),
-		regexp.MustCompile(`【[^】]+】`), // 移除所有【】括号内容作为备选
-		regexp.MustCompile(`\[[^\]]+\]`), // 移除所有[]括号内容作为备选
+	// 🔥 0. 先移除常见视频文件扩展名（避免影响后续清理）
+	videoExtensions := []string{".mkv", ".mp4", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mpg", ".mpeg", ".ts", ".m2ts"}
+	for _, ext := range videoExtensions {
+		if strings.HasSuffix(strings.ToLower(cleaned), ext) {
+			cleaned = cleaned[:len(cleaned)-len(ext)]
+			break
+		}
 	}
 
-	for _, pattern := range websitePatterns {
-		cleaned = pattern.ReplaceAllString(cleaned, "")
-	}
+	// 1. 移除网站水印和发布信息（使用预编译的正则）
+	cleaned = websitePattern1.ReplaceAllString(cleaned, "")
+	cleaned = websitePattern2.ReplaceAllString(cleaned, "")
+	cleaned = websitePattern3.ReplaceAllString(cleaned, "")
+	cleaned = websitePattern4.ReplaceAllString(cleaned, "")
 
-	// 2. 移除视频质量和编码信息
-	qualityPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?i)\d{3,4}p`),                                    // 1080p, 2160p
-		regexp.MustCompile(`(?i)WEB-DL|WEB-RIP|BluRay|BDRip|HDTV|DVDRip`),   // 来源
-		regexp.MustCompile(`(?i)H\.?264|H\.?265|x264|x265|HEVC|AVC`),         // 编码
-		regexp.MustCompile(`(?i)HDR|SDR|DTS|DD5\.1|AAC|AC3|DDP\d+\.\d+`),    // 音视频格式
-		regexp.MustCompile(`(?i)-[A-Z][a-zA-Z0-9]+$`),                        // 发布组名 -QuickIO
-	}
-
-	for _, pattern := range qualityPatterns {
-		cleaned = pattern.ReplaceAllString(cleaned, "")
-	}
+	// 2. 移除视频质量和编码信息（按从复杂到简单的顺序）
+	cleaned = yearRangePattern.ReplaceAllString(cleaned, "")  // 🔥 先移除年份范围（避免与单独年份冲突）
+	cleaned = yearPattern.ReplaceAllString(cleaned, "")       // 🔥 移除年份
+	cleaned = versionPattern.ReplaceAllString(cleaned, "")    // 🔥 版本标记（REPACK, PROPER等）
+	cleaned = qualityPattern6.ReplaceAllString(cleaned, "")   // 🔥 先移除复杂音频格式（DTS-HDMA, TrueHD, DTS:X等）
+	cleaned = channelPattern.ReplaceAllString(cleaned, "")    // 🔥 移除声道信息（7.1, 5.1等）
+	cleaned = qualityPattern8.ReplaceAllString(cleaned, "")   // 🔥 移除多音轨标记（2Audio）
+	cleaned = otherQualityPattern.ReplaceAllString(cleaned, "") // 🔥 移除UHD, 4K, 8K
+	cleaned = qualityPattern1.ReplaceAllString(cleaned, "")   // 分辨率
+	cleaned = qualityPattern2.ReplaceAllString(cleaned, "")   // 来源（REMUX, BluRay等）
+	cleaned = qualityPattern3.ReplaceAllString(cleaned, "")   // 编码（AV1, VP9, HEVC等）
+	cleaned = qualityPattern4.ReplaceAllString(cleaned, "")   // 基础音视频格式
+	cleaned = qualityPattern7.ReplaceAllString(cleaned, "")   // 位深
+	cleaned = qualityPattern5.ReplaceAllString(cleaned, "")   // 发布组名（最后清理）
 
 	// 3. 优先提取中文部分（如果存在混合的英文和中文）
 	// 匹配中文名称，移除英文部分
 	if containsChinese(cleaned) {
 		// 如果包含中文，尝试提取纯中文部分或中文为主的部分
-		// 匹配模式：移除前面的纯英文单词和点号
-		chinesePattern := regexp.MustCompile(`^[A-Za-z0-9.\s-]+(.*)$`)
-		if matches := chinesePattern.FindStringSubmatch(cleaned); len(matches) > 1 && containsChinese(matches[1]) {
+		// 使用预编译的正则匹配模式
+		if matches := chineseExtractPattern.FindStringSubmatch(cleaned); len(matches) > 1 && containsChinese(matches[1]) {
 			cleaned = matches[1]
 		}
 
@@ -67,8 +110,7 @@ func CleanShowName(name string) string {
 		}
 	}
 
-	// 4. 移除季度后缀信息（第X季、Season X等）
-	seasonSuffixPattern := regexp.MustCompile(`[.\s]*(?:第[零一二三四五六七八九十百\d]+季|[Ss]eason[\s_-]?\d+|[Ss]\d{1,2}).*$`)
+	// 4. 移除季度后缀信息（使用预编译的正则）
 	cleaned = seasonSuffixPattern.ReplaceAllString(cleaned, "")
 
 	// 5. 移除常见的后缀信息
