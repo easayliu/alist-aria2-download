@@ -34,6 +34,10 @@ var (
 	qualityPattern8 = regexp.MustCompile(`(?i)\d+Audio`)                                      // 多音轨（2Audio等）
 	otherQualityPattern = regexp.MustCompile(`(?i)UHD|4K|8K`)                                 // 超高清标记
 
+	// 🔥 多余的描述信息模式（多音轨、字幕等）
+	descriptorPattern = regexp.MustCompile(`(?i)[.\s]*(国台粤英?|国粤英?|国英|台英|粤英|多音轨|特效字幕|中[英日韩法]?字幕|内嵌?字幕|双语字幕|简[繁]?[中英日]?字幕|无字幕)[.\s]*`)
+	qualityDescPattern = regexp.MustCompile(`(?i)[.\s]*(高清|超清|蓝光|原盘|修复版|导演剪辑版|加长版|未删减版|完整版)[.\s]*`)
+
 	// 🔥 年份模式（独立的4位数年份：1900-2099）
 	yearPattern = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
 	// 🔥 年份范围模式（如1997-2012, 2002-2003）
@@ -73,6 +77,8 @@ func CleanShowName(name string) string {
 	// 2. 移除视频质量和编码信息（按从复杂到简单的顺序）
 	cleaned = yearRangePattern.ReplaceAllString(cleaned, "")  // 🔥 先移除年份范围（避免与单独年份冲突）
 	cleaned = yearPattern.ReplaceAllString(cleaned, "")       // 🔥 移除年份
+	cleaned = descriptorPattern.ReplaceAllString(cleaned, "") // 🔥 移除多余描述信息（多音轨、字幕等）
+	cleaned = qualityDescPattern.ReplaceAllString(cleaned, "") // 🔥 移除质量描述（高清、蓝光等）
 	cleaned = versionPattern.ReplaceAllString(cleaned, "")    // 🔥 版本标记（REPACK, PROPER等）
 	cleaned = qualityPattern6.ReplaceAllString(cleaned, "")   // 🔥 先移除复杂音频格式（DTS-HDMA, TrueHD, DTS:X等）
 	cleaned = channelPattern.ReplaceAllString(cleaned, "")    // 🔥 移除声道信息（7.1, 5.1等）
@@ -127,8 +133,19 @@ func CleanShowName(name string) string {
 		}
 	}
 
-	// 6. 移除多余的点号、冒号和其他特殊字符
-	cleaned = strings.ReplaceAll(cleaned, ".", "")
+	// 6. 智能处理点号和特殊字符
+	// 对于包含中文的情况，保留点号（如：玩具总动员.1-4+番外）
+	// 对于纯英文的情况，可以移除点号
+	if containsChinese(cleaned) {
+		// 保留点号，只移除多余的连续点号
+		cleaned = regexp.MustCompile(`\.{2,}`).ReplaceAllString(cleaned, ".")
+		// 移除开头和结尾的点号
+		cleaned = strings.Trim(cleaned, ".")
+	} else {
+		// 纯英文内容，移除所有点号
+		cleaned = strings.ReplaceAll(cleaned, ".", "")
+	}
+
 	cleaned = strings.ReplaceAll(cleaned, ":", "")   // 英文冒号
 	cleaned = strings.ReplaceAll(cleaned, "：", "")  // 中文冒号
 	cleaned = strings.ReplaceAll(cleaned, "·", "")   // 中文间隔号

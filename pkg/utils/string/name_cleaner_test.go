@@ -60,6 +60,31 @@ func TestCleanShowName(t *testing.T) {
 			input:    "",
 			expected: "",
 		},
+		{
+			name:     "带多音轨和字幕描述",
+			input:    "玩具总动员.1-4+番外.国台粤英多音轨.特效字幕.4k",
+			expected: "玩具总动员.1-4+番外",
+		},
+		{
+			name:     "带多音轨标记",
+			input:    "电影名称.国粤英.4K.BluRay.2160p",
+			expected: "电影名称",
+		},
+		{
+			name:     "带特效字幕",
+			input:    "影片名.特效字幕.1080p.WEB-DL",
+			expected: "影片名",
+		},
+		{
+			name:     "复杂的多音轨字幕组合",
+			input:    "电视剧.S01.国台粤英.特效字幕.蓝光.2160p.10bit",
+			expected: "电视剧",
+		},
+		{
+			name:     "仅带多音轨无其他信息",
+			input:    "节目名称.国英多音轨",
+			expected: "节目名称",
+		},
 	}
 
 	for _, tt := range tests {
