@@ -82,7 +82,7 @@ func (e *VariableExtractor) ExtractVariables(
 	// 6. 文件扩展名
 	vars["ext"] = filepath.Ext(file.Name)
 
-	logger.Debug("提取变量完成",
+	logger.Debug("Variable extraction completed",
 		"filename", file.Name,
 		"category", vars["category"],
 		"show", vars["show"],
@@ -103,7 +103,7 @@ func (e *VariableExtractor) extractShowName(path string) string {
 			afterPattern := path[idx+len(pattern):]
 			parts := strings.Split(afterPattern, "/")
 
-			// 🔥 新逻辑：跳过常见分类目录和年份目录
+			// 跳过常见分类目录和年份目录
 			for _, part := range parts {
 				if part == "" {
 					continue
@@ -111,16 +111,16 @@ func (e *VariableExtractor) extractShowName(path string) string {
 
 				// 使用增强的跳过检测（包含年份）
 				if pathutil.ShouldSkipDirectoryAdvanced(part) {
-					logger.Debug("跳过节目分类目录", "目录", part)
+					logger.Debug("Skipping category directory", "dir", part)
 					continue
 				}
 
 				// 找到第一个非分类目录，作为节目名
 				cleaned := e.cleanShowName(part)
-				logger.Debug("节目名称提取成功",
-					"原始路径", path,
-					"提取部分", part,
-					"清理后", cleaned)
+				logger.Debug("Show name extracted",
+					"path", path,
+					"part", part,
+					"cleaned", cleaned)
 				return cleaned
 			}
 		}
@@ -128,16 +128,16 @@ func (e *VariableExtractor) extractShowName(path string) string {
 
 	// 回退：使用父目录名
 	baseName := filepath.Base(filepath.Dir(path))
-	logger.Debug("节目名称使用回退逻辑",
-		"原始路径", path,
-		"父目录", baseName)
+	logger.Debug("Using fallback for show name",
+		"path", path,
+		"parentDir", baseName)
 	return baseName
 }
 
 // cleanShowName 清理节目名称（使用公共工具函数）
 func (e *VariableExtractor) cleanShowName(name string) string {
 	cleaned := strutil.CleanShowName(name)
-	logger.Debug("✅ 节目名清理完成", "原名", name, "清理后", cleaned)
+	logger.Debug("Show name cleaned", "original", name, "cleaned", cleaned)
 	return cleaned
 }
 
@@ -181,7 +181,7 @@ func (e *VariableExtractor) extractMovieTitle(path string) string {
 		afterMovies := path[idx+8:] // "/movies/" 长度为8
 		parts := strings.Split(afterMovies, "/")
 
-		// 🔥 新逻辑：跳过常见分类目录和年份目录
+		// 跳过常见分类目录和年份目录
 		for _, part := range parts {
 			if part == "" {
 				continue
@@ -189,16 +189,16 @@ func (e *VariableExtractor) extractMovieTitle(path string) string {
 
 			// 使用增强的跳过检测（包含年份）
 			if pathutil.ShouldSkipDirectoryAdvanced(part) {
-				logger.Debug("跳过电影分类目录", "目录", part)
+				logger.Debug("Skipping movie category directory", "dir", part)
 				continue
 			}
 
 			// 找到第一个非分类目录，作为电影名
 			cleaned := e.cleanMovieTitle(part)
-			logger.Debug("电影标题提取成功",
-				"原始路径", path,
-				"提取部分", part,
-				"清理后", cleaned)
+			logger.Debug("Movie title extracted",
+				"path", path,
+				"part", part,
+				"cleaned", cleaned)
 			return cleaned
 		}
 	}
@@ -207,10 +207,10 @@ func (e *VariableExtractor) extractMovieTitle(path string) string {
 	basename := filepath.Base(path)
 	basename = strings.TrimSuffix(basename, filepath.Ext(basename))
 	cleaned := e.cleanMovieTitle(basename)
-	logger.Debug("电影标题使用回退逻辑",
-		"原始路径", path,
-		"文件名", basename,
-		"清理后", cleaned)
+	logger.Debug("Using fallback for movie title",
+		"path", path,
+		"basename", basename,
+		"cleaned", cleaned)
 	return cleaned
 }
 
@@ -225,7 +225,7 @@ func (e *VariableExtractor) cleanMovieTitle(title string) string {
 	// - 移除季度信息
 	// - 提取中文部分
 	cleaned := strutil.CleanShowName(title)
-	logger.Debug("电影标题清理完成", "原标题", title, "清理后", cleaned)
+	logger.Debug("Movie title cleaned", "original", title, "cleaned", cleaned)
 	return cleaned
 }
 

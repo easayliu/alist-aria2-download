@@ -12,14 +12,14 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// MenuCallbacks 菜单回调处理器
+// MenuCallbacks menu callback handler
 type MenuCallbacks struct {
 	downloadService contracts.DownloadService
 	config          *config.Config
 	messageUtils    types.MessageSender
 }
 
-// NewMenuCallbacks 创建菜单回调处理器
+// NewMenuCallbacks creates menu callback handler
 func NewMenuCallbacks(downloadService contracts.DownloadService, config *config.Config, messageUtils types.MessageSender) *MenuCallbacks {
 	return &MenuCallbacks{
 		downloadService: downloadService,
@@ -28,7 +28,7 @@ func NewMenuCallbacks(downloadService contracts.DownloadService, config *config.
 	}
 }
 
-// HandleStartWithEdit 处理开始命令（支持消息编辑）
+// HandleStartWithEdit handles start command (supports message editing)
 func (mc *MenuCallbacks) HandleStartWithEdit(chatID int64, messageID int) {
 	// 使用统一格式化器
 	if msgUtils, ok := mc.messageUtils.(*utils.MessageUtils); ok {
@@ -79,7 +79,7 @@ func (mc *MenuCallbacks) HandleStartWithEdit(chatID int64, messageID int) {
 	mc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleHelpWithEdit 处理帮助命令（支持消息编辑）
+// HandleHelpWithEdit handles help command (supports message editing)
 func (mc *MenuCallbacks) HandleHelpWithEdit(chatID int64, messageID int) {
 	message := "<b>使用帮助</b>\n\n" +
 		"<b>快捷按钮:</b>\n" +
@@ -124,7 +124,7 @@ func (mc *MenuCallbacks) HandleHelpWithEdit(chatID int64, messageID int) {
 	mc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleStatusWithEdit 处理状态命令（支持消息编辑）
+// HandleStatusWithEdit handles status command (supports message editing)
 func (mc *MenuCallbacks) HandleStatusWithEdit(chatID int64, messageID int) {
 	ctx := context.Background()
 	status, err := mc.downloadService.GetSystemStatus(ctx)
@@ -163,7 +163,7 @@ func (mc *MenuCallbacks) HandleStatusWithEdit(chatID int64, messageID int) {
 	mc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleManageWithEdit 处理管理面板（支持消息编辑）
+// HandleManageWithEdit handles management panel (supports message editing)
 func (mc *MenuCallbacks) HandleManageWithEdit(chatID int64, messageID int) {
 	var message string
 	// 使用统一格式化器
@@ -193,7 +193,7 @@ func (mc *MenuCallbacks) HandleManageWithEdit(chatID int64, messageID int) {
 	mc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleDownloadMenuWithEdit 处理下载管理菜单（支持消息编辑）
+// HandleDownloadMenuWithEdit handles download management menu (supports message editing)
 func (mc *MenuCallbacks) HandleDownloadMenuWithEdit(chatID int64, messageID int) {
 	message := "<b>下载管理中心</b>\n\n" +
 		"<b>可用功能:</b>\n" +
@@ -224,7 +224,7 @@ func (mc *MenuCallbacks) HandleDownloadMenuWithEdit(chatID int64, messageID int)
 	mc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleFilesMenuWithEdit 处理文件浏览菜单（支持消息编辑）
+// HandleFilesMenuWithEdit handles file browsing menu (supports message editing)
 func (mc *MenuCallbacks) HandleFilesMenuWithEdit(chatID int64, messageID int) {
 	var message string
 	// 使用统一格式化器
@@ -262,7 +262,7 @@ func (mc *MenuCallbacks) HandleFilesMenuWithEdit(chatID int64, messageID int) {
 	mc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleSystemMenuWithEdit 处理系统管理菜单（支持消息编辑）
+// HandleSystemMenuWithEdit handles system management menu (supports message editing)
 func (mc *MenuCallbacks) HandleSystemMenuWithEdit(chatID int64, messageID int) {
 	message := "<b>系统管理中心</b>\n\n" +
 		"<b>可用功能:</b>\n" +
@@ -289,7 +289,7 @@ func (mc *MenuCallbacks) HandleSystemMenuWithEdit(chatID int64, messageID int) {
 	mc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleStatusMenuWithEdit 处理状态监控菜单（支持消息编辑）
+// HandleStatusMenuWithEdit handles status monitoring menu (supports message editing)
 func (mc *MenuCallbacks) HandleStatusMenuWithEdit(chatID int64, messageID int) {
 	message := "<b>状态监控中心</b>\n\n" +
 		"<b>可用功能:</b>\n" +
@@ -319,7 +319,7 @@ func (mc *MenuCallbacks) HandleStatusMenuWithEdit(chatID int64, messageID int) {
 	mc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleSystemInfoWithEdit 处理系统信息（支持消息编辑）
+// HandleSystemInfoWithEdit handles system information (supports message editing)
 func (mc *MenuCallbacks) HandleSystemInfoWithEdit(chatID int64, messageID int) {
 	message := "<b>系统信息</b>\n\n" +
 		"<b>服务状态:</b>\n" +

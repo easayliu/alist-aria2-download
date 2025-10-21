@@ -11,13 +11,13 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// MessageUtils 消息处理工具类
+// MessageUtils message processing utility
 type MessageUtils struct {
 	telegramClient *telegram.Client
 	formatter      *MessageFormatter
 }
 
-// NewMessageUtils 创建消息工具实例
+// NewMessageUtils creates message utility instance
 func NewMessageUtils(telegramClient *telegram.Client) *MessageUtils {
 	return &MessageUtils{
 		telegramClient: telegramClient,
@@ -25,12 +25,12 @@ func NewMessageUtils(telegramClient *telegram.Client) *MessageUtils {
 	}
 }
 
-// GetFormatter 获取消息格式化器 - 返回interface{}避免循环导入
+// GetFormatter gets message formatter - returns interface{} to avoid circular import
 func (mu *MessageUtils) GetFormatter() interface{} {
 	return mu.formatter
 }
 
-// SendMessage 发送基础消息
+// SendMessage sends basic message
 func (mu *MessageUtils) SendMessage(chatID int64, text string) {
 	if mu.telegramClient != nil {
 		messages := mu.SplitMessage(text, 4000) // 留一些余量
@@ -42,7 +42,7 @@ func (mu *MessageUtils) SendMessage(chatID int64, text string) {
 	}
 }
 
-// SendMessageHTML 发送HTML格式消息
+// SendMessageHTML sends HTML formatted message
 func (mu *MessageUtils) SendMessageHTML(chatID int64, text string) {
 	if mu.telegramClient != nil {
 		messages := mu.SplitMessage(text, 4000) // 留一些余量
@@ -54,7 +54,7 @@ func (mu *MessageUtils) SendMessageHTML(chatID int64, text string) {
 	}
 }
 
-// SendMessageHTMLWithAutoDelete 发送HTML格式消息并在指定时间后自动删除
+// SendMessageHTMLWithAutoDelete sends HTML formatted message with auto deletion
 func (mu *MessageUtils) SendMessageHTMLWithAutoDelete(chatID int64, text string, deleteAfterSeconds int) {
 	if mu.telegramClient != nil {
 		messages := mu.SplitMessage(text, 4000) // 留一些余量
@@ -66,7 +66,7 @@ func (mu *MessageUtils) SendMessageHTMLWithAutoDelete(chatID int64, text string,
 	}
 }
 
-// SendMessageMarkdown 发送Markdown格式消息
+// SendMessageMarkdown sends Markdown formatted message
 func (mu *MessageUtils) SendMessageMarkdown(chatID int64, text string) {
 	if mu.telegramClient != nil {
 		if err := mu.telegramClient.SendMessageWithParseMode(chatID, text, "Markdown"); err != nil {
@@ -75,7 +75,7 @@ func (mu *MessageUtils) SendMessageMarkdown(chatID int64, text string) {
 	}
 }
 
-// SendMessageWithKeyboard 发送带有内联键盘的消息
+// SendMessageWithKeyboard sends message with inline keyboard
 func (mu *MessageUtils) SendMessageWithKeyboard(chatID int64, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) {
 	if mu.telegramClient != nil {
 		messages := mu.SplitMessage(text, 4000) // 留一些余量
@@ -92,7 +92,7 @@ func (mu *MessageUtils) SendMessageWithKeyboard(chatID int64, text, parseMode st
 	}
 }
 
-// SendMessageWithReplyKeyboard 发送带有回复键盘的消息
+// SendMessageWithReplyKeyboard sends message with reply keyboard
 func (mu *MessageUtils) SendMessageWithReplyKeyboard(chatID int64, text string) {
 	if mu.telegramClient != nil && mu.telegramClient.GetBot() != nil {
 		msg := tgbotapi.NewMessage(chatID, text)
@@ -103,7 +103,7 @@ func (mu *MessageUtils) SendMessageWithReplyKeyboard(chatID int64, text string) 
 	}
 }
 
-// EditMessageWithKeyboard 编辑消息并设置键盘
+// EditMessageWithKeyboard edits message and sets keyboard
 func (mu *MessageUtils) EditMessageWithKeyboard(chatID int64, messageID int, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) {
 	if mu.telegramClient != nil && mu.telegramClient.GetBot() != nil {
 		// 编辑消息文本
@@ -124,7 +124,7 @@ func (mu *MessageUtils) EditMessageWithKeyboard(chatID int64, messageID int, tex
 	}
 }
 
-// ClearInlineKeyboard 清除内联键盘
+// ClearInlineKeyboard clears inline keyboard
 func (mu *MessageUtils) ClearInlineKeyboard(chatID int64, messageID int) {
 	if mu.telegramClient == nil || mu.telegramClient.GetBot() == nil {
 		return
@@ -137,7 +137,7 @@ func (mu *MessageUtils) ClearInlineKeyboard(chatID int64, messageID int) {
 	}
 }
 
-// SplitMessage 将长消息按指定长度分割成多个消息
+// SplitMessage splits long messages into multiple messages by specified length
 func (mu *MessageUtils) SplitMessage(text string, maxLength int) []string {
 	if len(text) <= maxLength {
 		return []string{text}
@@ -169,19 +169,19 @@ func (mu *MessageUtils) SplitMessage(text string, maxLength int) []string {
 	return messages
 }
 
-// EscapeHTML 转义HTML特殊字符
+// EscapeHTML escapes HTML special characters
 // 使用统一的工具函数
 func (mu *MessageUtils) EscapeHTML(text string) string {
 	return strutil.EscapeHTML(text)
 }
 
-// FormatFileSize 格式化文件大小
+// FormatFileSize formats file size
 // 使用统一的工具函数
 func (mu *MessageUtils) FormatFileSize(size int64) string {
 	return strutil.FormatFileSize(size)
 }
 
-// GetDefaultReplyKeyboard 获取默认的回复键盘
+// GetDefaultReplyKeyboard gets default reply keyboard
 func (mu *MessageUtils) GetDefaultReplyKeyboard() tgbotapi.ReplyKeyboardMarkup {
 	keyboard := tgbotapi.NewReplyKeyboard(
 		tgbotapi.NewKeyboardButtonRow(
@@ -197,9 +197,9 @@ func (mu *MessageUtils) GetDefaultReplyKeyboard() tgbotapi.ReplyKeyboardMarkup {
 	return keyboard
 }
 
-// ========== 下载结果格式化 ==========
+// ========== Download result formatting ==========
 
-// FormatDownloadDirectoryResult 格式化目录下载结果消息 - 统一格式
+// FormatDownloadDirectoryResult formats directory download result message - unified format
 func (mu *MessageUtils) FormatDownloadDirectoryResult(summary types.DownloadResultSummary) string {
 	// 基础结果消息 - 使用标准格式
 	resultMessage := fmt.Sprintf(
@@ -252,7 +252,7 @@ func (mu *MessageUtils) FormatDownloadDirectoryResult(summary types.DownloadResu
 	return resultMessage
 }
 
-// FormatDownloadSingleFileResult 格式化单文件下载结果消息 - 统一格式
+// FormatDownloadSingleFileResult formats single file download result message - unified format
 func (mu *MessageUtils) FormatDownloadSingleFileResult(fileName, filePath, downloadPath string, success bool, errorMsg string) string {
 	if success {
 		return fmt.Sprintf(
@@ -270,7 +270,7 @@ func (mu *MessageUtils) FormatDownloadSingleFileResult(fileName, filePath, downl
 	}
 }
 
-// DirectoryDownloadResultData 目录下载结果数据
+// DirectoryDownloadResultData directory download result data
 type DirectoryDownloadResultData struct {
 	DirectoryPath string
 	TotalFiles    int
@@ -284,7 +284,7 @@ type DirectoryDownloadResultData struct {
 	FailedFiles   []string
 }
 
-// FormatDirectoryDownloadResult 格式化目录下载结果消息（与/download命令保持一致）
+// FormatDirectoryDownloadResult formats directory download result message (consistent with /download command)
 func (mu *MessageUtils) FormatDirectoryDownloadResult(data DirectoryDownloadResultData) string {
 	// 使用统一格式化器
 	batchData := BatchResultData{

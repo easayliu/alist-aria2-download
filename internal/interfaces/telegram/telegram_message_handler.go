@@ -7,19 +7,19 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// MessageHandler 处理Telegram消息
+// MessageHandler handles Telegram messages
 type MessageHandler struct {
 	controller *TelegramController
 }
 
-// NewMessageHandler 创建新的消息处理器
+// NewMessageHandler creates a new message handler
 func NewMessageHandler(controller *TelegramController) *MessageHandler {
 	return &MessageHandler{
 		controller: controller,
 	}
 }
 
-// HandleMessage 处理消息
+// HandleMessage handles messages
 func (h *MessageHandler) HandleMessage(update *tgbotapi.Update) {
 	msg := update.Message
 	if msg == nil || msg.Text == "" {
@@ -29,7 +29,7 @@ func (h *MessageHandler) HandleMessage(update *tgbotapi.Update) {
 	userID := msg.From.ID
 	chatID := msg.Chat.ID
 
-	// 权限验证
+	// Authorization check
 	if !h.controller.telegramClient.IsAuthorized(userID) {
 		h.controller.messageUtils.SendMessage(chatID, "未授权访问")
 		username := ""
@@ -47,7 +47,7 @@ func (h *MessageHandler) HandleMessage(update *tgbotapi.Update) {
 	}
 	logger.Info("Received telegram command:", "command", command, "from", username, "chatID", chatID)
 
-	// 处理快捷按钮（Reply Keyboard）
+	// Handle quick buttons (Reply Keyboard)
 	switch command {
 	case "定时任务":
 		h.controller.taskCommands.HandleTasks(chatID, msg.From.ID)
@@ -63,7 +63,7 @@ func (h *MessageHandler) HandleMessage(update *tgbotapi.Update) {
 		return
 	}
 
-	// 处理核心斜杠命令
+	// Handle core slash commands
 	switch {
 	case strings.HasPrefix(command, "/start"):
 		h.controller.basicCommands.HandleStart(chatID)

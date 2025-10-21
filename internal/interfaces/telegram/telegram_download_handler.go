@@ -14,7 +14,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// ManualDownloadContext 手动下载上下文（兼容旧版本）
+// ManualDownloadContext manual download context (backward compatible)
 type ManualDownloadContext struct {
 	ChatID      int64
 	Request     manualDownloadRequest
@@ -23,7 +23,7 @@ type ManualDownloadContext struct {
 	CreatedAt   time.Time
 }
 
-// manualDownloadRequest 手动下载请求（兼容旧版本）
+// manualDownloadRequest manual download request (backward compatible)
 type manualDownloadRequest struct {
 	Path      string `json:"path"`
 	StartTime string `json:"start_time"`
@@ -32,23 +32,23 @@ type manualDownloadRequest struct {
 	Preview   bool   `json:"preview"`
 }
 
-// TimeParseResult 时间解析结果
+// TimeParseResult time parsing result
 type TimeParseResult struct {
 	StartTime   time.Time
 	EndTime     time.Time
 	Description string
 }
 
-// DownloadHandler 处理下载相关功能
+// DownloadHandler handles download-related functions
 type DownloadHandler struct {
 	controller *TelegramController
 	
-	// 手动下载上下文管理
+	// Manual download context management
 	manualMutex    sync.Mutex
 	manualContexts map[string]*ManualDownloadContext
 }
 
-// NewDownloadHandler 创建新的下载处理器
+// NewDownloadHandler creates a new download handler
 func NewDownloadHandler(controller *TelegramController) *DownloadHandler {
 	return &DownloadHandler{
 		controller:     controller,
@@ -57,14 +57,14 @@ func NewDownloadHandler(controller *TelegramController) *DownloadHandler {
 }
 
 // ================================
-// 时间解析和手动下载核心功能
+// Time parsing and manual download core functions
 // ================================
 
-// parseTimeArguments 解析时间参数
-// 支持的格式：
-// 1. 数字 - 小时数（如：48）
-// 2. 日期范围 - 两个日期（如：2025-09-01 2025-09-26）
-// 3. 时间范围 - 两个时间戳（如：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z）
+// parseTimeArguments parses time parameters
+// Supported formats:
+// 1. Number - hours (e.g., 48)
+// 2. Date range - two dates (e.g., 2025-09-01 2025-09-26)
+// 3. Time range - two timestamps (e.g., 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z)
 func (h *DownloadHandler) parseTimeArguments(args []string) (*TimeParseResult, error) {
 	if len(args) == 0 {
 		// 默认24小时
@@ -123,7 +123,7 @@ func (h *DownloadHandler) parseTimeArguments(args []string) (*TimeParseResult, e
 	return nil, fmt.Errorf("参数过多，支持的格式：\n• /download\n• /download 48\n• /download 2025-09-01 2025-09-26\n• /download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
 }
 
-// handleManualDownload 处理手动下载功能，支持时间范围参数
+// handleManualDownload handles manual download function with time range parameters
 func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, preview bool) {
 	// 解析时间参数
 	timeResult, err := h.parseTimeArguments(timeArgs)
@@ -284,12 +284,12 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 				Directory:   file.DownloadPath,
 				AutoClassify: true,
 			}
-			
+
 			_, err := h.controller.downloadService.CreateDownload(ctx, downloadReq)
 			if err != nil {
 				failCount++
 				failedFiles = append(failedFiles, file.Name)
-				logger.Error("创建下载任务失败", "file", file.Name, "error", err)
+				logger.Error("Failed to create download task", "file", file.Name, "error", err)
 				continue
 			}
 			successCount++
@@ -315,16 +315,16 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 	}
 }
 
-// HandleQuickPreview 处理快速预览
+// HandleQuickPreview handles quick preview
 func (h *DownloadHandler) HandleQuickPreview(chatID int64, timeArgs []string) {
 	h.handleManualDownload(chatID, timeArgs, true)
 }
 
 // ================================
-// 手动下载上下文管理
+// Manual download context management
 // ================================
 
-// storeManualContext 存储手动下载上下文
+// storeManualContext stores manual download context
 func (h *DownloadHandler) storeManualContext(ctx *ManualDownloadContext) string {
 	h.cleanupManualContexts()
 
@@ -341,7 +341,7 @@ func (h *DownloadHandler) storeManualContext(ctx *ManualDownloadContext) string 
 	return token
 }
 
-// getManualContext 获取手动下载上下文
+// getManualContext retrieves manual download context
 func (h *DownloadHandler) getManualContext(token string) (*ManualDownloadContext, bool) {
 	h.manualMutex.Lock()
 	defer h.manualMutex.Unlock()
@@ -356,14 +356,14 @@ func (h *DownloadHandler) getManualContext(token string) (*ManualDownloadContext
 	return &copyCtx, true
 }
 
-// deleteManualContext 删除手动下载上下文
+// deleteManualContext deletes manual download context
 func (h *DownloadHandler) deleteManualContext(token string) {
 	h.manualMutex.Lock()
 	delete(h.manualContexts, token)
 	h.manualMutex.Unlock()
 }
 
-// cleanupManualContexts 清理过期的手动下载上下文
+// cleanupManualContexts cleans up expired manual download contexts
 func (h *DownloadHandler) cleanupManualContexts() {
 	cutoff := time.Now().Add(-10 * time.Minute)
 	h.manualMutex.Lock()
@@ -375,7 +375,7 @@ func (h *DownloadHandler) cleanupManualContexts() {
 	h.manualMutex.Unlock()
 }
 
-// HandleManualConfirm 处理手动下载确认
+// HandleManualConfirm handles manual download confirmation
 func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messageID int) {
 	ctx, ok := h.getManualContext(token)
 	if !ok {
@@ -467,7 +467,7 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 		if err != nil {
 			failCount++
 			failedFiles = append(failedFiles, file.Name)
-			logger.Error("创建下载任务失败", "file", file.Name, "error", err)
+			logger.Error("Failed to create download task", "file", file.Name, "error", err)
 			continue
 		}
 		successCount++

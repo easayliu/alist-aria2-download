@@ -47,11 +47,11 @@ func NewAppFileService(cfg *config.Config, downloadService contracts.DownloadSer
 
 	// 立即初始化 pathStrategy（不需要依赖 downloadService）
 	service.pathStrategy = pathservices.NewPathStrategyService(cfg, service)
-	logger.Debug("PathStrategyService已初始化（NewAppFileService）")
+	logger.Debug("PathStrategyService initialized (NewAppFileService)")
 
 	// 立即初始化 pathGenerator
 	service.pathGenerator = pathservices.NewPathGenerationService(cfg, service.pathStrategy, pathCategory, mediaClassifier)
-	logger.Debug("PathGenerationService已初始化（NewAppFileService）")
+	logger.Debug("PathGenerationService initialized (NewAppFileService)")
 
 	return service
 }
@@ -63,13 +63,13 @@ func (s *AppFileService) SetDownloadService(downloadService contracts.DownloadSe
 	// 初始化路径策略服务（现在可以安全使用 self 引用）
 	if s.pathStrategy == nil {
 		s.pathStrategy = pathservices.NewPathStrategyService(s.config, s)
-		logger.Debug("PathStrategyService已初始化")
+		logger.Debug("PathStrategyService initialized")
 	}
 
 	// 初始化路径生成服务
 	if s.pathGenerator == nil {
 		s.pathGenerator = pathservices.NewPathGenerationService(s.config, s.pathStrategy, s.pathCategory, s.mediaClassifier)
-		logger.Debug("PathGenerationService已初始化")
+		logger.Debug("PathGenerationService initialized")
 	}
 }
 
@@ -162,7 +162,7 @@ func (s *AppFileService) convertToFileResponse(item alist.FileItem, basePath str
 		category := s.pathCategory.GetCategoryFromPathWithFallback(fullPath, item.Name, s.GetFileCategory)
 		resp.MediaType = category
 		resp.Category = category
-		logger.Debug("文件分类完成", "file", item.Name, "category", category)
+		logger.Debug("File classification completed", "file", item.Name, "category", category)
 
 		resp.DownloadPath = s.GenerateDownloadPath(resp)
 

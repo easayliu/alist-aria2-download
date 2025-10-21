@@ -11,12 +11,12 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// StatusHandler 处理状态查询相关功能
+// StatusHandler handles status query related functions
 type StatusHandler struct {
 	controller *TelegramController
 }
 
-// NewStatusHandler 创建新的状态处理器
+// NewStatusHandler creates a new status handler
 func NewStatusHandler(controller *TelegramController) *StatusHandler {
 	return &StatusHandler{
 		controller: controller,
@@ -24,14 +24,14 @@ func NewStatusHandler(controller *TelegramController) *StatusHandler {
 }
 
 // ================================
-// 下载状态功能
+// Download Status Functions
 // ================================
 
-// HandleDownloadStatusAPIWithEdit 处理下载状态API（支持消息编辑）
+// HandleDownloadStatusAPIWithEdit handles download status API (supports message editing)
 func (h *StatusHandler) HandleDownloadStatusAPIWithEdit(chatID int64, messageID int) {
 	ctx := context.Background()
 	listReq := contracts.DownloadListRequest{
-		Limit: 100, // 获取最近100个下载
+		Limit: 100,
 	}
 	downloads, err := h.controller.downloadService.ListDownloads(ctx, listReq)
 	if err != nil {
@@ -46,10 +46,10 @@ func (h *StatusHandler) HandleDownloadStatusAPIWithEdit(chatID int64, messageID 
 		return
 	}
 
-	// 构建下载列表数据
+	// Build download list data
 	var downloadItems []utils.DownloadItemData
 	for _, d := range downloads.Downloads {
-		// 获取状态emoji
+		// Get status emoji
 		statusEmoji := "❓"
 		switch string(d.Status) {
 		case "active", "running":
@@ -95,12 +95,12 @@ func (h *StatusHandler) HandleDownloadStatusAPIWithEdit(chatID int64, messageID 
 }
 
 // ================================
-// Alist和健康检查功能
+// Alist and Health Check Functions
 // ================================
 
-// HandleAlistLoginWithEdit 处理Alist登录（支持消息编辑）
+// HandleAlistLoginWithEdit handles Alist login (supports message editing)
 func (h *StatusHandler) HandleAlistLoginWithEdit(chatID int64, messageID int) {
-	// 显示正在测试连接的消息
+	// Display testing connection message
 	loadingMessage := "正在测试Alist连接..."
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -109,20 +109,20 @@ func (h *StatusHandler) HandleAlistLoginWithEdit(chatID int64, messageID int) {
 	)
 	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, loadingMessage, "HTML", &keyboard)
 
-	// 创建Alist客户端
+	// Create Alist client
 	alistClient := alist.NewClient(
 		h.controller.config.Alist.BaseURL,
 		h.controller.config.Alist.Username,
 		h.controller.config.Alist.Password,
 	)
 
-	// 清除现有token强制重新登录
+	// Clear existing token to force re-login
 	alistClient.ClearToken()
 
-	// 通过调用API测试连接和登录（客户端会自动处理token刷新）
+	// Test connection and login by calling API (client handles token refresh automatically)
 	_, err := alistClient.ListFiles("/", 1, 1)
 
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	var message string
 
@@ -155,9 +155,9 @@ func (h *StatusHandler) HandleAlistLoginWithEdit(chatID int64, messageID int) {
 	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &finalKeyboard)
 }
 
-// HandleHealthCheckWithEdit 处理健康检查（支持消息编辑）
+// HandleHealthCheckWithEdit handles health check (supports message editing)
 func (h *StatusHandler) HandleHealthCheckWithEdit(chatID int64, messageID int) {
-	// 构建系统健康检查数据
+	// Build system health check data
 	var telegramStatus string
 	var telegramUsers, telegramAdmins int
 
@@ -169,7 +169,7 @@ func (h *StatusHandler) HandleHealthCheckWithEdit(chatID int64, messageID int) {
 		telegramStatus = "❌ 未启用"
 	}
 
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	data := utils.SystemStatusData{
 		ServiceStatus:  "✅ 正常运行",
@@ -188,7 +188,7 @@ func (h *StatusHandler) HandleHealthCheckWithEdit(chatID int64, messageID int) {
 
 	message := formatter.FormatSystemStatus(data)
 
-	// 添加运行时信息
+	// Add runtime information
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
@@ -221,16 +221,16 @@ func (h *StatusHandler) HandleHealthCheckWithEdit(chatID int64, messageID int) {
 }
 
 // ================================
-// 状态监控功能
+// Status Monitoring Functions
 // ================================
 
-// HandleStatusRealtimeWithEdit 处理实时状态（支持消息编辑）
+// HandleStatusRealtimeWithEdit handles real-time status (supports message editing)
 func (h *StatusHandler) HandleStatusRealtimeWithEdit(chatID int64, messageID int) {
-	// 获取当前下载状态
+	// Get current download status
 	h.HandleDownloadStatusAPIWithEdit(chatID, messageID)
 }
 
-// HandleStatusStorageWithEdit 处理存储状态监控（支持消息编辑）
+// HandleStatusStorageWithEdit handles storage status monitoring (supports message editing)
 func (h *StatusHandler) HandleStatusStorageWithEdit(chatID int64, messageID int) {
 	message := "<b>存储状态监控</b>\n\n" +
 		"<b>存储信息:</b>\n" +
@@ -255,7 +255,7 @@ func (h *StatusHandler) HandleStatusStorageWithEdit(chatID int64, messageID int)
 	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleStatusHistoryWithEdit 处理历史统计数据（支持消息编辑）
+// HandleStatusHistoryWithEdit handles historical statistics (supports message editing)
 func (h *StatusHandler) HandleStatusHistoryWithEdit(chatID int64, messageID int) {
 	message := "<b>历史统计数据</b>\n\n" +
 		"<b>下载历史:</b>\n" +

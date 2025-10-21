@@ -83,7 +83,7 @@ func (s *PathStrategyService) GenerateDownloadPath(
 			downloadPath = path
 			logger.Debug("Path mapped by rules", "path", downloadPath)
 		} else {
-			logger.Debug("No mapping rule matched, fallback to other mode", "error", err)
+			logger.Debug("No mapping rule matched, using fallback", "error", err)
 			// 回退到模板或智能模式
 			s.useMappingMode = false
 		}
@@ -113,7 +113,7 @@ func (s *PathStrategyService) GenerateDownloadPath(
 	// 2. 路径验证和清理
 	cleanPath, err := s.pathValidator.ValidateAndClean(downloadPath)
 	if err != nil {
-		logger.Warn("路径验证失败，使用回退路径",
+		logger.Warn("Path validation failed, using fallback",
 			"original", downloadPath,
 			"error", err)
 
@@ -126,7 +126,7 @@ func (s *PathStrategyService) GenerateDownloadPath(
 		// 检查重复下载
 		if s.conflictDetector.ShouldSkipDuplicate() {
 			if record, err := s.conflictDetector.CheckDuplicateDownload(file.Path); err != nil {
-				logger.Warn("检测到重复下载",
+				logger.Warn("Duplicate download detected",
 					"file", file.Path,
 					"previous_download", record.DownloadedAt)
 				return "", err
@@ -141,7 +141,7 @@ func (s *PathStrategyService) GenerateDownloadPath(
 		}
 
 		if conflict, err := s.conflictDetector.CheckPathConflict(cleanPath, mediaType); conflict {
-			logger.Warn("检测到路径冲突", "path", cleanPath, "error", err)
+			logger.Warn("Path conflict detected", "path", cleanPath, "error", err)
 
 			// 根据策略解决冲突
 			policy := s.conflictDetector.GetConflictPolicy()
@@ -155,7 +155,7 @@ func (s *PathStrategyService) GenerateDownloadPath(
 	// 4. 确保目录存在
 	downloadDir := filepath.Dir(cleanPath)
 	if err := s.directoryMgr.EnsureDirectory(downloadDir); err != nil {
-		logger.Error("确保目录失败",
+		logger.Error("Failed to ensure directory",
 			"dir", downloadDir,
 			"error", err)
 		return "", err
@@ -173,7 +173,7 @@ func (s *PathStrategyService) PrepareDownloadDirectory(
 	baseDir string,
 	totalSize int64,
 ) error {
-	logger.Info("准备下载目录",
+	logger.Info("Preparing download directory",
 		"baseDir", baseDir,
 		"totalSize", strutil.FormatFileSize(totalSize))
 

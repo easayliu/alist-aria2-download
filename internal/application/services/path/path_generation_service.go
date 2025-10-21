@@ -127,14 +127,14 @@ func (s *PathGenerationService) extractPathStructure(filePath, pathCategory, bas
 	}
 
 	if keywordFound == "" {
-		logger.Warn("未找到匹配的关键词", "filePath", filePath, "pathCategory", pathCategory)
+		logger.Warn("No matching keyword found", "filePath", filePath, "pathCategory", pathCategory)
 		return ""
 	}
 
 	// 在原始路径中找到关键词的位置
 	keywordIndex := strings.Index(pathLower, keywordFound)
 	if keywordIndex == -1 {
-		logger.Warn("无法在原始路径中找到关键词位置", "filePath", filePath, "keywordFound", keywordFound)
+		logger.Warn("Unable to find keyword position in path", "filePath", filePath, "keywordFound", keywordFound)
 		return ""
 	}
 
@@ -164,11 +164,11 @@ func (s *PathGenerationService) extractPathStructure(filePath, pathCategory, bas
 				cleanedShowName := strutil.CleanShowName(afterKeyword)
 				seasonCode := strutil.FormatSeason(seasonNumber)
 				targetDir := pathutil.JoinPath(baseDir, targetCategoryDir, cleanedShowName, seasonCode)
-				logger.Info("从目录名提取季度信息",
-					"原始名称", afterKeyword,
-					"节目名", cleanedShowName,
-					"季度", seasonCode,
-					"目标路径", targetDir)
+				logger.Info("Extracted season info from directory name",
+					"original", afterKeyword,
+					"showName", cleanedShowName,
+					"season", seasonCode,
+					"targetPath", targetDir)
 				return targetDir
 			}
 		}
@@ -178,10 +178,10 @@ func (s *PathGenerationService) extractPathStructure(filePath, pathCategory, bas
 		if cleanedDirName != "" && cleanedDirName != afterKeyword {
 			// 清理成功，使用清理后的名称
 			targetDir := pathutil.JoinPath(baseDir, targetCategoryDir, cleanedDirName)
-			logger.Info("清理目录名",
-				"原始名称", afterKeyword,
-				"清理后", cleanedDirName,
-				"目标路径", targetDir)
+			logger.Info("Cleaned directory name",
+				"original", afterKeyword,
+				"cleaned", cleanedDirName,
+				"targetPath", targetDir)
 			return targetDir
 		}
 		// 如果清理失败，使用默认目录
@@ -261,7 +261,7 @@ func (s *PathGenerationService) generateSmartTVPath(filePath, baseDir string) st
 	pathLower := strings.ToLower(filePath)
 	tvsIndex := strings.Index(pathLower, "tvs")
 	if tvsIndex == -1 {
-		logger.Warn("路径中未找到tvs关键词", "filePath", filePath)
+		logger.Warn("TVS keyword not found in path", "filePath", filePath)
 		return ""
 	}
 
@@ -273,7 +273,7 @@ func (s *PathGenerationService) generateSmartTVPath(filePath, baseDir string) st
 
 	pathParts := strings.Split(afterTvs, "/")
 	if len(pathParts) < 1 {
-		logger.Warn("TV路径结构不完整", "afterTvs", afterTvs, "parts", pathParts)
+		logger.Warn("Incomplete TV path structure", "afterTvs", afterTvs, "parts", pathParts)
 		return ""
 	}
 
@@ -304,13 +304,13 @@ func (s *PathGenerationService) generateSmartTVPath(filePath, baseDir string) st
 			seasonCode := fmt.Sprintf("S%02d", seasonNumber)
 			smartPath = pathutil.JoinPath(baseDir, "tvs", baseShowName, seasonCode)
 
-			logger.Info("从目录生成季度路径",
-				"原路径", filePath,
-				"基础节目名", baseShowName,
-				"季度目录", currentDir,
-				"季度", seasonNumber,
-				"季度代码", seasonCode,
-				"智能路径", smartPath)
+			logger.Info("Generated season path from directory",
+				"originalPath", filePath,
+				"baseShowName", baseShowName,
+				"seasonDir", currentDir,
+				"season", seasonNumber,
+				"seasonCode", seasonCode,
+				"smartPath", smartPath)
 
 			return smartPath
 		}
@@ -325,11 +325,11 @@ func (s *PathGenerationService) generateSmartTVPath(filePath, baseDir string) st
 			extractedShowName := strutil.CleanShowName(currentDir)
 			if extractedShowName != "" {
 				smartPath = pathutil.JoinPath(baseDir, "tvs", baseShowName, extractedShowName)
-				logger.Info("使用特殊节目名生成路径",
-					"原路径", filePath,
-					"基础节目名", baseShowName,
-					"特殊节目", extractedShowName,
-					"智能路径", smartPath)
+				logger.Info("Generated path using special show name",
+					"originalPath", filePath,
+					"baseShowName", baseShowName,
+					"specialShow", extractedShowName,
+					"smartPath", smartPath)
 				return smartPath
 			}
 		}
@@ -337,10 +337,10 @@ func (s *PathGenerationService) generateSmartTVPath(filePath, baseDir string) st
 
 	// 没有找到季度信息，返回基础节目名路径
 	smartPath = pathutil.JoinPath(baseDir, "tvs", baseShowName)
-	logger.Info("未找到季度信息，使用基础节目名",
-		"原路径", filePath,
-		"节目名", baseShowName,
-		"智能路径", smartPath)
+	logger.Info("Season info not found, using base show name",
+		"originalPath", filePath,
+		"showName", baseShowName,
+		"smartPath", smartPath)
 
 	return smartPath
 }

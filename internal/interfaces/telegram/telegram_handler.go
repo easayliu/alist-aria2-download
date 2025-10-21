@@ -6,14 +6,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TelegramHandler 兼容性包装器
-// 保持与旧版本完全相同的公共接口，确保兼容性
+// TelegramHandler is a compatibility wrapper
+// Maintains the exact same public interface as legacy version to ensure compatibility
 type TelegramHandler struct {
 	controller *TelegramController
 }
 
-// NewTelegramHandler 创建新的 Telegram 处理器（兼容性接口）
-// 保持与原版本完全相同的函数签名
+// NewTelegramHandler creates a new Telegram handler (compatibility interface)
+// Maintains exact same function signature as the legacy version
 func NewTelegramHandler(cfg *config.Config, notificationService *services.NotificationService, fileService *services.FileService, schedulerService *services.SchedulerService) *TelegramHandler {
 	controller := NewTelegramController(cfg, notificationService, fileService, schedulerService)
 	return &TelegramHandler{
@@ -22,34 +22,34 @@ func NewTelegramHandler(cfg *config.Config, notificationService *services.Notifi
 }
 
 // ================================
-// 公共接口委托 - 保持完全兼容性
+// Public interface delegation - maintains full compatibility
 // ================================
 
-// Webhook 处理 Webhook 请求（委托给控制器）
+// Webhook handles webhook requests (delegates to internal controller)
 func (h *TelegramHandler) Webhook(c *gin.Context) {
 	h.controller.Webhook(c)
 }
 
-// StartPolling 开始轮询（委托给控制器）
+// StartPolling starts update polling (delegates to internal controller)
 func (h *TelegramHandler) StartPolling() {
 	h.controller.StartPolling()
 }
 
-// StopPolling 停止轮询（委托给控制器）
+// StopPolling stops update polling (delegates to internal controller)
 func (h *TelegramHandler) StopPolling() {
 	h.controller.StopPolling()
 }
 
-// FormatFileSize 格式化文件大小（委托给控制器）
+// FormatFileSize formats file size (delegates to internal controller)
 func (h *TelegramHandler) FormatFileSize(size int64) string {
 	return h.controller.FormatFileSize(size)
 }
 
 // ================================
-// 内部访问器 - 供测试和调试使用
+// Internal accessors - for testing and debugging only
 // ================================
 
-// GetController 获取内部控制器（用于测试和调试）
+// GetController provides access to internal controller (for testing and debugging)
 func (h *TelegramHandler) GetController() *TelegramController {
 	return h.controller
 }

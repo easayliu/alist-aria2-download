@@ -99,14 +99,14 @@ func (e *PathMappingEngine) loadDefaultRules() {
 	}
 
 	e.rules = append(e.rules, defaultRules...)
-	logger.Info("加载默认映射规则", "count", len(defaultRules))
+	logger.Info("Default mapping rules loaded", "count", len(defaultRules))
 }
 
 // AddRule 添加规则
 func (e *PathMappingEngine) AddRule(rule *PathMappingRule) {
 	e.rules = append(e.rules, rule)
 	e.sortRules()
-	logger.Info("添加映射规则", "id", rule.ID, "name", rule.Name)
+	logger.Info("Mapping rule added", "id", rule.ID, "name", rule.Name)
 }
 
 // RemoveRule 移除规则
@@ -114,7 +114,7 @@ func (e *PathMappingEngine) RemoveRule(ruleID string) {
 	for i, rule := range e.rules {
 		if rule.ID == ruleID {
 			e.rules = append(e.rules[:i], e.rules[i+1:]...)
-			logger.Info("移除映射规则", "id", ruleID)
+			logger.Info("Mapping rule removed", "id", ruleID)
 			return
 		}
 	}
@@ -132,7 +132,7 @@ func (e *PathMappingEngine) ApplyRules(
 	file contracts.FileResponse,
 	baseDir string,
 ) (string, error) {
-	logger.Debug("开始应用映射规则",
+	logger.Debug("Applying mapping rules",
 		"file", file.Name,
 		"path", file.Path,
 		"rulesCount", len(e.rules))
@@ -144,20 +144,20 @@ func (e *PathMappingEngine) ApplyRules(
 		}
 
 		if e.matchRule(file, rule.SourceMatch) {
-			logger.Info("规则匹配",
+			logger.Info("Rule matched",
 				"rule", rule.Name,
 				"file", file.Name)
 
 			// 应用转换规则
 			path, err := e.applyTransform(file, baseDir, rule.Transform)
 			if err != nil {
-				logger.Warn("规则应用失败",
+				logger.Warn("Rule application failed",
 					"rule", rule.Name,
 					"error", err)
 				continue
 			}
 
-			logger.Info("规则应用成功",
+			logger.Info("Rule applied successfully",
 				"rule", rule.Name,
 				"path", path)
 			return path, nil
@@ -165,7 +165,7 @@ func (e *PathMappingEngine) ApplyRules(
 	}
 
 	// 无匹配规则
-	return "", fmt.Errorf("未找到匹配的映射规则")
+	return "", fmt.Errorf("no matching mapping rule found")
 }
 
 // matchRule 检查文件是否匹配规则
@@ -219,7 +219,7 @@ func (e *PathMappingEngine) matchPath(path, pattern string, isRegex bool) bool {
 		// 正则表达式匹配
 		matched, err := regexp.MatchString(pattern, path)
 		if err != nil {
-			logger.Warn("正则表达式错误", "pattern", pattern, "error", err)
+			logger.Warn("Regex pattern error", "pattern", pattern, "error", err)
 			return false
 		}
 		return matched
@@ -277,7 +277,7 @@ func (e *PathMappingEngine) GetRule(ruleID string) *PathMappingRule {
 func (e *PathMappingEngine) EnableRule(ruleID string) {
 	if rule := e.GetRule(ruleID); rule != nil {
 		rule.Enabled = true
-		logger.Info("启用规则", "id", ruleID)
+		logger.Info("Rule enabled", "id", ruleID)
 	}
 }
 
@@ -285,6 +285,6 @@ func (e *PathMappingEngine) EnableRule(ruleID string) {
 func (e *PathMappingEngine) DisableRule(ruleID string) {
 	if rule := e.GetRule(ruleID); rule != nil {
 		rule.Enabled = false
-		logger.Info("禁用规则", "id", ruleID)
+		logger.Info("Rule disabled", "id", ruleID)
 	}
 }

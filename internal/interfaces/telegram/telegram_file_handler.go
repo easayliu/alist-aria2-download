@@ -12,12 +12,12 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// FileHandler 处理文件浏览相关功能
+// FileHandler handles file browsing functionality
 type FileHandler struct {
 	controller *TelegramController
 }
 
-// NewFileHandler 创建新的文件处理器
+// NewFileHandler creates a new file handler
 func NewFileHandler(controller *TelegramController) *FileHandler {
 	return &FileHandler{
 		controller: controller,
@@ -25,15 +25,15 @@ func NewFileHandler(controller *TelegramController) *FileHandler {
 }
 
 // ================================
-// 文件浏览功能
+// File browsing functionality
 // ================================
 
-// HandleBrowseFiles 处理文件浏览（支持分页和交互）
+// HandleBrowseFiles handles file browsing (supports pagination and interaction)
 func (h *FileHandler) HandleBrowseFiles(chatID int64, path string, page int) {
-	h.HandleBrowseFilesWithEdit(chatID, path, page, 0) // 0 表示发送新消息
+	h.HandleBrowseFilesWithEdit(chatID, path, page, 0) // 0 means send new message
 }
 
-// HandleBrowseFilesWithEdit 处理文件浏览（支持编辑消息和分页）
+// HandleBrowseFilesWithEdit handles file browsing (supports message editing and pagination)
 func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page int, messageID int) {
 	if path == "" {
 		path = "/"
@@ -42,15 +42,15 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 		page = 1
 	}
 
-	// 调试日志
-	logger.Info("浏览文件", "path", path, "page", page, "messageID", messageID)
+	// Debug log
+	logger.Info("Browsing files", "path", path, "page", page, "messageID", messageID)
 
-	// 只在发送新消息时显示提示
+	// Only show prompt when sending new message
 	if messageID == 0 {
 		h.controller.messageUtils.SendMessage(chatID, "正在获取文件列表...")
 	}
 
-	// 获取文件列表 (每页显示8个文件，为按钮布局留出空间)
+	// Get file list (display 8 files per page, leave space for button layout)
 	files, err := h.listFilesSimple(path, page, 8)
 	if err != nil {
 		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
@@ -63,7 +63,7 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 		return
 	}
 
-	// 统计文件信息
+	// Count file information
 	dirCount := 0
 	fileCount := 0
 	videoCount := 0
@@ -78,7 +78,7 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 		}
 	}
 
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	browserData := utils.FileBrowserData{
 		Path:       path,
@@ -93,7 +93,7 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 	message := formatter.FormatFileBrowser(browserData)
 	message += "\n"
 
-	// 构建内联键盘
+	// Build inline keyboard
 	var keyboard [][]tgbotapi.InlineKeyboardButton
 
 	for _, file := range files {
@@ -102,8 +102,8 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 
 		if file.IsDir {
 			prefix = "📁"
-			// 目录点击：进入子目录
-			// 构建完整路径
+			// Directory click: enter subdirectory
+			// Build full path
 			var fullPath string
 			if file.Path != "" {
 				fullPath = file.Path
@@ -117,8 +117,8 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 			callbackData = fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(fullPath), 1)
 		} else if h.controller.fileService.IsVideoFile(file.Name) {
 			prefix = "🎬"
-			// 视频文件点击：显示操作菜单
-			// 构建完整路径
+			// Video file click: show operation menu
+			// Build full path
 			var fullPath string
 			if file.Path != "" {
 				fullPath = file.Path
@@ -132,8 +132,8 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 			callbackData = fmt.Sprintf("file_menu:%s", h.controller.common.EncodeFilePath(fullPath))
 		} else {
 			prefix = "📄"
-			// 其他文件点击：显示操作菜单
-			// 构建完整路径
+			// Other file click: show operation menu
+			// Build full path
 			var fullPath string
 			if file.Path != "" {
 				fullPath = file.Path
@@ -148,15 +148,15 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 		}
 
 		fileName := file.Name
-		// 使用智能截断，考虑中英文字符宽度
-		// 确保按钮宽度与消息内容宽度一致（42字符）
-		// emoji (📁/📄) 约占 2 字符
-		maxWidth := 38  // 目录行: emoji(2) + 空格(1) + 文件名(38) = 41字符
+		// Use smart truncation considering Chinese/English character width
+		// Ensure button width matches message content width (42 characters)
+		// emoji (📁/📄) occupies about 2 characters
+		maxWidth := 38  // Directory row: emoji(2) + space(1) + filename(38) = 41 chars
 		if !file.IsDir {
-			maxWidth = 30 // 文件行: emoji(2) + 空格(1) + 文件名(30) + 按钮(📥约2) = 35字符
+			maxWidth = 30 // File row: emoji(2) + space(1) + filename(30) + button(📥~2) = 35 chars
 		}
 
-		// 使用 formatter 的 TruncateButtonText 方法，考虑 emoji 占用
+		// Use formatter's TruncateButtonText method considering emoji space
 		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 		fileName = formatter.TruncateButtonText(fileName, maxWidth)
 
@@ -165,9 +165,9 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 			callbackData,
 		)
 
-		// 为文件（非目录）添加快捷下载按钮
+		// Add quick download button for files (non-directories)
 		if !file.IsDir {
-			// 文件行：文件名按钮 + 快捷下载按钮
+			// File row: filename button + quick download button
 			var fullPath string
 			if file.Path != "" {
 				fullPath = file.Path
@@ -186,15 +186,15 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 
 			keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button, downloadButton})
 		} else {
-			// 目录行：只有目录按钮，占满整行
+			// Directory row: only directory button occupying full width
 			keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})
 		}
 	}
 
-	// 添加导航按钮
+	// Add navigation buttons
 	navButtons := []tgbotapi.InlineKeyboardButton{}
 
-	// 上一页按钮
+	// Previous page button
 	if page > 1 {
 		navButtons = append(navButtons, tgbotapi.NewInlineKeyboardButtonData(
 			"< 上一页",
@@ -202,7 +202,7 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 		))
 	}
 
-	// 下一页按钮 (如果当前页满了，可能还有下一页)
+	// Next page button (if current page is full, there may be more)
 	if len(files) == 8 {
 		navButtons = append(navButtons, tgbotapi.NewInlineKeyboardButtonData(
 			"下一页 >",
@@ -214,17 +214,17 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 		keyboard = append(keyboard, navButtons)
 	}
 
-	// 添加功能按钮 - 第一行：下载和刷新
+	// Add action buttons - first row: download and refresh
 	actionRow1 := []tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardButtonData("📥 下载目录", fmt.Sprintf("download_dir:%s", h.controller.common.EncodeFilePath(path))),
 		tgbotapi.NewInlineKeyboardButtonData("🔄 刷新", fmt.Sprintf("browse_refresh:%s:%d", h.controller.common.EncodeFilePath(path), page)),
 	}
 	keyboard = append(keyboard, actionRow1)
 
-	// 添加导航按钮 - 第二行：上级目录和主菜单
+	// Add navigation buttons - second row: parent directory and main menu
 	actionRow2 := []tgbotapi.InlineKeyboardButton{}
 
-	// 返回上级目录按钮
+	// Return to parent directory button
 	if path != "/" {
 		parentPath := h.getParentPath(path)
 		actionRow2 = append(actionRow2, tgbotapi.NewInlineKeyboardButtonData(
@@ -233,7 +233,7 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 		))
 	}
 
-	// 返回主菜单按钮
+	// Return to main menu button
 	actionRow2 = append(actionRow2, tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"))
 
 	if len(actionRow2) > 0 {
@@ -243,26 +243,26 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 	inlineKeyboard := tgbotapi.NewInlineKeyboardMarkup(keyboard...)
 
 	if messageID > 0 {
-		// 编辑现有消息
+		// Edit existing message
 		h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &inlineKeyboard)
 	} else {
-		// 发送新消息
+		// Send new message
 		h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &inlineKeyboard)
 	}
 }
 
-// HandleFileMenu 处理文件操作菜单
+// HandleFileMenu handles file operation menu
 func (h *FileHandler) HandleFileMenu(chatID int64, filePath string) {
-	h.HandleFileMenuWithEdit(chatID, filePath, 0) // 0 表示发送新消息
+	h.HandleFileMenuWithEdit(chatID, filePath, 0) // 0 means send new message
 }
 
-// HandleFileMenuWithEdit 处理文件操作菜单（支持消息编辑）
+// HandleFileMenuWithEdit handles file operation menu (supports message editing)
 func (h *FileHandler) HandleFileMenuWithEdit(chatID int64, filePath string, messageID int) {
-	// 获取文件信息
+	// Get file information
 	fileName := filepath.Base(filePath)
 	fileExt := strings.ToLower(filepath.Ext(fileName))
 
-	// 根据文件类型选择图标
+	// Choose icon based on file type
 	var fileIcon string
 	if h.controller.fileService.IsVideoFile(fileName) {
 		fileIcon = "🎬"
@@ -270,7 +270,7 @@ func (h *FileHandler) HandleFileMenuWithEdit(chatID int64, filePath string, mess
 		fileIcon = "📄"
 	}
 
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	fileType := ""
 	if fileExt != "" {
@@ -302,27 +302,27 @@ func (h *FileHandler) HandleFileMenuWithEdit(chatID int64, filePath string, mess
 	)
 
 	if messageID > 0 {
-		// 编辑现有消息
+		// Edit existing message
 		h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 	} else {
-		// 发送新消息
+		// Send new message
 		h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
 	}
 }
 
-// HandleFileDownload 处理文件下载（使用/downloads命令机制）
+// HandleFileDownload handles file download (using /downloads command mechanism)
 func (h *FileHandler) HandleFileDownload(chatID int64, filePath string) {
-	// 直接调用新的基于/downloads命令的文件下载处理函数
+	// Directly call new /downloads command based file download handler
 	h.handleDownloadFileByPath(chatID, filePath)
 }
 
-// handleDownloadFileByPath 通过路径下载单个文件
+// handleDownloadFileByPath downloads a single file by path
 func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
-	// 使用文件服务获取文件信息（统一使用getFilesFromPath确保路径一致性）
+	// Get file info using file service (uniformly use getFilesFromPath to ensure path consistency)
 	parentDir := filepath.Dir(filePath)
 	fileName := filepath.Base(filePath)
 
-	// 使用文件服务的智能分类功能获取文件信息
+	// Get file information using file service's smart classification
 	fileInfo, err := h.getFilesFromPath(parentDir, false)
 	if err != nil {
 		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
@@ -330,7 +330,7 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 		return
 	}
 
-	// 找到对应的文件信息
+	// Find corresponding file information
 	var targetFileInfo *contracts.FileResponse
 	for _, info := range fileInfo {
 		if info.Name == fileName {
@@ -345,7 +345,7 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 		return
 	}
 
-	// 创建下载任务 - 使用contracts接口
+	// Create download task - using contracts interface
 	downloadReq := contracts.DownloadRequest{
 		URL:         targetFileInfo.InternalURL,
 		Filename:    targetFileInfo.Name,
@@ -361,7 +361,7 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 		return
 	}
 
-	// 使用统一格式化器发送成功消息
+	// Use unified formatter to send success message
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	message := formatter.FormatFileDownloadSuccess(utils.FileDownloadSuccessData{
 		Filename:     targetFileInfo.Name,
@@ -385,19 +385,19 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 	h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
 }
 
-// HandleFileInfo 处理文件信息查看
+// HandleFileInfo handles file information viewing
 func (h *FileHandler) HandleFileInfo(chatID int64, filePath string) {
-	h.HandleFileInfoWithEdit(chatID, filePath, 0) // 0 表示发送新消息
+	h.HandleFileInfoWithEdit(chatID, filePath, 0) // 0 means send new message
 }
 
-// HandleFileInfoWithEdit 处理文件信息查看（支持消息编辑）
+// HandleFileInfoWithEdit handles file information viewing (supports message editing)
 func (h *FileHandler) HandleFileInfoWithEdit(chatID int64, filePath string, messageID int) {
-	// 显示加载消息（仅在发送新消息时）
+	// Show loading message (only when sending new message)
 	if messageID == 0 {
 		h.controller.messageUtils.SendMessage(chatID, "正在获取文件信息...")
 	}
 
-	// 获取文件信息
+	// Get file information
 	fileInfo, err := h.listFilesSimple(filepath.Dir(filePath), 1, 1000)
 	if err != nil {
 		message := "获取文件信息失败: " + err.Error()
@@ -414,7 +414,7 @@ func (h *FileHandler) HandleFileInfoWithEdit(chatID int64, filePath string, mess
 		return
 	}
 
-	// 查找对应的文件
+	// Find corresponding file
 	var targetFile *contracts.FileResponse
 	fileName := filepath.Base(filePath)
 	for _, file := range fileInfo {
@@ -439,16 +439,16 @@ func (h *FileHandler) HandleFileInfoWithEdit(chatID int64, filePath string, mess
 		return
 	}
 
-	// 使用文件的修改时间
+	// Use file's modification time
 	modTime := targetFile.Modified
 
-	// 判断文件类型
+	// Determine file type
 	fileType := "其他文件"
 	if h.controller.fileService.IsVideoFile(targetFile.Name) {
 		fileType = "视频文件"
 	}
 
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	infoData := utils.FileInfoData{
 		Icon:       "ℹ️",
@@ -461,10 +461,10 @@ func (h *FileHandler) HandleFileInfoWithEdit(chatID int64, filePath string, mess
 		EscapeHTML: h.controller.messageUtils.EscapeHTML,
 	}
 
-	// 构建信息消息
+	// Build info message
 	message := formatter.FormatFileInfo(infoData)
 
-	// 添加返回按钮
+	// Add return button
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("返回", fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(filepath.Dir(filePath)), 1)),
@@ -478,40 +478,40 @@ func (h *FileHandler) HandleFileInfoWithEdit(chatID int64, filePath string, mess
 	}
 }
 
-// HandleFileLink 处理获取文件链接
+// HandleFileLink handles getting file link
 func (h *FileHandler) HandleFileLink(chatID int64, filePath string) {
-	h.HandleFileLinkWithEdit(chatID, filePath, 0) // 0 表示发送新消息
+	h.HandleFileLinkWithEdit(chatID, filePath, 0) // 0 means send new message
 }
 
-// HandleFileLinkWithEdit 处理获取文件链接（支持消息编辑）
+// HandleFileLinkWithEdit handles getting file link (supports message editing)
 func (h *FileHandler) HandleFileLinkWithEdit(chatID int64, filePath string, messageID int) {
-	// 显示加载消息（仅在发送新消息时）
+	// Show loading message (only when sending new message)
 	if messageID == 0 {
 		h.controller.messageUtils.SendMessage(chatID, "正在获取文件链接...")
 	}
 
-	// 获取文件下载链接
+	// Get file download link
 	downloadURL := h.getFileDownloadURL(filepath.Dir(filePath), filepath.Base(filePath))
 
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	var lines []string
 
-	// 标题
+	// Title
 	lines = append(lines, formatter.FormatTitle("🔗", "文件链接"))
 	lines = append(lines, "")
 
-	// 文件信息
+	// File information
 	lines = append(lines, formatter.FormatFieldCode("文件", h.controller.messageUtils.EscapeHTML(filepath.Base(filePath))))
 	lines = append(lines, "")
 
-	// 下载链接
+	// Download link
 	lines = append(lines, formatter.FormatField("下载链接", ""))
 	lines = append(lines, fmt.Sprintf("<code>%s</code>", h.controller.messageUtils.EscapeHTML(downloadURL)))
 
 	message := strings.Join(lines, "\n")
 
-	// 添加返回按钮
+	// Add return button
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("返回", fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(filepath.Dir(filePath)), 1)),
@@ -525,13 +525,13 @@ func (h *FileHandler) HandleFileLinkWithEdit(chatID int64, filePath string, mess
 	}
 }
 
-// HandleDownloadDirectory 处理目录下载（使用/downloads命令机制）
+// HandleDownloadDirectory handles directory download (using /downloads command mechanism)
 func (h *FileHandler) HandleDownloadDirectory(chatID int64, dirPath string) {
-	// 直接调用新的基于/downloads命令的目录下载处理函数
+	// Directly call new /downloads command based directory download handler
 	h.handleDownloadDirectoryByPath(chatID, dirPath)
 }
 
-// handleDownloadDirectoryByPath 通过路径下载目录 - 使用重构后的新架构
+// handleDownloadDirectoryByPath downloads directory by path - using refactored new architecture
 func (h *FileHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string) {
 	ctx := context.Background()
 
@@ -543,7 +543,7 @@ func (h *FileHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string
 	req := contracts.DirectoryDownloadRequest{
 		DirectoryPath: dirPath,
 		Recursive:     true,
-		VideoOnly:     true,  // 只下载视频文件
+		VideoOnly:     true,  // Only download video files
 		AutoClassify:  true,
 	}
 	
@@ -579,30 +579,30 @@ func (h *FileHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string
 	h.controller.messageUtils.SendMessageHTMLWithAutoDelete(chatID, message, 30)
 }
 
-// sendBatchDownloadResult 发送批量下载结果消息 - 新架构格式
+// sendBatchDownloadResult sends batch download result message - new architecture format
 func (h *FileHandler) sendBatchDownloadResult(chatID int64, dirPath string, result *contracts.BatchDownloadResponse) {
-	// 防止空指针解引用
+	// Prevent nil pointer dereference
 	if result == nil {
 		h.controller.messageUtils.SendMessage(chatID, "❌ 批量下载结果为空")
 		return
 	}
 
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	var lines []string
 
-	// 标题
+	// Title
 	lines = append(lines, formatter.FormatTitle("📊", "目录下载任务创建完成"))
 	lines = append(lines, "")
 
-	// 基本信息
+	// Basic information
 	lines = append(lines, formatter.FormatFieldCode("目录", h.controller.messageUtils.EscapeHTML(dirPath)))
 	lines = append(lines, formatter.FormatField("扫描文件", fmt.Sprintf("%d 个", result.Summary.TotalFiles)))
 	lines = append(lines, formatter.FormatField("视频文件", fmt.Sprintf("%d 个", result.Summary.VideoFiles)))
 	lines = append(lines, formatter.FormatField("成功创建", fmt.Sprintf("%d 个任务", result.SuccessCount)))
 	lines = append(lines, formatter.FormatField("失败", fmt.Sprintf("%d 个任务", result.FailureCount)))
 
-	// 分类统计
+	// Classification statistics
 	if result.Summary.MovieFiles > 0 || result.Summary.TVFiles > 0 {
 		lines = append(lines, "")
 		if result.Summary.MovieFiles > 0 {
@@ -613,7 +613,7 @@ func (h *FileHandler) sendBatchDownloadResult(chatID int64, dirPath string, resu
 		}
 	}
 
-	// 失败文件详情
+	// Failed file details
 	if result.FailureCount > 0 && len(result.Results) <= 3 {
 		lines = append(lines, "")
 		lines = append(lines, formatter.FormatSection("失败的文件"))
@@ -633,7 +633,7 @@ func (h *FileHandler) sendBatchDownloadResult(chatID int64, dirPath string, resu
 		lines = append(lines, fmt.Sprintf("⚠️ 有 %d 个文件下载失败", result.FailureCount))
 	}
 
-	// 成功提示
+	// Success message
 	if result.SuccessCount > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "✅ 所有任务已使用自动路径分类功能")
@@ -641,17 +641,17 @@ func (h *FileHandler) sendBatchDownloadResult(chatID int64, dirPath string, resu
 	}
 
 	message := strings.Join(lines, "\n")
-	// 发送消息，20秒后自动删除
+	// Send message, auto-delete after 20 seconds
 	h.controller.messageUtils.SendMessageHTMLWithAutoDelete(chatID, message, 20)
 }
 
 // ================================
-// 文件浏览菜单功能
+// File browsing menu functionality
 // ================================
 
-// HandleFilesBrowseWithEdit 处理文件浏览（支持消息编辑）
+// HandleFilesBrowseWithEdit handles file browsing (supports message editing)
 func (h *FileHandler) HandleFilesBrowseWithEdit(chatID int64, messageID int) {
-	// 使用默认路径或根目录开始浏览
+	// Start browsing with default path or root directory
 	defaultPath := h.controller.config.Alist.DefaultPath
 	if defaultPath == "" {
 		defaultPath = "/"
@@ -659,29 +659,29 @@ func (h *FileHandler) HandleFilesBrowseWithEdit(chatID int64, messageID int) {
 	h.HandleBrowseFilesWithEdit(chatID, defaultPath, 1, messageID)
 }
 
-// HandleFilesSearchWithEdit 处理文件搜索（支持消息编辑）
+// HandleFilesSearchWithEdit handles file search (supports message editing)
 func (h *FileHandler) HandleFilesSearchWithEdit(chatID int64, messageID int) {
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	var lines []string
 
-	// 标题
+	// Title
 	lines = append(lines, formatter.FormatTitle("🔍", "文件搜索功能"))
 	lines = append(lines, "")
 
-	// 搜索说明
+	// Search instructions
 	lines = append(lines, formatter.FormatSection("搜索说明"))
 	lines = append(lines, formatter.FormatListItem("•", "支持文件名关键词搜索"))
 	lines = append(lines, formatter.FormatListItem("•", "支持路径模糊匹配"))
 	lines = append(lines, formatter.FormatListItem("•", "支持文件类型过滤"))
 	lines = append(lines, "")
 
-	// 使用说明
+	// Usage instructions
 	lines = append(lines, formatter.FormatSection("请输入搜索关键词"))
 	lines = append(lines, "格式: <code>/search &lt;关键词&gt;</code>")
 	lines = append(lines, "")
 
-	// 快速搜索
+	// Quick search
 	lines = append(lines, formatter.FormatSection("快速搜索"))
 
 	message := strings.Join(lines, "\n")
@@ -699,17 +699,17 @@ func (h *FileHandler) HandleFilesSearchWithEdit(chatID int64, messageID int) {
 	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleFilesInfoWithEdit 处理文件信息查看（支持消息编辑）
+// HandleFilesInfoWithEdit handles file information viewing (supports message editing)
 func (h *FileHandler) HandleFilesInfoWithEdit(chatID int64, messageID int) {
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	var lines []string
 
-	// 标题
+	// Title
 	lines = append(lines, formatter.FormatTitle("ℹ️", "文件信息查看"))
 	lines = append(lines, "")
 
-	// 可查看信息
+	// Viewable information
 	lines = append(lines, formatter.FormatSection("可查看信息"))
 	lines = append(lines, formatter.FormatListItem("•", "文件基本属性"))
 	lines = append(lines, formatter.FormatListItem("•", "文件大小和修改时间"))
@@ -717,7 +717,7 @@ func (h *FileHandler) HandleFilesInfoWithEdit(chatID int64, messageID int) {
 	lines = append(lines, formatter.FormatListItem("•", "媒体类型识别"))
 	lines = append(lines, "")
 
-	// 操作提示
+	// Operation prompt
 	lines = append(lines, formatter.FormatSection("请选择操作方式"))
 
 	message := strings.Join(lines, "\n")
@@ -735,17 +735,17 @@ func (h *FileHandler) HandleFilesInfoWithEdit(chatID int64, messageID int) {
 	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleFilesDownloadWithEdit 处理路径下载功能（支持消息编辑）
+// HandleFilesDownloadWithEdit handles path download functionality (supports message editing)
 func (h *FileHandler) HandleFilesDownloadWithEdit(chatID int64, messageID int) {
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	var lines []string
 
-	// 标题
+	// Title
 	lines = append(lines, formatter.FormatTitle("📥", "路径下载功能"))
 	lines = append(lines, "")
 
-	// 下载选项
+	// Download options
 	lines = append(lines, formatter.FormatSection("下载选项"))
 	lines = append(lines, formatter.FormatListItem("•", "指定路径批量下载"))
 	lines = append(lines, formatter.FormatListItem("•", "递归下载子目录"))
@@ -753,12 +753,12 @@ func (h *FileHandler) HandleFilesDownloadWithEdit(chatID int64, messageID int) {
 	lines = append(lines, formatter.FormatListItem("•", "过滤文件类型"))
 	lines = append(lines, "")
 
-	// 使用格式
+	// Usage format
 	lines = append(lines, formatter.FormatSection("使用格式"))
 	lines = append(lines, "<code>/path_download /movies/2024</code>")
 	lines = append(lines, "")
 
-	// 快速下载
+	// Quick download
 	lines = append(lines, formatter.FormatSection("快速下载"))
 
 	message := strings.Join(lines, "\n")
@@ -776,16 +776,16 @@ func (h *FileHandler) HandleFilesDownloadWithEdit(chatID int64, messageID int) {
 	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// HandleAlistFilesWithEdit 处理获取Alist文件列表（支持消息编辑）
+// HandleAlistFilesWithEdit handles getting Alist file list (supports message editing)
 func (h *FileHandler) HandleAlistFilesWithEdit(chatID int64, messageID int) {
 	h.HandleBrowseFilesWithEdit(chatID, h.controller.config.Alist.DefaultPath, 1, messageID)
 }
 
 // ================================
-// 辅助方法 - 兼容性适配
+// Helper methods - Compatibility adaptation
 // ================================
 
-// listFilesSimple 简单列出文件 - 适配contracts.FileService接口
+// listFilesSimple lists files simply - adapting to contracts.FileService interface
 func (h *FileHandler) listFilesSimple(path string, page, perPage int) ([]contracts.FileResponse, error) {
 	req := contracts.FileListRequest{
 		Path:     path,
@@ -798,8 +798,8 @@ func (h *FileHandler) listFilesSimple(path string, page, perPage int) ([]contrac
 	if err != nil {
 		return nil, err
 	}
-	
-	// 合并文件和目录
+
+	// Merge files and directories
 	var allItems []contracts.FileResponse
 	allItems = append(allItems, resp.Directories...)
 	allItems = append(allItems, resp.Files...)
@@ -807,12 +807,12 @@ func (h *FileHandler) listFilesSimple(path string, page, perPage int) ([]contrac
 	return allItems, nil
 }
 
-// getFilesFromPath 从指定路径获取文件 - 适配contracts.FileService接口
+// getFilesFromPath gets files from specified path - adapting to contracts.FileService interface
 func (h *FileHandler) getFilesFromPath(basePath string, recursive bool) ([]contracts.FileResponse, error) {
 	req := contracts.FileListRequest{
 		Path:      basePath,
 		Recursive: recursive,
-		PageSize:  10000, // 获取所有文件
+		PageSize:  10000, // Get all files
 	}
 	
 	ctx := context.Background()
@@ -824,9 +824,9 @@ func (h *FileHandler) getFilesFromPath(basePath string, recursive bool) ([]contr
 	return resp.Files, nil
 }
 
-// getFileDownloadURL 获取文件下载URL - 适配contracts.FileService接口
+// getFileDownloadURL gets file download URL - adapting to contracts.FileService interface
 func (h *FileHandler) getFileDownloadURL(path, fileName string) string {
-	// 构建完整路径
+	// Build full path
 	fullPath := path + "/" + fileName
 	if path == "/" {
 		fullPath = "/" + fileName
@@ -835,14 +835,14 @@ func (h *FileHandler) getFileDownloadURL(path, fileName string) string {
 	ctx := context.Background()
 	fileInfo, err := h.controller.fileService.GetFileInfo(ctx, fullPath)
 	if err != nil {
-		// 如果获取失败，回退到直接构建URL
+		// If fetch fails, fallback to directly building URL
 		return h.controller.config.Alist.BaseURL + "/d" + fullPath
 	}
 
 	return fileInfo.InternalURL
 }
 
-// getParentPath 获取父目录路径
+// getParentPath gets parent directory path
 func (h *FileHandler) getParentPath(path string) string {
 	if path == "/" {
 		return "/"
@@ -854,7 +854,7 @@ func (h *FileHandler) getParentPath(path string) string {
 	return parentPath
 }
 
-// DirectoryDownloadStats 目录下载统计信息 - 为保持兼容性保留
+// DirectoryDownloadStats directory download statistics - retained for compatibility
 type DirectoryDownloadStats struct {
 	TotalFiles   int
 	VideoFiles   int
@@ -865,7 +865,7 @@ type DirectoryDownloadStats struct {
 	TotalSizeStr string
 }
 
-// DirectoryDownloadResult 目录下载结果 - 为保持兼容性保留
+// DirectoryDownloadResult directory download result - retained for compatibility
 type DirectoryDownloadResult struct {
 	Stats        DirectoryDownloadStats
 	SuccessCount int

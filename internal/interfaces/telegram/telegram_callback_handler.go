@@ -8,19 +8,19 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// CallbackHandler 处理Telegram回调查询
+// CallbackHandler handles Telegram callback queries
 type CallbackHandler struct {
 	controller *TelegramController
 }
 
-// NewCallbackHandler 创建新的回调查询处理器
+// NewCallbackHandler creates a new callback query handler
 func NewCallbackHandler(controller *TelegramController) *CallbackHandler {
 	return &CallbackHandler{
 		controller: controller,
 	}
 }
 
-// HandleCallbackQuery 处理回调查询
+// HandleCallbackQuery handles callback queries
 func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 	callback := update.CallbackQuery
 	if callback == nil {
@@ -31,7 +31,7 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 	chatID := callback.Message.Chat.ID
 	data := callback.Data
 
-	// 权限验证
+	// Authorization check
 	if !h.controller.telegramClient.IsAuthorized(userID) {
 		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "未授权访问")
 		return
@@ -39,7 +39,7 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 
 	logger.Info("Received callback query:", "data", data, "from", callback.From.UserName, "chatID", chatID)
 
-	// 处理预览相关回调
+	// Handle preview-related callbacks
 	if strings.HasPrefix(data, "preview_hours|") {
 		hours := strings.TrimPrefix(data, "preview_hours|")
 		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "正在生成预览")
@@ -72,7 +72,7 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		return
 	}
 
-	// 处理手动下载确认回调
+	// Handle manual download confirmation callbacks
 	if strings.HasPrefix(data, "manual_confirm|") {
 		token := strings.TrimPrefix(data, "manual_confirm|")
 		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "开始创建下载任务")
@@ -91,10 +91,10 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		return
 	}
 
-	// 先回应回调查询
+	// First respond to callback query
 	h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "")
 
-	// 处理文件浏览相关的回调
+	// Handle file browsing related callbacks
 	if strings.HasPrefix(data, "browse_dir:") {
 		parts := strings.Split(data, ":")
 		if len(parts) >= 3 {
@@ -104,7 +104,7 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 			if page < 1 {
 				page = 1
 			}
-			logger.Info("点击目录", "encodedPath", encodedPath, "decodedPath", path, "page", page)
+			logger.Info("Directory clicked", "encodedPath", encodedPath, "decodedPath", path, "page", page)
 			h.controller.fileHandler.HandleBrowseFilesWithEdit(chatID, path, page, callback.Message.MessageID)
 		}
 		return
@@ -166,7 +166,7 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		return
 	}
 
-	// 处理菜单回调
+	// Handle menu callbacks
 	switch data {
 	case "cmd_help":
 		h.controller.menuCallbacks.HandleHelpWithEdit(chatID, callback.Message.MessageID)
@@ -183,7 +183,7 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 	case "menu_status":
 		h.controller.menuCallbacks.HandleStatusMenuWithEdit(chatID, callback.Message.MessageID)
 	case "show_yesterday_options", "api_yesterday_files", "api_yesterday_files_preview", "api_yesterday_download":
-		// 昨日文件功能已移除，跳转到定时任务
+		// Yesterday files feature removed, redirect to scheduled tasks
 		h.controller.taskHandler.HandleTasksWithEdit(chatID, userID, callback.Message.MessageID)
 	case "cmd_tasks":
 		h.controller.taskHandler.HandleTasksWithEdit(chatID, userID, callback.Message.MessageID)
@@ -195,7 +195,7 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		h.controller.statusHandler.HandleHealthCheckWithEdit(chatID, callback.Message.MessageID)
 	case "back_main":
 		h.controller.menuCallbacks.HandleStartWithEdit(chatID, callback.Message.MessageID)
-	// 下载管理功能
+	// Download management functions
 	case "download_list":
 		h.controller.statusHandler.HandleDownloadStatusAPIWithEdit(chatID, callback.Message.MessageID)
 	case "download_create":
@@ -204,7 +204,7 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		h.controller.downloadHandler.HandleDownloadControlWithEdit(chatID, callback.Message.MessageID)
 	case "download_delete":
 		h.controller.downloadHandler.HandleDownloadDeleteWithEdit(chatID, callback.Message.MessageID)
-	// 文件浏览功能
+	// File browsing functions
 	case "files_browse":
 		h.controller.fileHandler.HandleFilesBrowseWithEdit(chatID, callback.Message.MessageID)
 	case "files_search":
@@ -215,10 +215,10 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		h.controller.fileHandler.HandleFilesDownloadWithEdit(chatID, callback.Message.MessageID)
 	case "api_alist_files":
 		h.controller.fileHandler.HandleAlistFilesWithEdit(chatID, callback.Message.MessageID)
-	// 系统管理功能
+	// System management functions
 	case "system_info":
 		h.controller.menuCallbacks.HandleSystemInfoWithEdit(chatID, callback.Message.MessageID)
-	// 状态监控功能
+	// Status monitoring functions
 	case "status_realtime":
 		h.controller.statusHandler.HandleStatusRealtimeWithEdit(chatID, callback.Message.MessageID)
 	case "status_storage":

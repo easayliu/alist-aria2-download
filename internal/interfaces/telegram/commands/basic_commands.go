@@ -14,7 +14,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// BasicCommands 基础命令处理器
+// BasicCommands handles basic commands
 type BasicCommands struct {
 	downloadService contracts.DownloadService
 	fileService     contracts.FileService
@@ -22,7 +22,7 @@ type BasicCommands struct {
 	messageUtils    types.MessageSender
 }
 
-// NewBasicCommands 创建基础命令处理器
+// NewBasicCommands creates a basic commands handler
 func NewBasicCommands(downloadService contracts.DownloadService, fileService contracts.FileService, config *config.Config, messageUtils types.MessageSender) *BasicCommands {
 	return &BasicCommands{
 		downloadService: downloadService,
@@ -32,7 +32,7 @@ func NewBasicCommands(downloadService contracts.DownloadService, fileService con
 	}
 }
 
-// HandleStart 处理开始命令
+// HandleStart handles start command
 func (bc *BasicCommands) HandleStart(chatID int64) {
 	message := "<b>欢迎使用 Alist-Aria2 下载管理器</b>\n\n" +
 		"<b>功能模块:</b>\n" +
@@ -42,7 +42,7 @@ func (bc *BasicCommands) HandleStart(chatID int64) {
 		"• 状态监控 - 实时状态和下载统计\n\n" +
 		"选择功能模块开始使用："
 
-	// 发送带有内联键盘的欢迎消息
+	// Send welcome message with inline keyboard
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("下载管理", "menu_download"),
@@ -58,9 +58,11 @@ func (bc *BasicCommands) HandleStart(chatID int64) {
 	)
 
 	bc.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+
+	bc.messageUtils.SendMessageWithReplyKeyboard(chatID, "💡 Use shortcut buttons below or type commands")
 }
 
-// HandleHelp 处理帮助命令
+// HandleHelp handles help command
 func (bc *BasicCommands) HandleHelp(chatID int64) {
 	message := "<b>使用帮助</b>\n\n" +
 		"<b>快捷按钮:</b>\n" +
@@ -92,7 +94,7 @@ func (bc *BasicCommands) HandleHelp(chatID int64) {
 		"• <code>weekly</code> - 每周汇总（7天内文件）\n" +
 		"• <code>realtime</code> - 实时同步（1小时内文件）"
 
-	// 创建快捷操作键盘
+	// Create shortcut action keyboard
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("系统状态", "cmd_status"),
@@ -103,7 +105,7 @@ func (bc *BasicCommands) HandleHelp(chatID int64) {
 	bc.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
 }
 
-// HandleStatus 处理状态命令
+// HandleStatus handles status command
 func (bc *BasicCommands) HandleStatus(chatID int64) {
 	ctx := context.Background()
 	status, err := bc.downloadService.GetSystemStatus(ctx)
@@ -117,7 +119,7 @@ func (bc *BasicCommands) HandleStatus(chatID int64) {
 	telegramInfo := status["telegram"].(map[string]interface{})
 	serverInfo := status["server"].(map[string]interface{})
 
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := bc.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	message := formatter.FormatSimpleSystemStatus(utils.SimpleSystemStatusData{
 		TelegramStatus: telegramInfo["status"].(string),
@@ -130,11 +132,11 @@ func (bc *BasicCommands) HandleStatus(chatID int64) {
 	bc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// HandleList 处理列表命令
+// HandleList handles list command
 func (bc *BasicCommands) HandleList(chatID int64, command string) {
 	parts := strings.Fields(command)
 
-	// 使用配置中的默认路径，如果用户没有提供路径
+	// Use default path from config if user didn't provide one
 	path := bc.config.Alist.DefaultPath
 	if path == "" {
 		path = "/"
@@ -144,7 +146,7 @@ func (bc *BasicCommands) HandleList(chatID int64, command string) {
 		path = strings.Join(parts[1:], " ")
 	}
 
-	// 获取文件列表 - 使用contracts接口
+	// Get file list - using contracts interface
 	req := contracts.FileListRequest{
 		Path:     path,
 		Page:     1,
@@ -157,21 +159,21 @@ func (bc *BasicCommands) HandleList(chatID int64, command string) {
 		bc.messageUtils.SendMessage(chatID, formatter.FormatError("获取文件列表", err))
 		return
 	}
-	
-	// 合并文件和目录
+
+	// Merge files and directories
 	files := append(resp.Directories, resp.Files...)
 
-	// 构建消息
+	// Build message
 	formatter := bc.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	escapedPath := bc.messageUtils.EscapeHTML(path)
 	message := formatter.FormatTitle("📁", fmt.Sprintf("目录: %s", escapedPath)) + "\n\n"
 
-	// 统计
+	// Statistics
 	videoCount := 0
 	dirCount := 0
 	otherCount := 0
 
-	// 列出文件
+	// List files
 	for _, file := range files {
 		if file.IsDir {
 			dirCount++
@@ -186,14 +188,14 @@ func (bc *BasicCommands) HandleList(chatID int64, command string) {
 			message += fmt.Sprintf("[F] %s (%s)\n", bc.messageUtils.EscapeHTML(file.Name), sizeStr)
 		}
 
-		// 限制消息长度
+		// Limit message length
 		if len(message) > 3500 {
 			message += "\n... 更多文件未显示"
 			break
 		}
 	}
 
-	// 添加统计信息
+	// Add statistics
 	message += "\n" + formatter.FormatSection("统计") + "\n"
 	if dirCount > 0 {
 		message += formatter.FormatListItem("•", fmt.Sprintf("目录: %d", dirCount)) + "\n"
@@ -208,7 +210,7 @@ func (bc *BasicCommands) HandleList(chatID int64, command string) {
 	bc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// HandlePreviewMenu 处理预览菜单命令
+// HandlePreviewMenu handles preview menu command
 func (bc *BasicCommands) HandlePreviewMenu(chatID int64) {
 	message := "<b>选择预览时间范围</b>\n\n" +
 		"请选择要预览的时间范围：\n" +
@@ -232,21 +234,21 @@ func (bc *BasicCommands) HandlePreviewMenu(chatID int64) {
 	bc.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
 }
 
-// HandleAlistLogin 处理Alist登录
+// HandleAlistLogin handles Alist login
 func (bc *BasicCommands) HandleAlistLogin(chatID int64) {
 	bc.messageUtils.SendMessage(chatID, "正在测试Alist连接...")
 
-	// 创建Alist客户端
+	// Create Alist client
 	alistClient := alist.NewClient(
 		bc.config.Alist.BaseURL,
 		bc.config.Alist.Username,
 		bc.config.Alist.Password,
 	)
 
-	// 清除现有token强制重新登录
+	// Clear existing token to force re-login
 	alistClient.ClearToken()
 
-	// 通过调用API测试连接和登录（客户端会自动处理token刷新）
+	// Test connection and login by calling API (client will handle token refresh automatically)
 	_, err := alistClient.ListFiles("/", 1, 1)
 	if err != nil {
 		formatter := bc.messageUtils.GetFormatter().(*utils.MessageFormatter)
@@ -254,14 +256,14 @@ func (bc *BasicCommands) HandleAlistLogin(chatID int64) {
 		return
 	}
 
-	// 获取token状态
+	// Get token status
 	hasToken, isValid, expiryTime := alistClient.GetTokenStatus()
 	message := fmt.Sprintf("Alist连接成功！\n有效Token: %v\nToken有效: %v\n过期时间: %s", 
 		hasToken, isValid, expiryTime.Format("2006-01-02 15:04:05"))
 	bc.messageUtils.SendMessage(chatID, message)
 }
 
-// HandleHealthCheck 处理健康检查
+// HandleHealthCheck handles health check
 func (bc *BasicCommands) HandleHealthCheck(chatID int64) {
 	message := "<b>系统健康检查</b>\n\n"
 	message += fmt.Sprintf("服务状态: 正常\n")
@@ -274,7 +276,7 @@ func (bc *BasicCommands) HandleHealthCheck(chatID int64) {
 	message += fmt.Sprintf("RPC地址: %s\n", bc.config.Aria2.RpcURL)
 	message += fmt.Sprintf("下载目录: %s\n", bc.config.Aria2.DownloadDir)
 
-	// 添加系统运行信息
+	// Add system runtime information
 	message += fmt.Sprintf("\n系统信息:\n")
 	message += fmt.Sprintf("运行时间: %s\n", runtime.GOOS)
 	message += fmt.Sprintf("架构: %s\n", runtime.GOARCH)

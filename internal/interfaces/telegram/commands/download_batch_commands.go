@@ -12,26 +12,26 @@ import (
 	"github.com/easayliu/alist-aria2-download/pkg/utils/time"
 )
 
-// TimeParseResult 时间解析结果
+// TimeParseResult represents the result of time parsing
 type TimeParseResult struct {
 	StartTime   time.Time
 	EndTime     time.Time
 	Description string
 }
 
-// HandleYesterdayFiles 处理获取昨天文件
+// HandleYesterdayFiles handles getting yesterday's files
 func (dc *DownloadCommands) HandleYesterdayFiles(chatID int64) {
 	ctx := context.Background()
 	dc.messageUtils.SendMessage(chatID, "正在获取昨天的文件...")
 
-	// 使用配置的默认路径
+	// Use configured default path
 	config := dc.container.GetConfig()
 	path := config.Alist.DefaultPath
 	if path == "" {
 		path = "/"
 	}
 
-	// 调用应用服务获取昨天的文件
+	// Call application service to get yesterday's files
 	fileService := dc.container.GetFileService()
 	response, err := fileService.GetYesterdayFiles(ctx, path)
 	if err != nil {
@@ -46,7 +46,7 @@ func (dc *DownloadCommands) HandleYesterdayFiles(chatID int64) {
 		return
 	}
 
-	// 准备显示的文件列表
+	// Prepare file list for display
 	var displayFiles []utils.YesterdayFileItem
 	maxDisplay := 10
 	if len(response.Files) < maxDisplay {
@@ -61,13 +61,13 @@ func (dc *DownloadCommands) HandleYesterdayFiles(chatID int64) {
 		})
 	}
 
-	// 计算剩余文件数
+	// Calculate remaining file count
 	remainingCount := 0
 	if len(response.Files) > 10 {
 		remainingCount = len(response.Files) - 10
 	}
 
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	message := formatter.FormatYesterdayFiles(utils.YesterdayFilesData{
 		TotalCount:     len(response.Files),
@@ -83,19 +83,19 @@ func (dc *DownloadCommands) HandleYesterdayFiles(chatID int64) {
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// HandleYesterdayDownload 处理下载昨天的文件
+// HandleYesterdayDownload handles downloading yesterday's files
 func (dc *DownloadCommands) HandleYesterdayDownload(chatID int64) {
 	ctx := context.Background()
 	dc.messageUtils.SendMessage(chatID, "正在准备下载昨天的文件...")
 
-	// 使用配置的默认路径
+	// Use configured default path
 	config := dc.container.GetConfig()
 	path := config.Alist.DefaultPath
 	if path == "" {
 		path = "/"
 	}
 
-	// 获取昨天的文件
+	// Get yesterday's files
 	fileService := dc.container.GetFileService()
 	response, err := fileService.GetYesterdayFiles(ctx, path)
 	if err != nil {
@@ -109,7 +109,7 @@ func (dc *DownloadCommands) HandleYesterdayDownload(chatID int64) {
 		return
 	}
 
-	// 构建批量下载请求
+	// Build batch download request
 	var downloadItems []contracts.DownloadRequest
 	for _, file := range response.Files {
 		downloadItems = append(downloadItems, contracts.DownloadRequest{
@@ -135,7 +135,7 @@ func (dc *DownloadCommands) HandleYesterdayDownload(chatID int64) {
 		return
 	}
 
-	// 使用统一格式化器发送结果
+	// Send result using unified formatter
 	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	message := formatter.FormatBatchDownloadResult2(utils.BatchDownloadResult2Data{
 		SuccessCount: batchResponse.SuccessCount,
@@ -146,9 +146,9 @@ func (dc *DownloadCommands) HandleYesterdayDownload(chatID int64) {
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// handleManualDownload 处理手动下载功能
+// handleManualDownload handles manual download functionality
 func (dc *DownloadCommands) handleManualDownload(ctx context.Context, chatID int64, timeArgs []string, preview bool) {
-	// 解析时间参数
+	// Parse time parameters
 	timeResult, err := dc.parseTimeArguments(timeArgs)
 	if err != nil {
 		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
@@ -167,22 +167,22 @@ func (dc *DownloadCommands) handleManualDownload(ctx context.Context, chatID int
 		formatter.FormatField("时间范围", timeResult.Description)
 	dc.messageUtils.SendMessageHTML(chatID, processingMsg)
 
-	// 获取配置的默认路径
+	// Get configured default path
 	config := dc.container.GetConfig()
 	path := config.Alist.DefaultPath
 	if path == "" {
 		path = "/"
 	}
 
-	// 构建时间范围文件请求
+	// Build time range file request
 	req := contracts.TimeRangeFileRequest{
 		Path:      path,
 		StartTime: timeResult.StartTime,
 		EndTime:   timeResult.EndTime,
-		VideoOnly: true, // 只处理视频文件
+		VideoOnly: true, // Only process video files
 	}
 
-	// 调用应用服务获取时间范围内的文件
+	// Call application service to get files by time range
 	fileService := dc.container.GetFileService()
 	response, err := fileService.GetFilesByTimeRange(ctx, req)
 	if err != nil {
@@ -205,22 +205,22 @@ func (dc *DownloadCommands) handleManualDownload(ctx context.Context, chatID int
 	}
 
 	if preview {
-		// 预览模式：显示文件信息和确认按钮
+		// Preview mode: display file info and confirmation button
 		dc.sendManualDownloadPreview(chatID, response, timeResult, timeArgs)
 	} else {
-		// 直接下载模式：创建下载任务
+		// Direct download mode: create download tasks
 		dc.executeManualDownload(ctx, chatID, response, timeResult)
 	}
 }
 
-// parseTimeArguments 解析时间参数
-// 支持的格式：
-// 1. 数字 - 小时数（如：48）
-// 2. 日期范围 - 两个日期（如：2025-09-01 2025-09-26）
-// 3. 时间范围 - 两个时间戳（如：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z）
+// parseTimeArguments parses time parameters
+// Supported formats:
+// 1. Number - hours (e.g., 48)
+// 2. Date range - two dates (e.g., 2025-09-01 2025-09-26)
+// 3. Time range - two timestamps (e.g., 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z)
 func (dc *DownloadCommands) parseTimeArguments(args []string) (*TimeParseResult, error) {
 	if len(args) == 0 {
-		// 默认24小时
+		// Default 24 hours
 		timeRange := timeutil.CreateTimeRangeFromHours(24)
 		return &TimeParseResult{
 			StartTime:   timeRange.Start,
@@ -230,12 +230,12 @@ func (dc *DownloadCommands) parseTimeArguments(args []string) (*TimeParseResult,
 	}
 
 	if len(args) == 1 {
-		// 尝试解析为小时数
+		// Try parsing as hours
 		if hours, err := strconv.Atoi(args[0]); err == nil {
 			if hours <= 0 {
 				return nil, fmt.Errorf("小时数必须大于0")
 			}
-			if hours > 8760 { // 一年的小时数
+			if hours > 8760 { // Hours in a year
 				return nil, fmt.Errorf("小时数不能超过8760（一年）")
 			}
 			timeRange := timeutil.CreateTimeRangeFromHours(hours)
@@ -252,15 +252,15 @@ func (dc *DownloadCommands) parseTimeArguments(args []string) (*TimeParseResult,
 	if len(args) == 2 {
 		startStr, endStr := args[0], args[1]
 
-		// 使用统一的时间解析工具
+		// Use unified time parsing utility
 		timeRange, err := timeutil.ParseTimeRange(startStr, endStr)
 		if err != nil {
 			return nil, fmt.Errorf("无效的时间格式，支持的格式：\n• 日期范围：2025-09-01 2025-09-26\n• 时间范围：2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
 		}
 
-		// 根据时间格式生成描述
+		// Generate description based on time format
 		description := fmt.Sprintf("从 %s 到 %s", timeRange.Start.Format("2006-01-02 15:04"), timeRange.End.Format("2006-01-02 15:04"))
-		// 如果是日期格式（时间都是0点），使用日期格式描述
+		// If date format (time is 00:00), use date format description
 		if timeRange.Start.Hour() == 0 && timeRange.Start.Minute() == 0 && timeRange.Start.Second() == 0 &&
 			(timeRange.End.Hour() == 23 && timeRange.End.Minute() == 59) {
 			description = fmt.Sprintf("从 %s 到 %s", timeRange.Start.Format("2006-01-02"), timeRange.End.Format("2006-01-02"))
@@ -276,16 +276,16 @@ func (dc *DownloadCommands) parseTimeArguments(args []string) (*TimeParseResult,
 	return nil, fmt.Errorf("参数过多，支持的格式：\n• /download\n• /download 48\n• /download 2025-09-01 2025-09-26\n• /download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
 }
 
-// sendManualDownloadPreview 发送手动下载预览
+// sendManualDownloadPreview sends manual download preview
 func (dc *DownloadCommands) sendManualDownloadPreview(chatID int64, response *contracts.TimeRangeFileResponse, timeResult *TimeParseResult, timeArgs []string) {
-	// 获取配置的默认路径
+	// Get configured default path
 	config := dc.container.GetConfig()
 	path := config.Alist.DefaultPath
 	if path == "" {
 		path = "/"
 	}
 
-	// 构建预览消息
+	// Build preview message
 	message := fmt.Sprintf(
 		"<b>手动下载预览</b>\n\n"+
 			"<b>时间范围:</b> %s\n"+
@@ -314,7 +314,7 @@ func (dc *DownloadCommands) sendManualDownloadPreview(chatID int64, response *co
 		for i := 0; i < displayCount; i++ {
 			file := response.Files[i]
 			filename := dc.messageUtils.EscapeHTML(file.Name)
-			// 限制文件名长度
+			// Limit filename length
 			if len([]rune(filename)) > 40 {
 				runes := []rune(filename)
 				filename = string(runes[:40]) + "..."
@@ -327,7 +327,7 @@ func (dc *DownloadCommands) sendManualDownloadPreview(chatID int64, response *co
 		}
 	}
 
-	// 构建确认命令
+	// Build confirmation command
 	confirmCommand := "/download confirm"
 	if len(timeArgs) > 0 {
 		confirmCommand += " " + strings.Join(timeArgs, " ")
@@ -338,7 +338,7 @@ func (dc *DownloadCommands) sendManualDownloadPreview(chatID int64, response *co
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// executeManualDownload 执行手动下载
+// executeManualDownload executes manual download
 func (dc *DownloadCommands) executeManualDownload(ctx context.Context, chatID int64, response *contracts.TimeRangeFileResponse, timeResult *TimeParseResult) {
 	if len(response.Files) == 0 {
 		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
@@ -347,7 +347,7 @@ func (dc *DownloadCommands) executeManualDownload(ctx context.Context, chatID in
 		return
 	}
 
-	// 构建批量下载请求
+	// Build batch download request
 	var downloadItems []contracts.DownloadRequest
 	for _, file := range response.Files {
 		downloadItems = append(downloadItems, contracts.DownloadRequest{
@@ -365,7 +365,7 @@ func (dc *DownloadCommands) executeManualDownload(ctx context.Context, chatID in
 		AutoClassify: true,
 	}
 
-	// 调用应用服务批量创建下载
+	// Call application service to create batch download
 	downloadService := dc.container.GetDownloadService()
 	batchResponse, err := downloadService.CreateBatchDownload(ctx, batchRequest)
 	if err != nil {
@@ -374,13 +374,13 @@ func (dc *DownloadCommands) executeManualDownload(ctx context.Context, chatID in
 		return
 	}
 
-	// 获取配置的默认路径
+	// Get configured default path
 	path := config.Alist.DefaultPath
 	if path == "" {
 		path = "/"
 	}
 
-	// 发送结果
+	// Send result
 	message := fmt.Sprintf(
 		"<b>手动下载任务已创建</b>\n\n"+
 			"<b>时间范围:</b> %s\n"+

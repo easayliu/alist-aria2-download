@@ -21,7 +21,7 @@ func NewTemplateRenderer(templates config.PathTemplates) *TemplateRenderer {
 
 // Render 渲染模板
 func (r *TemplateRenderer) Render(template string, vars map[string]string) string {
-	logger.Debug("渲染模板", "template", template, "vars", vars)
+	logger.Debug("Rendering template", "template", template, "vars", vars)
 
 	result := template
 
@@ -34,7 +34,7 @@ func (r *TemplateRenderer) Render(template string, vars map[string]string) strin
 	// 清理未替换的变量（保持原样或移除）
 	result = r.cleanUnusedPlaceholders(result)
 
-	logger.Debug("模板渲染完成", "result", result)
+	logger.Debug("Template rendering completed", "result", result)
 
 	return result
 }
@@ -76,7 +76,7 @@ func (r *TemplateRenderer) cleanUnusedPlaceholders(path string) string {
 
 		// 移除这个占位符
 		placeholder := path[start : start+end+1]
-		logger.Warn("未替换的变量占位符", "placeholder", placeholder)
+		logger.Warn("Unreplaced variable placeholder", "placeholder", placeholder)
 		path = strings.Replace(path, placeholder, "", 1)
 	}
 
@@ -95,7 +95,7 @@ func (r *TemplateRenderer) ValidateTemplate(template string) error {
 	closeCount := strings.Count(template, "}")
 
 	if openCount != closeCount {
-		logger.Warn("模板格式错误：括号不配对",
+		logger.Warn("Template format error: mismatched braces",
 			"template", template,
 			"open", openCount,
 			"close", closeCount)

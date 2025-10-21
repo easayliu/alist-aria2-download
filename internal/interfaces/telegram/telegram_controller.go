@@ -17,31 +17,31 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// TelegramController 重构后的 Telegram 主控制器
-// 负责路由分发和依赖管理
+// TelegramController is the refactored main Telegram controller
+// Responsible for request routing and dependency management
 type TelegramController struct {
-	// 核心依赖 - 使用contracts接口实现API First架构
+	// Core dependencies - using contracts interface for API First architecture
 	telegramClient      *telegram.Client
 	notificationService *services.NotificationService
-	fileService         contracts.FileService      // 使用契约接口
-	downloadService     contracts.DownloadService  // 使用契约接口
+	fileService         contracts.FileService
+	downloadService     contracts.DownloadService
 	schedulerService    *services.SchedulerService
-	container           *services.ServiceContainer  // 服务容器
+	container           *services.ServiceContainer
 	config              *config.Config
 
-	// 状态管理 - 与旧版本兼容
+	// State management - compatible with legacy version
 	lastUpdateID int
 	ctx          context.Context
 	cancel       context.CancelFunc
 
-	// 重构后的模块化组件
+	// Refactored modular components for separation of concerns
 	messageUtils        *utils.MessageUtils
 	basicCommands       *commands.BasicCommands
 	downloadCommands    types.DownloadCommandHandler
 	taskCommands        *commands.TaskCommands
 	menuCallbacks       *callbacks.MenuCallbacks
-	
-	// 各个功能处理器
+
+	// Specialized function handlers
 	messageHandler  *MessageHandler
 	callbackHandler *CallbackHandler
 	downloadHandler *DownloadHandler
@@ -52,8 +52,8 @@ type TelegramController struct {
 }
 
 
-// NewTelegramController 创建新的 Telegram 控制器
-// 使用API First架构，通过ServiceContainer获取契约接口
+// NewTelegramController creates a new Telegram controller instance
+// Implements API First architecture by obtaining contract interfaces through ServiceContainer
 func NewTelegramController(cfg *config.Config, notificationService *services.NotificationService, fileService *services.FileService, schedulerService *services.SchedulerService) *TelegramController {
 	var telegramClient *telegram.Client
 	if cfg.Telegram.Enabled {
@@ -62,14 +62,14 @@ func NewTelegramController(cfg *config.Config, notificationService *services.Not
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// 创建服务容器
+	// Create service container for dependency injection
 	container, err := services.NewServiceContainer(cfg)
 	if err != nil {
 		logger.Error("Failed to create service container:", err)
 		panic("Service container initialization failed")
 	}
 
-	// 创建主控制器实例
+	// Create and initialize main controller instance
 	controller := &TelegramController{
 		telegramClient:      telegramClient,
 		notificationService: notificationService,
@@ -80,30 +80,30 @@ func NewTelegramController(cfg *config.Config, notificationService *services.Not
 		cancel:              cancel,
 	}
 
-	// 初始化模块化组件
+	// Initialize all modular components
 	controller.initializeModules()
 
 	return controller
 }
 
-// initializeModules 初始化所有模块化组件
+// initializeModules initializes all modular components with proper dependencies
 func (c *TelegramController) initializeModules() {
-	// 创建消息工具
+	// Create message utilities for formatting and sending
 	c.messageUtils = utils.NewMessageUtils(c.telegramClient)
 
-	// 从服务容器获取契约接口，实现API First架构
+	// Get contract interfaces from service container to implement API First architecture
 	c.fileService = c.container.GetFileService()
 	c.downloadService = c.container.GetDownloadService()
 
-	// 使用契约接口初始化基础命令模块
+	// Initialize command modules with contract interfaces
 	c.basicCommands = commands.NewBasicCommands(c.downloadService, c.fileService, c.config, c.messageUtils)
 	c.downloadCommands = commands.NewDownloadCommands(c.container, c.messageUtils)
 	c.taskCommands = commands.NewTaskCommands(c.schedulerService, c.config, c.messageUtils)
 
-	// 创建回调处理器
+	// Create callback handlers for inline keyboard interactions
 	c.menuCallbacks = callbacks.NewMenuCallbacks(c.downloadService, c.config, c.messageUtils)
 
-	// 初始化各个功能处理器
+	// Initialize specialized function handlers
 	c.messageHandler = NewMessageHandler(c)
 	c.callbackHandler = NewCallbackHandler(c)
 	c.downloadHandler = NewDownloadHandler(c)
@@ -114,10 +114,10 @@ func (c *TelegramController) initializeModules() {
 }
 
 // ================================
-// 公共接口实现 - 与旧版本完全兼容
+// Public interface implementation - maintains full compatibility
 // ================================
 
-// Webhook 处理 Webhook 请求（与旧版本完全兼容）
+// Webhook handles webhook requests (fully compatible with legacy version)
 func (c *TelegramController) Webhook(ctx *gin.Context) {
 	if !c.config.Telegram.Enabled {
 		ctx.JSON(200, gin.H{"error": "Telegram integration disabled"})
@@ -140,7 +140,7 @@ func (c *TelegramController) Webhook(ctx *gin.Context) {
 	ctx.JSON(200, gin.H{"ok": true})
 }
 
-// StartPolling 开始轮询（与旧版本完全兼容）
+// StartPolling starts update polling (fully compatible with legacy version)
 func (c *TelegramController) StartPolling() {
 	if !c.config.Telegram.Enabled || c.telegramClient == nil {
 		logger.Info("Telegram polling disabled")
@@ -149,6 +149,7 @@ func (c *TelegramController) StartPolling() {
 
 	logger.Info("Starting Telegram polling...")
 
+	// Run polling in background goroutine
 	go func() {
 		for {
 			select {
@@ -162,14 +163,14 @@ func (c *TelegramController) StartPolling() {
 	}()
 }
 
-// StopPolling 停止轮询（与旧版本完全兼容）
+// StopPolling stops update polling (fully compatible with legacy version)
 func (c *TelegramController) StopPolling() {
 	if c.cancel != nil {
 		c.cancel()
 	}
 }
 
-// pollUpdates 轮询更新
+// pollUpdates polls for new updates from Telegram
 func (c *TelegramController) pollUpdates() {
 	updates, err := c.telegramClient.GetUpdates(int64(c.lastUpdateID+1), 30)
 	if err != nil {
@@ -192,15 +193,15 @@ func (c *TelegramController) pollUpdates() {
 }
 
 // ================================
-// 兼容性接口 - 为了保持向后兼容
+// Compatibility interface - backward compatibility layer
 // ================================
 
-// 为了保持与旧代码的兼容性，提供一些委托方法
+// Delegation methods to maintain compatibility with legacy code
 func (c *TelegramController) FormatFileSize(size int64) string {
 	return c.common.FormatFileSize(size)
 }
 
-// 获取器方法，供其他模块使用
+// Getter methods providing access to internal components for other modules
 func (c *TelegramController) GetTelegramClient() *telegram.Client {
 	return c.telegramClient
 }

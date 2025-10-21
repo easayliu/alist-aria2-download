@@ -10,13 +10,13 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 )
 
-// DownloadCommands 下载相关命令处理器 - 纯协议转换层
+// DownloadCommands handles download-related commands - pure protocol conversion layer
 type DownloadCommands struct {
 	container    *services.ServiceContainer
 	messageUtils types.MessageSender
 }
 
-// NewDownloadCommands 创建下载命令处理器
+// NewDownloadCommands creates a download command handler
 func NewDownloadCommands(container *services.ServiceContainer, messageUtils types.MessageSender) *DownloadCommands {
 	return &DownloadCommands{
 		container:    container,
@@ -24,39 +24,39 @@ func NewDownloadCommands(container *services.ServiceContainer, messageUtils type
 	}
 }
 
-// HandleDownload 处理下载命令 - Telegram协议转换
+// HandleDownload handles download command - Telegram protocol conversion
 func (dc *DownloadCommands) HandleDownload(chatID int64, command string) {
 	ctx := context.Background()
 	parts := strings.Fields(command)
 
-	// 如果没有额外参数，默认进入预览模式（最近24小时）
+	// If no additional parameters, default to preview mode (last 24 hours)
 	if len(parts) == 1 {
 		dc.handleManualDownload(ctx, chatID, []string{}, true)
 		return
 	}
 
-	// 检查第一个参数是否为URL（以http开头）
+	// Check if first parameter is a URL (starts with http)
 	if strings.HasPrefix(parts[1], "http") {
 		dc.handleURLDownload(ctx, chatID, parts[1])
 		return
 	}
 
-	// 检查第一个参数是否为文件路径（以/开头）
+	// Check if first parameter is a file path (starts with /)
 	if strings.HasPrefix(parts[1], "/") {
 		filePath := parts[1]
-		
-		// 判断是文件还是目录
+
+		// Determine if it's a file or directory
 		if strings.HasSuffix(filePath, "/") || dc.isDirectoryPath(ctx, filePath) {
-			// 目录下载
+			// Directory download
 			dc.handleDownloadDirectoryByPath(ctx, chatID, filePath)
 		} else {
-			// 文件下载
+			// File download
 			dc.handleDownloadFileByPath(ctx, chatID, filePath)
 		}
 		return
 	}
 
-	// 处理时间参数的手动下载
+	// Handle manual download with time parameters
 	preview := true
 	timeArgs := parts[1:]
 	if len(timeArgs) > 0 {
@@ -74,7 +74,7 @@ func (dc *DownloadCommands) HandleDownload(chatID int64, command string) {
 	dc.handleManualDownload(ctx, chatID, timeArgs, preview)
 }
 
-// HandleCancel 处理取消下载命令
+// HandleCancel handles cancel download command
 func (dc *DownloadCommands) HandleCancel(chatID int64, command string) {
 	ctx := context.Background()
 	parts := strings.Fields(command)
@@ -85,7 +85,7 @@ func (dc *DownloadCommands) HandleCancel(chatID int64, command string) {
 
 	gid := parts[1]
 
-	// 调用应用服务取消下载
+	// Call application service to cancel download
 	downloadService := dc.container.GetDownloadService()
 	if err := downloadService.CancelDownload(ctx, gid); err != nil {
 		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
@@ -93,21 +93,21 @@ func (dc *DownloadCommands) HandleCancel(chatID int64, command string) {
 		return
 	}
 
-	// 使用统一格式化器发送成功消息
+	// Send success message using unified formatter
 	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	message := formatter.FormatDownloadCancelled(gid)
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// handleURLDownload 处理URL下载
+// handleURLDownload handles URL download
 func (dc *DownloadCommands) handleURLDownload(ctx context.Context, chatID int64, url string) {
-	// 构建下载请求
+	// Build download request
 	req := contracts.DownloadRequest{
 		URL:          url,
 		AutoClassify: true,
 	}
 
-	// 调用应用服务创建下载
+	// Call application service to create download
 	downloadService := dc.container.GetDownloadService()
 	response, err := downloadService.CreateDownload(ctx, req)
 	if err != nil {
@@ -116,7 +116,7 @@ func (dc *DownloadCommands) handleURLDownload(ctx context.Context, chatID int64,
 		return
 	}
 
-	// 使用统一格式化器发送确认消息
+	// Send confirmation message using unified formatter
 	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	message := formatter.FormatDownloadCreated(utils.DownloadCreatedData{
 		URL:      url,
@@ -126,15 +126,15 @@ func (dc *DownloadCommands) handleURLDownload(ctx context.Context, chatID int64,
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// handleDownloadFileByPath 通过路径下载单个文件
+// handleDownloadFileByPath downloads a single file by path
 func (dc *DownloadCommands) handleDownloadFileByPath(ctx context.Context, chatID int64, filePath string) {
-	// 构建文件下载请求
+	// Build file download request
 	req := contracts.FileDownloadRequest{
 		FilePath:     filePath,
 		AutoClassify: true,
 	}
 
-	// 调用应用服务下载文件
+	// Call application service to download file
 	fileService := dc.container.GetFileService()
 	response, err := fileService.DownloadFile(ctx, req)
 	if err != nil {
@@ -143,7 +143,7 @@ func (dc *DownloadCommands) handleDownloadFileByPath(ctx context.Context, chatID
 		return
 	}
 
-	// 发送成功消息 - 使用统一格式化器
+	// Send success message using unified formatter
 	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	message := formatter.FormatFileDownloadSuccess(utils.FileDownloadSuccessData{
 		Filename:     response.Filename,
@@ -157,17 +157,17 @@ func (dc *DownloadCommands) handleDownloadFileByPath(ctx context.Context, chatID
 	dc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// handleDownloadDirectoryByPath 通过路径下载目录
+// handleDownloadDirectoryByPath downloads a directory by path
 func (dc *DownloadCommands) handleDownloadDirectoryByPath(ctx context.Context, chatID int64, dirPath string) {
-	// 构建目录下载请求
+	// Build directory download request
 	req := contracts.DirectoryDownloadRequest{
 		DirectoryPath: dirPath,
-		VideoOnly:     true, // 只下载视频文件
+		VideoOnly:     true, // Only download video files
 		AutoClassify:  true,
 		Recursive:     true,
 	}
 
-	// 调用应用服务下载目录
+	// Call application service to download directory
 	fileService := dc.container.GetFileService()
 	response, err := fileService.DownloadDirectory(ctx, req)
 	if err != nil {
@@ -182,7 +182,7 @@ func (dc *DownloadCommands) handleDownloadDirectoryByPath(ctx context.Context, c
 		return
 	}
 
-	// 转换为统一格式的结果摘要
+	// Convert to unified format result summary
 	var downloadResults []types.DownloadResult
 	for _, result := range response.Results {
 		downloadResults = append(downloadResults, types.DownloadResult{
@@ -202,14 +202,14 @@ func (dc *DownloadCommands) handleDownloadDirectoryByPath(ctx context.Context, c
 		Results:       downloadResults,
 	}
 
-	// 使用统一格式化器
+	// Use unified formatter
 	resultMessage := dc.messageUtils.FormatDownloadDirectoryResult(summary)
 	dc.messageUtils.SendMessageHTML(chatID, resultMessage)
 }
 
-// isDirectoryPath 判断路径是否为目录
+// isDirectoryPath determines if a path is a directory
 func (dc *DownloadCommands) isDirectoryPath(ctx context.Context, path string) bool {
-	// 调用应用服务获取文件信息
+	// Call application service to get file info
 	fileService := dc.container.GetFileService()
 	fileInfo, err := fileService.GetFileInfo(ctx, path)
 	return err == nil && fileInfo.IsDir

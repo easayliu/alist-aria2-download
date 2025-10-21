@@ -6,50 +6,50 @@ import (
 	"unicode/utf8"
 )
 
-// MessageFormatter 消息格式化工具 - 遵循 Telegram Bot API HTML 最佳实践
+// MessageFormatter message formatting utility - follows Telegram Bot API HTML best practices
 //
-// Telegram 支持的 HTML 标签:
-//   - <b>, <strong> - 粗体
-//   - <i>, <em> - 斜体
-//   - <u>, <ins> - 下划线
-//   - <s>, <strike>, <del> - 删除线
-//   - <code> - 行内代码
-//   - <pre> - 代码块
-//   - <pre><code class="language-xxx"> - 带语言标识的代码块
-//   - <a href="url"> - 链接
-//   - <tg-spoiler> - 剧透标签
+// Telegram supported HTML tags:
+//   - <b>, <strong> - bold
+//   - <i>, <em> - italic
+//   - <u>, <ins> - underline
+//   - <s>, <strike>, <del> - strikethrough
+//   - <code> - inline code
+//   - <pre> - code block
+//   - <pre><code class="language-xxx"> - code block with language identifier
+//   - <a href="url"> - link
+//   - <tg-spoiler> - spoiler tag
 //
-// 最佳实践:
-//   - 支持标签嵌套
-//   - 仅需转义 4 个字符: & < > "
-//   - Emoji 和中文无需转义
-//   - 让 Telegram 客户端自然渲染,不强制统一消息宽度
+// Best practices:
+//   - Tag nesting is supported
+//   - Only need to escape 4 characters: & < > "
+//   - Emoji and Chinese do not need escaping
+//   - Let Telegram client render naturally, do not force uniform message width
 //
-// 参考: https://core.telegram.org/bots/api#html-style
+// Reference: https://core.telegram.org/bots/api#html-style
 type MessageFormatter struct {
 	maxWidth int // 最大宽度(字符数) - 用于内容智能换行参考(不强制)
 }
 
-// NewMessageFormatter 创建消息格式化器
+// NewMessageFormatter creates message formatter
 func NewMessageFormatter() *MessageFormatter {
 	return &MessageFormatter{
 		maxWidth: 50, // 内容智能换行的参考宽度（不强制）
 	}
 }
 
-// FormatTitle 格式化标题 - 遵循 Telegram 最佳实践
+// FormatTitle formats title - follows Telegram best practices
 func (mf *MessageFormatter) FormatTitle(emoji, title string) string {
 	// Telegram 官方推荐：简洁清晰的标题格式
 	// 使用 emoji 提升可读性和用户体验
 	return fmt.Sprintf("<b>%s %s</b>", emoji, title)
 }
 
-// FormatSection 格式化章节标题
+// FormatSection formats section title
 func (mf *MessageFormatter) FormatSection(title string) string {
 	return fmt.Sprintf("\n<b>%s</b>", title)
 }
 
-// FormatSeparator 格式化分隔线
+// FormatSeparator formats separator line
 func (mf *MessageFormatter) FormatSeparator() string {
 	return strings.Repeat("─", 30)
 }

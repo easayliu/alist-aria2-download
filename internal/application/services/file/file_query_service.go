@@ -154,14 +154,14 @@ func (s *FileQueryService) fetchFilesRecursiveWithInfo(path string, startTime, e
 
 					// 替换URL（只在包含fcalist-public时替换）
 					originalURL := fileInfo.Data.RawURL
-					logger.Info("🎯 FileQueryService获取到raw_url", "path", fullPath, "raw_url", originalURL)
-					
+					logger.Debug("Got raw URL", "path", fullPath, "raw_url", originalURL)
+
 					internalURL := originalURL
 					if strings.Contains(originalURL, "fcalist-public") {
 						internalURL = strings.ReplaceAll(originalURL, "fcalist-public", "fcalist-internal")
-						logger.Info("🔄 FileQueryService URL替换", "original", originalURL, "internal", internalURL)
+						logger.Debug("URL replaced", "original", originalURL, "internal", internalURL)
 					} else {
-						logger.Info("ℹ️  FileQueryService无需URL替换", "url", originalURL)
+						logger.Debug("No URL replacement needed", "url", originalURL)
 					}
 
 					// 判断媒体类型并生成下载路径（这里需要依赖媒体服务）

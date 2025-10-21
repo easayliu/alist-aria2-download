@@ -7,12 +7,12 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// TaskHandler 处理任务管理相关功能
+// TaskHandler handles task management related functions
 type TaskHandler struct {
 	controller *TelegramController
 }
 
-// NewTaskHandler 创建新的任务处理器
+// NewTaskHandler creates a new task handler
 func NewTaskHandler(controller *TelegramController) *TaskHandler {
 	return &TaskHandler{
 		controller: controller,
@@ -20,10 +20,10 @@ func NewTaskHandler(controller *TelegramController) *TaskHandler {
 }
 
 // ================================
-// 任务管理功能
+// Task Management Functions
 // ================================
 
-// HandleTasksWithEdit 处理查看定时任务（支持消息编辑）
+// HandleTasksWithEdit handles viewing scheduled tasks (supports message editing)
 func (h *TaskHandler) HandleTasksWithEdit(chatID int64, userID int64, messageID int) {
 	if h.controller.schedulerService == nil {
 		message := "定时任务服务未启用"
@@ -79,7 +79,7 @@ func (h *TaskHandler) HandleTasksWithEdit(chatID int64, userID int64, messageID 
 			status = "启用"
 		}
 
-		// 计算时间描述
+		// Calculate time description
 		timeDesc := h.formatTaskTimeDescription(task.HoursAgo)
 		schedule := fmt.Sprintf("%s (最近%s)", task.Cron, timeDesc)
 
@@ -104,7 +104,7 @@ func (h *TaskHandler) HandleTasksWithEdit(chatID int64, userID int64, messageID 
 		})
 	}
 
-	// 使用统一格式化器
+	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	listData := utils.TaskListData{
 		TotalCount: len(tasks),
@@ -112,7 +112,7 @@ func (h *TaskHandler) HandleTasksWithEdit(chatID int64, userID int64, messageID 
 	}
 	message := formatter.FormatTaskList(listData)
 
-	// 添加命令说明
+	// Add command instructions
 	message += "\n\n" + formatter.FormatSection("命令")
 	message += "\n" + formatter.FormatListItem("•", "立即运行: <code>/runtask ID</code>")
 	message += "\n" + formatter.FormatListItem("•", "删除任务: <code>/deltask ID</code>")
@@ -128,7 +128,7 @@ func (h *TaskHandler) HandleTasksWithEdit(chatID int64, userID int64, messageID 
 	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
-// formatTaskTimeDescription 格式化任务时间描述
+// formatTaskTimeDescription formats task time description
 func (h *TaskHandler) formatTaskTimeDescription(hoursAgo int) string {
 	switch hoursAgo {
 	case 24:

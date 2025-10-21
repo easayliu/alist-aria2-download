@@ -77,11 +77,11 @@ func (d *ConflictDetector) CheckDuplicateDownload(
 	defer d.mutex.RUnlock()
 
 	if record, exists := d.downloadHistory[filePath]; exists {
-		logger.Info("检测到重复下载",
+		logger.Info("Duplicate download detected",
 			"file", filePath,
 			"downloaded_at", record.DownloadedAt)
 
-		return &record, fmt.Errorf("文件已下载: %s", filePath)
+		return &record, fmt.Errorf("file already downloaded: %s", filePath)
 	}
 
 	return nil, nil
@@ -92,26 +92,26 @@ func (d *ConflictDetector) ResolveConflict(
 	targetPath string,
 	policy ConflictPolicy,
 ) (string, error) {
-	logger.Info("解决路径冲突",
+	logger.Info("Resolving path conflict",
 		"path", targetPath,
 		"policy", policy)
 
 	switch policy {
 	case ConflictPolicySkip:
-		return "", fmt.Errorf("跳过下载（冲突策略）")
+		return "", fmt.Errorf("skipping download (conflict policy)")
 
 	case ConflictPolicyOverwrite:
-		logger.Warn("将覆盖现有文件", "path", targetPath)
+		logger.Warn("Will overwrite existing file", "path", targetPath)
 		return targetPath, nil
 
 	case ConflictPolicyRename:
 		// 生成新路径：添加序号或时间戳
 		newPath := d.generateUniquePath(targetPath)
-		logger.Info("重命名路径", "original", targetPath, "new", newPath)
+		logger.Info("Renaming path", "original", targetPath, "new", newPath)
 		return newPath, nil
 
 	default:
-		return "", fmt.Errorf("未知的冲突策略: %s", policy)
+		return "", fmt.Errorf("unknown conflict policy: %s", policy)
 	}
 }
 
@@ -153,7 +153,7 @@ func (d *ConflictDetector) RegisterDownload(record DownloadRecord) {
 	// 注册路径和媒体类型
 	d.pathRegistry[record.DownloadPath] = record.MediaType
 
-	logger.Debug("注册下载记录",
+	logger.Debug("Registered download record",
 		"file", record.FilePath,
 		"download_path", record.DownloadPath,
 		"media_type", record.MediaType)
@@ -180,7 +180,7 @@ func (d *ConflictDetector) ClearHistory() {
 	d.downloadHistory = make(map[string]DownloadRecord)
 	d.pathRegistry = make(map[string]string)
 
-	logger.Info("已清空下载历史记录")
+	logger.Info("Download history cleared")
 }
 
 // GetHistoryCount 获取历史记录数量

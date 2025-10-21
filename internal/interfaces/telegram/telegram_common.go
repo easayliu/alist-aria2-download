@@ -7,18 +7,18 @@ import (
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 )
 
-// Common 通用工具函数和共享状态
+// Common utility functions and shared state
 type Common struct {
 	controller *TelegramController
-	
-	// 路径缓存相关
+
+	// Path cache related
 	pathMutex        sync.RWMutex
 	pathCache        map[string]string // token -> path
 	pathReverseCache map[string]string // path -> token
 	pathTokenCounter int
 }
 
-// NewCommon 创建新的通用工具实例
+// NewCommon creates a new common utility instance
 func NewCommon(controller *TelegramController) *Common {
 	return &Common{
 		controller:       controller,
@@ -29,37 +29,37 @@ func NewCommon(controller *TelegramController) *Common {
 }
 
 // ================================
-// 文件大小格式化功能
+// File size formatting functions
 // ================================
 
-// FormatFileSize 格式化文件大小
+// FormatFileSize formats file size
 func (c *Common) FormatFileSize(size int64) string {
 	return c.controller.messageUtils.FormatFileSize(size)
 }
 
 // ================================
-// 路径缓存管理
+// Path cache management
 // ================================
 
-// EncodeFilePath 编码文件路径用于callback data（使用缓存机制避免64字节限制）
+// EncodeFilePath encodes file path for callback data (using cache to avoid 64-byte limit)
 func (c *Common) EncodeFilePath(path string) string {
 	c.pathMutex.Lock()
 	defer c.pathMutex.Unlock()
 
-	// 检查是否已有缓存
+	// Check if path is already in cache
 	if token, exists := c.pathReverseCache[path]; exists {
 		return token
 	}
 
-	// 创建新的短token
+	// Create new short token for path
 	c.pathTokenCounter++
 	token := fmt.Sprintf("p%d", c.pathTokenCounter)
 
-	// 存储到缓存
+	// Store path and token in cache
 	c.pathCache[token] = path
 	c.pathReverseCache[path] = token
 
-	// 清理过期缓存（保持缓存大小合理）
+	// Clean up cache if it gets too large (keep cache size reasonable)
 	if len(c.pathCache) > 1000 {
 		c.cleanupPathCache()
 	}
@@ -67,7 +67,7 @@ func (c *Common) EncodeFilePath(path string) string {
 	return token
 }
 
-// DecodeFilePath 解码文件路径
+// DecodeFilePath decodes file path from token
 func (c *Common) DecodeFilePath(encoded string) string {
 	c.pathMutex.RLock()
 	defer c.pathMutex.RUnlock()
@@ -76,42 +76,43 @@ func (c *Common) DecodeFilePath(encoded string) string {
 		return path
 	}
 
-	logger.Warn("路径token未找到:", "token", encoded)
-	return "/" // 未找到时返回根目录
+	logger.Warn("Path token not found", "token", encoded)
+	return "/"
 }
 
-// cleanupPathCache 清理路径缓存（保留最近的500个）
+// cleanupPathCache cleans up path cache (keeps most recent 500 entries)
 func (c *Common) cleanupPathCache() {
-	// 这是一个简单的清理策略，实际应用中可以使用LRU等更复杂的策略
+	// Simple cleanup strategy: clear all when limit exceeded
+	// In production, could use LRU or other advanced strategies
 	if len(c.pathCache) <= 500 {
 		return
 	}
 
-	// 清空缓存，重新开始（简单但有效）
+	// Clear entire cache and restart counter (simple but effective)
 	c.pathCache = make(map[string]string)
 	c.pathReverseCache = make(map[string]string)
 	c.pathTokenCounter = 1
 
-	logger.Info("路径缓存已清理")
+	logger.Info("Path cache cleared")
 }
 
 // ================================
-// 路径工具函数
+// Path utility functions
 // ================================
 
-// IsDirectoryPath 判断路径是否为目录
+// IsDirectoryPath checks if path is a directory
 func (c *Common) IsDirectoryPath(path string) bool {
-	// 简化实现，避免循环依赖
-	return true // 暂时返回true，实际实现需要通过FileService
+	// Simplified implementation: always return true to avoid circular dependency
+	return true
 }
 
-// GetParentPath 获取父目录路径 - 兼容性方法
+// GetParentPath gets parent directory path - compatibility wrapper method
 func (c *Common) GetParentPath(path string) string {
 	if path == "/" {
 		return "/"
 	}
-	
-	// 简单实现：移除最后一个路径分量
+
+	// Simple implementation: remove the last path component
 	for i := len(path) - 1; i >= 0; i-- {
 		if path[i] == '/' {
 			if i == 0 {
@@ -120,10 +121,10 @@ func (c *Common) GetParentPath(path string) string {
 			return path[:i]
 		}
 	}
-	
+
 	return "/"
 }
 
 // ================================
-// 辅助方法 - 内部使用
+// Helper methods - internal use only
 // ================================

@@ -45,11 +45,11 @@ func NewDirectoryManager(cfg *config.Config) *DirectoryManager {
 
 // EnsureDirectory 确保目录存在且可用
 func (m *DirectoryManager) EnsureDirectory(path string) error {
-	logger.Debug("检查目录", "path", path)
+	logger.Debug("Checking directory", "path", path)
 
 	// 1. 检查缓存
 	if m.isInCache(path) {
-		logger.Debug("目录已在缓存中", "path", path)
+		logger.Debug("Directory found in cache", "path", path)
 		return nil
 	}
 
@@ -70,12 +70,12 @@ func (m *DirectoryManager) EnsureDirectory(path string) error {
 		// 验证可写性（可选）
 		if m.validatePerms {
 			if err := m.checkWritable(path); err != nil {
-				logger.Warn("目录权限验证失败，但目录已存在，继续使用", "path", path, "error", err)
+				logger.Warn("Directory permission validation failed, but directory exists, continuing", "path", path, "error", err)
 				// 不返回错误，允许继续使用已存在的目录
 			}
 		}
 
-		logger.Debug("✅ 目录已存在", "path", path)
+		logger.Debug("Directory exists", "path", path)
 		return nil
 	}
 
@@ -89,30 +89,30 @@ func (m *DirectoryManager) EnsureDirectory(path string) error {
 
 	// 4. 自动创建目录（仅当配置启用时）
 	if !m.autoCreate {
-		logger.Warn("目录不存在且未启用自动创建，将交由下载工具处理", "path", path)
+		logger.Warn("Directory does not exist and auto-create is disabled, delegating to download tool", "path", path)
 		// 不返回错误，让 Aria2 自己尝试创建
 		return nil
 	}
 
 	// 5. 尝试创建目录
-	logger.Info("📁 尝试创建目录", "path", path)
+	logger.Info("Attempting to create directory", "path", path)
 	if err := os.MkdirAll(path, 0755); err != nil {
 		// 创建失败时，检查是否是权限问题
 		if os.IsPermission(err) {
-			logger.Warn("⚠️  无权限创建目录，将交由下载工具处理", "path", path, "error", err)
+			logger.Warn("No permission to create directory, delegating to download tool", "path", path, "error", err)
 			// 不返回错误，让 Aria2 自己尝试
 			return nil
 		}
 
 		// 其他错误（如只读文件系统）也不阻止下载
-		logger.Warn("⚠️  创建目录失败，将交由下载工具处理", "path", path, "error", err)
+		logger.Warn("Failed to create directory, delegating to download tool", "path", path, "error", err)
 		return nil
 	}
 
 	// 6. 验证可写性（新创建的目录）
 	if m.validatePerms {
 		if err := m.checkWritable(path); err != nil {
-			logger.Warn("新创建目录的权限验证失败", "path", path, "error", err)
+			logger.Warn("Permission validation failed for newly created directory", "path", path, "error", err)
 			// 不返回错误，不清理目录
 		}
 	}
@@ -120,7 +120,7 @@ func (m *DirectoryManager) EnsureDirectory(path string) error {
 	// 7. 更新缓存
 	m.updateCache(path, true)
 
-	logger.Info("✅ 目录创建成功", "path", path)
+	logger.Info("Directory created successfully", "path", path)
 	return nil
 }
 
@@ -130,11 +130,11 @@ func (m *DirectoryManager) CheckDiskSpace(path string, requiredBytes int64) erro
 		return nil
 	}
 
-	logger.Debug("检查磁盘空间", "path", path, "required", formatSize(requiredBytes))
+	logger.Debug("Checking disk space", "path", path, "required", formatSize(requiredBytes))
 
 	availableBytes, err := m.getAvailableSpace(path)
 	if err != nil {
-		logger.Warn("无法检查磁盘空间", "path", path, "error", err)
+		logger.Warn("Unable to check disk space", "path", path, "error", err)
 		return nil // 不阻止下载，只是警告
 	}
 
@@ -145,14 +145,14 @@ func (m *DirectoryManager) CheckDiskSpace(path string, requiredBytes int64) erro
 		return &DirectoryError{
 			Path: path,
 			Reason: fmt.Sprintf(
-				"磁盘空间不足: 需要 %s (含缓冲)，可用 %s",
+				"Insufficient disk space: required %s (with buffer), available %s",
 				formatSize(requiredWithBuffer),
 				formatSize(availableBytes),
 			),
 		}
 	}
 
-	logger.Debug("磁盘空间充足",
+	logger.Debug("Sufficient disk space",
 		"available", formatSize(availableBytes),
 		"required", formatSize(requiredWithBuffer))
 
@@ -165,7 +165,7 @@ func (m *DirectoryManager) CheckBatchDiskSpace(path string, totalBytes int64) er
 		return nil
 	}
 
-	logger.Info("批量检查磁盘空间",
+	logger.Info("Checking batch disk space",
 		"path", path,
 		"totalSize", formatSize(totalBytes))
 
@@ -187,7 +187,7 @@ func (m *DirectoryManager) checkWritable(path string) error {
 
 	// 清理测试文件
 	if err := os.Remove(testFile); err != nil {
-		logger.Warn("清理测试文件失败", "file", testFile, "error", err)
+		logger.Warn("Failed to clean up test file", "file", testFile, "error", err)
 	}
 
 	return nil
@@ -237,7 +237,7 @@ func (m *DirectoryManager) ClearCache() {
 	defer m.cacheMutex.Unlock()
 
 	m.dirCache = make(map[string]bool)
-	logger.Debug("目录缓存已清空")
+	logger.Debug("Directory cache cleared")
 }
 
 // GetCacheSize 获取缓存大小（用于监控）

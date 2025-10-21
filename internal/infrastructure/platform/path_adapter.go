@@ -46,7 +46,7 @@ func NewPathAdapter() *PathAdapter {
 
 // NormalizePath 规范化路径（跨平台处理）
 func (a *PathAdapter) NormalizePath(path string) string {
-	logger.Debug("规范化路径", "original", path, "platform", a.platform)
+	logger.Debug("Normalizing path", "original", path, "platform", a.platform)
 
 	// 1. 统一分隔符为当前平台
 	path = filepath.FromSlash(path)
@@ -59,7 +59,7 @@ func (a *PathAdapter) NormalizePath(path string) string {
 		path = a.ensureWindowsDrive(path)
 	}
 
-	logger.Debug("路径规范化完成", "normalized", path)
+	logger.Debug("Path normalization completed", "normalized", path)
 	return path
 }
 
@@ -118,7 +118,7 @@ func (a *PathAdapter) validateWindowsPath(path string) error {
 
 	// 4. 检查路径长度
 	if len(path) > 260 {
-		logger.Warn("Windows路径可能过长", "length", len(path), "max", 260)
+		logger.Warn("Windows path may be too long", "length", len(path), "max", 260)
 	}
 
 	return nil

@@ -93,7 +93,7 @@ func (s *MediaClassificationService) UpdateMediaStats(summary *contracts.FileSum
 
 	// 使用 GetMediaType 方法，它会优先使用路径分类，然后回退到文件名分类
 	mediaType := s.GetMediaType(filePath)
-	logger.Debug("文件媒体类型已确定", "file", filename, "mediaType", mediaType)
+	logger.Debug("File media type determined", "file", filename, "mediaType", mediaType)
 
 	switch mediaType {
 	case "movie":

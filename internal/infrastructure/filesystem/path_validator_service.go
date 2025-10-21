@@ -174,7 +174,7 @@ func (s *PathValidatorService) validateWindowsPath(path string) error {
 
 // CleanPath 清理路径（移除不安全字符）
 func (s *PathValidatorService) CleanPath(path string) string {
-	logger.Debug("清理路径", "original", path)
+	logger.Debug("Cleaning path", "original", path)
 
 	// 1. 移除零宽字符
 	path = removeZeroWidthChars(path)
@@ -193,7 +193,7 @@ func (s *PathValidatorService) CleanPath(path string) string {
 		path = s.truncatePath(path)
 	}
 
-	logger.Debug("清理路径完成", "cleaned", path)
+	logger.Debug("Path cleaning completed", "cleaned", path)
 	return path
 }
 
@@ -234,7 +234,7 @@ func (s *PathValidatorService) truncatePath(path string) string {
 
 	if availableLength < 20 {
 		// 如果目录路径太长，只保留基础目录
-		logger.Warn("路径过长，使用简化路径", "original", path)
+		logger.Warn("Path too long, using simplified path", "original", path)
 		return filepath.Join(filepath.Dir(dir), base[:20]+ext)
 	}
 

@@ -12,14 +12,14 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 )
 
-// TaskCommands 定时任务命令处理器
+// TaskCommands handles scheduled task commands
 type TaskCommands struct {
 	schedulerService *task.SchedulerService
 	config           *config.Config
 	messageUtils     types.MessageSender
 }
 
-// NewTaskCommands 创建定时任务命令处理器
+// NewTaskCommands creates a scheduled task command handler
 func NewTaskCommands(schedulerService *task.SchedulerService, config *config.Config, messageUtils types.MessageSender) *TaskCommands {
 	return &TaskCommands{
 		schedulerService: schedulerService,
@@ -28,7 +28,7 @@ func NewTaskCommands(schedulerService *task.SchedulerService, config *config.Con
 	}
 }
 
-// HandleTasks 处理查看定时任务
+// HandleTasks handles viewing scheduled tasks
 func (tc *TaskCommands) HandleTasks(chatID int64, userID int64) {
 	if tc.schedulerService == nil {
 		tc.messageUtils.SendMessage(chatID, "定时任务服务未启用")
@@ -65,7 +65,7 @@ func (tc *TaskCommands) HandleTasks(chatID int64, userID int64) {
 			status = "启用"
 		}
 
-		// 计算时间描述
+		// Calculate time description
 		timeDesc := tc.formatTaskTimeDescription(task.HoursAgo)
 
 		message += fmt.Sprintf(
@@ -103,7 +103,7 @@ func (tc *TaskCommands) HandleTasks(chatID int64, userID int64) {
 	tc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// HandleAddTask 处理添加定时任务
+// HandleAddTask handles adding a scheduled task
 func (tc *TaskCommands) HandleAddTask(chatID int64, userID int64, command string) {
 	if tc.schedulerService == nil {
 		tc.messageUtils.SendMessage(chatID, "定时任务服务未启用")
@@ -111,44 +111,44 @@ func (tc *TaskCommands) HandleAddTask(chatID int64, userID int64, command string
 	}
 
 	parts := strings.Fields(command)
-	if len(parts) < 5 { // 最少需要5个参数（路径可选）
+	if len(parts) < 5 { // Minimum 5 parameters required (path is optional)
 		tc.sendAddTaskHelp(chatID)
 		return
 	}
 
-	// 解析参数 - 需要处理cron表达式可能包含空格的情况
+	// Parse parameters - need to handle cron expressions that may contain spaces
 	name := parts[1]
 
 	var cron, path string
 	var hoursAgo int
 	var videoOnly bool
 
-	// 最后两个参数始终是 hoursAgo 和 videoOnly
+	// Last two parameters are always hoursAgo and videoOnly
 	videoOnly = parts[len(parts)-1] == "true"
 	hoursAgo, _ = strconv.Atoi(parts[len(parts)-2])
 
-	// 检查倒数第三个参数是否是路径（以/开头）或是否是数字（如果是数字，说明没有提供路径）
+	// Check if third-to-last parameter is a path (starts with /) or a number (if number, path not provided)
 	if len(parts) >= 6 && strings.HasPrefix(parts[len(parts)-3], "/") {
-		// 有路径参数
+		// Has path parameter
 		path = parts[len(parts)-3]
-		// 中间的部分都是cron表达式
+		// Middle parts are cron expression
 		cronParts := parts[2 : len(parts)-3]
 		cron = strings.Join(cronParts, " ")
 	} else {
-		// 没有路径参数，使用默认路径
+		// No path parameter, use default path
 		path = tc.config.Alist.DefaultPath
 		if path == "" {
 			path = "/"
 		}
-		// 中间的部分都是cron表达式
+		// Middle parts are cron expression
 		cronParts := parts[2 : len(parts)-2]
 		cron = strings.Join(cronParts, " ")
 	}
 
-	// 去除可能的引号
+	// Remove possible quotes
 	cron = strings.Trim(cron, "\"'")
 
-	// 创建任务
+	// Create task
 	task := &entities.ScheduledTask{
 		Name:      name,
 		Enabled:   true,
@@ -180,7 +180,7 @@ func (tc *TaskCommands) HandleAddTask(chatID int64, userID int64, command string
 	tc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// HandleQuickTask 处理快捷定时任务
+// HandleQuickTask handles quick scheduled task creation
 func (tc *TaskCommands) HandleQuickTask(chatID int64, userID int64, command string) {
 	if tc.schedulerService == nil {
 		tc.messageUtils.SendMessage(chatID, "定时任务服务未启用")
@@ -195,7 +195,7 @@ func (tc *TaskCommands) HandleQuickTask(chatID int64, userID int64, command stri
 
 	taskType := parts[1]
 
-	// 获取路径，如果没有指定则使用默认路径
+	// Get path, use default path if not specified
 	path := tc.config.Alist.DefaultPath
 	if path == "" {
 		path = "/"
@@ -211,7 +211,7 @@ func (tc *TaskCommands) HandleQuickTask(chatID int64, userID int64, command stri
 		task = &entities.ScheduledTask{
 			Name:      fmt.Sprintf("每日下载-%s", path),
 			Enabled:   true,
-			Cron:      "0 2 * * *", // 每天凌晨2点
+			Cron:      "0 2 * * *", // Every day at 2 AM
 			Path:      path,
 			HoursAgo:  24,
 			VideoOnly: true,
@@ -221,7 +221,7 @@ func (tc *TaskCommands) HandleQuickTask(chatID int64, userID int64, command stri
 		task = &entities.ScheduledTask{
 			Name:      fmt.Sprintf("频繁同步-%s", path),
 			Enabled:   true,
-			Cron:      "0 */2 * * *", // 每2小时
+			Cron:      "0 */2 * * *", // Every 2 hours
 			Path:      path,
 			HoursAgo:  2,
 			VideoOnly: true,
@@ -231,9 +231,9 @@ func (tc *TaskCommands) HandleQuickTask(chatID int64, userID int64, command stri
 		task = &entities.ScheduledTask{
 			Name:      fmt.Sprintf("每周汇总-%s", path),
 			Enabled:   true,
-			Cron:      "0 9 * * 1", // 每周一早9点
+			Cron:      "0 9 * * 1", // Every Monday at 9 AM
 			Path:      path,
-			HoursAgo:  168, // 7天
+			HoursAgo:  168, // 7 days
 			VideoOnly: true,
 			CreatedBy: userID,
 		}
@@ -241,7 +241,7 @@ func (tc *TaskCommands) HandleQuickTask(chatID int64, userID int64, command stri
 		task = &entities.ScheduledTask{
 			Name:      fmt.Sprintf("实时同步-%s", path),
 			Enabled:   true,
-			Cron:      "0 * * * *", // 每小时（整点）
+			Cron:      "0 * * * *", // Every hour (on the hour)
 			Path:      path,
 			HoursAgo:  1,
 			VideoOnly: true,
@@ -284,7 +284,7 @@ func (tc *TaskCommands) HandleQuickTask(chatID int64, userID int64, command stri
 	tc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// HandleDeleteTask 处理删除定时任务
+// HandleDeleteTask handles deleting a scheduled task
 func (tc *TaskCommands) HandleDeleteTask(chatID int64, userID int64, command string) {
 	if tc.schedulerService == nil {
 		tc.messageUtils.SendMessage(chatID, "定时任务服务未启用")
@@ -299,7 +299,7 @@ func (tc *TaskCommands) HandleDeleteTask(chatID int64, userID int64, command str
 
 	taskID := parts[1]
 
-	// 查找完整的任务ID
+	// Find complete task ID
 	tasks, _ := tc.schedulerService.GetUserTasks(userID)
 	var fullTaskID string
 	for _, task := range tasks {
@@ -323,7 +323,7 @@ func (tc *TaskCommands) HandleDeleteTask(chatID int64, userID int64, command str
 	tc.messageUtils.SendMessage(chatID, "任务已删除")
 }
 
-// HandleRunTask 处理立即运行定时任务
+// HandleRunTask handles running a scheduled task immediately
 func (tc *TaskCommands) HandleRunTask(chatID int64, userID int64, command string) {
 	if tc.schedulerService == nil {
 		tc.messageUtils.SendMessage(chatID, "定时任务服务未启用")
@@ -338,7 +338,7 @@ func (tc *TaskCommands) HandleRunTask(chatID int64, userID int64, command string
 
 	taskID := parts[1]
 
-	// 查找完整的任务ID
+	// Find complete task ID
 	tasks, _ := tc.schedulerService.GetUserTasks(userID)
 	var fullTaskID string
 	var taskName string
@@ -364,7 +364,7 @@ func (tc *TaskCommands) HandleRunTask(chatID int64, userID int64, command string
 	tc.messageUtils.SendMessage(chatID, fmt.Sprintf("任务 '%s' 已开始运行，请稍后查看结果", taskName))
 }
 
-// formatTaskTimeDescription 格式化任务时间描述
+// formatTaskTimeDescription formats task time description
 func (tc *TaskCommands) formatTaskTimeDescription(hoursAgo int) string {
 	switch hoursAgo {
 	case 24:
@@ -382,7 +382,7 @@ func (tc *TaskCommands) formatTaskTimeDescription(hoursAgo int) string {
 	}
 }
 
-// sendAddTaskHelp 发送添加任务帮助信息
+// sendAddTaskHelp sends add task help message
 func (tc *TaskCommands) sendAddTaskHelp(chatID int64) {
 	defaultPath := tc.config.Alist.DefaultPath
 	if defaultPath == "" {
@@ -439,7 +439,7 @@ func (tc *TaskCommands) sendAddTaskHelp(chatID int64) {
 	tc.messageUtils.SendMessageHTML(chatID, message)
 }
 
-// sendQuickTaskHelp 发送快捷任务帮助信息
+// sendQuickTaskHelp sends quick task help message
 func (tc *TaskCommands) sendQuickTaskHelp(chatID int64) {
 	defaultPath := tc.config.Alist.DefaultPath
 	if defaultPath == "" {
