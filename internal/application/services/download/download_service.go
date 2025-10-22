@@ -223,9 +223,12 @@ func (s *AppDownloadService) CreateBatchDownload(ctx context.Context, req contra
 			result.Success = true
 			result.Download = download
 			successCount++
-			
+
 			// 更新摘要统计 - 使用最终下载目录路径进行正确分类
 			summary.TotalFiles++
+			summary.TotalSize += item.FileSize  // 累加文件大小
+			logger.Debug("Batch download: added file to summary", "file", download.Filename, "fileSize", item.FileSize, "totalSize", summary.TotalSize)
+
 			if s.isVideoFile(download.Filename) {
 				summary.VideoFiles++
 				// 使用最终的下载目录路径来判断分类
@@ -292,6 +295,13 @@ func (s *AppDownloadService) GetSystemStatus(ctx context.Context) (map[string]in
 			"status":      aria2Status,
 			"version":     versionStr,
 			"global_stat": globalStat,
+		},
+		"telegram": map[string]interface{}{
+			"status": "online",
+		},
+		"server": map[string]interface{}{
+			"port": s.config.Server.Port,
+			"mode": s.config.Server.Mode,
 		},
 		"service": map[string]interface{}{
 			"name":    "download_service",

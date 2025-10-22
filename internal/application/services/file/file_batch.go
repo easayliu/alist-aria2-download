@@ -81,14 +81,15 @@ func (s *AppFileService) DownloadDirectory(ctx context.Context, req contracts.Di
 	var downloadRequests []contracts.DownloadRequest
 	for _, file := range listResp.Files {
 		// 动态获取真实的下载URL
-		logger.Debug("Getting download URL for file in directory", "file", file.Name, "path", file.Path)
+		logger.Debug("Getting download URL for file in directory", "file", file.Name, "path", file.Path, "size", file.Size)
 		internalURL, _ := s.getRealDownloadURLs(file.Path)
-		
+
 		downloadReq := contracts.DownloadRequest{
 			URL:          internalURL,
 			Filename:     file.Name,
 			Directory:    req.TargetDir,
 			AutoClassify: req.AutoClassify,
+			FileSize:     file.Size,  // 设置文件大小用于统计
 		}
 
 		if downloadReq.Directory == "" {
@@ -96,6 +97,7 @@ func (s *AppFileService) DownloadDirectory(ctx context.Context, req contracts.Di
 		}
 
 		downloadRequests = append(downloadRequests, downloadReq)
+		logger.Debug("Download request created", "file", file.Name, "fileSize", downloadReq.FileSize)
 	}
 
 	batchReq := contracts.BatchDownloadRequest{

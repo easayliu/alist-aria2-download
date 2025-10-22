@@ -343,3 +343,226 @@ func (h *FileHandler) ManualDownloadFiles(c *gin.Context) {
 		"results":       batchResponse.Results,
 	})
 }
+
+// SearchFiles 搜索文件
+// @Summary 搜索文件
+// @Description 在指定路径中搜索符合条件的文件
+// @Tags 文件管理
+// @Accept json
+// @Produce json
+// @Param request body contracts.FileSearchRequest true "搜索请求参数"
+// @Success 200 {object} map[string]interface{} "搜索结果"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /files/search [post]
+func (h *FileHandler) SearchFiles(c *gin.Context) {
+	ctx := context.Background()
+	var req contracts.FileSearchRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httputil.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
+		return
+	}
+
+	if req.Path == "" {
+		req.Path = h.container.GetConfig().Alist.DefaultPath
+	}
+
+	fileService := h.container.GetFileService()
+	response, err := fileService.SearchFiles(ctx, req)
+	if err != nil {
+		httputil.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to search files: "+err.Error())
+		return
+	}
+
+	httputil.Success(c, gin.H{
+		"query":   req.Query,
+		"path":    req.Path,
+		"total":   response.TotalCount,
+		"files":   response.Files,
+		"summary": response.Summary,
+	})
+}
+
+// GetFilesByTimeRange 按时间范围获取文件
+// @Summary 按时间范围获取文件
+// @Description 获取指定时间范围内修改的文件列表
+// @Tags 文件管理
+// @Accept json
+// @Produce json
+// @Param request body contracts.TimeRangeFileRequest true "时间范围请求参数"
+// @Success 200 {object} map[string]interface{} "时间范围内的文件列表"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /files/time-range [post]
+func (h *FileHandler) GetFilesByTimeRange(c *gin.Context) {
+	ctx := context.Background()
+	var req contracts.TimeRangeFileRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httputil.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
+		return
+	}
+
+	if req.Path == "" {
+		req.Path = h.container.GetConfig().Alist.DefaultPath
+	}
+
+	fileService := h.container.GetFileService()
+	response, err := fileService.GetFilesByTimeRange(ctx, req)
+	if err != nil {
+		httputil.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get files by time range: "+err.Error())
+		return
+	}
+
+	httputil.Success(c, gin.H{
+		"path":       req.Path,
+		"time_range": response.TimeRange,
+		"total":      len(response.Files),
+		"files":      response.Files,
+		"summary":    response.Summary,
+	})
+}
+
+// GetRecentFiles 获取最近文件
+// @Summary 获取最近文件
+// @Description 获取最近指定小时内修改的文件
+// @Tags 文件管理
+// @Accept json
+// @Produce json
+// @Param path query string false "搜索路径"
+// @Param hours_ago query int false "小时数" default(24)
+// @Success 200 {object} map[string]interface{} "最近文件列表"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /files/recent [get]
+func (h *FileHandler) GetRecentFiles(c *gin.Context) {
+	ctx := context.Background()
+	var req contracts.RecentFilesRequest
+
+	if err := c.ShouldBindQuery(&req); err != nil {
+		httputil.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
+		return
+	}
+
+	if req.Path == "" {
+		req.Path = h.container.GetConfig().Alist.DefaultPath
+	}
+
+	fileService := h.container.GetFileService()
+	response, err := fileService.GetRecentFiles(ctx, req)
+	if err != nil {
+		httputil.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get recent files: "+err.Error())
+		return
+	}
+
+	httputil.Success(c, gin.H{
+		"path":      req.Path,
+		"hours_ago": req.HoursAgo,
+		"total":     response.TotalCount,
+		"files":     response.Files,
+		"summary":   response.Summary,
+	})
+}
+
+// ClassifyFiles 分类文件
+// @Summary 分类文件
+// @Description 将文件列表按照类型进行分类
+// @Tags 文件管理
+// @Accept json
+// @Produce json
+// @Param request body contracts.FileClassificationRequest true "文件分类请求参数"
+// @Success 200 {object} map[string]interface{} "分类结果"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /files/classify [post]
+func (h *FileHandler) ClassifyFiles(c *gin.Context) {
+	ctx := context.Background()
+	var req contracts.FileClassificationRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httputil.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
+		return
+	}
+
+	fileService := h.container.GetFileService()
+	response, err := fileService.ClassifyFiles(ctx, req)
+	if err != nil {
+		httputil.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to classify files: "+err.Error())
+		return
+	}
+
+	httputil.Success(c, gin.H{
+		"classified_files": response.ClassifiedFiles,
+		"summary":          response.Summary,
+	})
+}
+
+// GetFilesByCategory 按分类获取文件
+// @Summary 按分类获取文件
+// @Description 获取指定分类的文件列表
+// @Tags 文件管理
+// @Produce json
+// @Param category path string true "文件分类" Enums(video, audio, image, document, archive, other)
+// @Param path query string false "搜索路径"
+// @Success 200 {object} map[string]interface{} "分类文件列表"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /files/category/{category} [get]
+func (h *FileHandler) GetFilesByCategory(c *gin.Context) {
+	ctx := context.Background()
+	category := c.Param("category")
+	path := c.Query("path")
+
+	if path == "" {
+		path = h.container.GetConfig().Alist.DefaultPath
+	}
+
+	fileService := h.container.GetFileService()
+	response, err := fileService.GetFilesByCategory(ctx, path, category)
+	if err != nil {
+		httputil.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get files by category: "+err.Error())
+		return
+	}
+
+	httputil.Success(c, gin.H{
+		"path":     path,
+		"category": category,
+		"total":    response.TotalCount,
+		"files":    response.Files,
+		"summary":  response.Summary,
+	})
+}
+
+// DownloadSingleFile 下载单个文件
+// @Summary 下载单个文件
+// @Description 下载指定路径的单个文件到Aria2
+// @Tags 文件管理
+// @Accept json
+// @Produce json
+// @Param request body contracts.FileDownloadRequest true "文件下载请求参数"
+// @Success 200 {object} map[string]interface{} "文件下载任务创建成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /files/single-download [post]
+func (h *FileHandler) DownloadSingleFile(c *gin.Context) {
+	ctx := context.Background()
+	var req contracts.FileDownloadRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httputil.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid request parameters: "+err.Error())
+		return
+	}
+
+	fileService := h.container.GetFileService()
+	response, err := fileService.DownloadFile(ctx, req)
+	if err != nil {
+		httputil.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to download file: "+err.Error())
+		return
+	}
+
+	httputil.Success(c, gin.H{
+		"message":  "File download created successfully",
+		"file":     req.FilePath,
+		"download": response,
+	})
+}

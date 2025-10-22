@@ -155,7 +155,7 @@ func (s *SchedulerService) DeleteTask(taskID string) error {
 		delete(s.jobs, taskID)
 	}
 
-	logger.Info("Task deleted:", taskID)
+	logger.Info("Task deleted", "task_id", taskID)
 	return nil
 }
 
@@ -201,7 +201,7 @@ func (s *SchedulerService) scheduleTask(task *entities.ScheduledTask) error {
 
 // executeTask 执行任务
 func (s *SchedulerService) executeTask(task *entities.ScheduledTask) {
-	logger.Info("Executing scheduled task:", task.Name)
+	logger.Info("Executing scheduled task", "task", task.Name)
 
 	// 创建context
 	ctx := context.Background()
@@ -241,7 +241,7 @@ func (s *SchedulerService) executeTask(task *entities.ScheduledTask) {
 	files := resp.Files
 
 	if len(files) == 0 {
-		logger.Info("No files found for scheduled task:", task.Name)
+		logger.Info("No files found for scheduled task", "task", task.Name)
 		// 也发送无文件的通知（可选，避免用户疑惑）
 		if task.AutoPreview {
 			completeReq := contracts.TaskNotificationRequest{

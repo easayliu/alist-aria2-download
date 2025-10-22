@@ -58,8 +58,6 @@ func (bc *BasicCommands) HandleStart(chatID int64) {
 	)
 
 	bc.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
-
-	bc.messageUtils.SendMessageWithReplyKeyboard(chatID, "💡 Use shortcut buttons below or type commands")
 }
 
 // HandleHelp handles help command

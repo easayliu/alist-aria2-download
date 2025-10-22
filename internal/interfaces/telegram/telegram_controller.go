@@ -65,7 +65,7 @@ func NewTelegramController(cfg *config.Config, notificationService *services.Not
 	// Create service container for dependency injection
 	container, err := services.NewServiceContainer(cfg)
 	if err != nil {
-		logger.Error("Failed to create service container:", err)
+		logger.Error("Failed to create service container", "error", err)
 		panic("Service container initialization failed")
 	}
 
@@ -126,7 +126,7 @@ func (c *TelegramController) Webhook(ctx *gin.Context) {
 
 	var update tgbotapi.Update
 	if err := ctx.ShouldBindJSON(&update); err != nil {
-		logger.Error("Failed to parse telegram update:", err)
+		logger.Error("Failed to parse telegram update", "error", err)
 		ctx.JSON(400, gin.H{"error": "Invalid update format"})
 		return
 	}
@@ -174,7 +174,7 @@ func (c *TelegramController) StopPolling() {
 func (c *TelegramController) pollUpdates() {
 	updates, err := c.telegramClient.GetUpdates(int64(c.lastUpdateID+1), 30)
 	if err != nil {
-		logger.Error("Failed to get telegram updates:", err)
+		logger.Error("Failed to get telegram updates", "error", err)
 		time.Sleep(5 * time.Second)
 		return
 	}

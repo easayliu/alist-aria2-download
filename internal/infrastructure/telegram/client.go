@@ -19,14 +19,14 @@ type Client struct {
 func NewClient(cfg *config.TelegramConfig) *Client {
 	bot, err := tgbotapi.NewBotAPI(cfg.BotToken)
 	if err != nil {
-		logger.Error("Failed to create Telegram bot:", err)
+		logger.Error("Failed to create Telegram bot", "error", err)
 		return &Client{
 			config: cfg,
 			bot:    nil,
 		}
 	}
 
-	logger.Info("Telegram bot connected successfully, bot username:", bot.Self.UserName)
+	logger.Info("Telegram bot connected successfully", "username", bot.Self.UserName)
 
 	client := &Client{
 		config: cfg,
@@ -35,7 +35,7 @@ func NewClient(cfg *config.TelegramConfig) *Client {
 
 	// 注册Bot命令菜单
 	if err := client.RegisterBotCommands(); err != nil {
-		logger.Error("Failed to register bot commands:", err)
+		logger.Error("Failed to register bot commands", "error", err)
 	} else {
 		logger.Info("Bot commands registered successfully")
 	}

@@ -53,10 +53,39 @@ func (s *AppFileService) ListFiles(ctx context.Context, req contracts.FileListRe
 				continue
 			}
 
+			// 如果是递归模式，需要获取真实Size（用于下载统计）
+			if req.Recursive {
+				logger.Debug("Getting file info for recursive mode", "file", item.Name, "initialSize", fileResp.Size)
+				filePath := pathutil.JoinPath(req.Path, item.Name)
+				fileInfo, err := s.alistClient.GetFileInfo(filePath)
+				if err != nil {
+					logger.Warn("Failed to get file info in recursive mode", "file", item.Name, "error", err)
+					// 使用原始Size
+				} else {
+					// 更新Size（解决ListFiles返回Size为0的问题）
+					if fileInfo.Data.Size > 0 {
+						logger.Debug("Updating size in recursive mode", "file", item.Name, "oldSize", fileResp.Size, "newSize", fileInfo.Data.Size)
+						fileResp.Size = fileInfo.Data.Size
+						fileResp.SizeFormatted = strutil.FormatFileSize(fileInfo.Data.Size)
+					} else {
+						logger.Warn("GetFileInfo returned zero size in recursive mode", "file", item.Name)
+					}
+
+					// 更新下载URL
+					originalURL := fileInfo.Data.RawURL
+					internalURL := originalURL
+					if strings.Contains(originalURL, "fcalist-public") {
+						internalURL = strings.ReplaceAll(originalURL, "fcalist-public", "fcalist-internal")
+					}
+					fileResp.InternalURL = internalURL
+					fileResp.ExternalURL = originalURL
+				}
+			}
+
 			files = append(files, fileResp)
 			summary.TotalFiles++
-			summary.TotalSize += item.Size
-			logger.Debug("Added file", "name", item.Name)
+			summary.TotalSize += fileResp.Size
+			logger.Debug("Added file", "name", item.Name, "size", fileResp.Size, "totalSize", summary.TotalSize)
 
 			// 媒体分类统计 - 传入完整路径用于路径分类
 			s.updateMediaStats(&summary, fileResp.Path, item.Name)
@@ -65,25 +94,9 @@ func (s *AppFileService) ListFiles(ctx context.Context, req contracts.FileListRe
 
 	// 4. 递归处理子目录（如果需要）
 	if req.Recursive {
-		for _, dir := range directories {
-			subReq := req
-			subReq.Path = dir.Path
-			subReq.Recursive = false // 避免无限递归
-			
-			subResp, err := s.ListFiles(ctx, subReq)
-			if err != nil {
-				logger.Warn("Failed to list subdirectory", "path", dir.Path, "error", err)
-				continue
-			}
-			
-			files = append(files, subResp.Files...)
-			summary.TotalFiles += subResp.Summary.TotalFiles
-			summary.TotalSize += subResp.Summary.TotalSize
-			summary.VideoFiles += subResp.Summary.VideoFiles
-			summary.MovieFiles += subResp.Summary.MovieFiles
-			summary.TVFiles += subResp.Summary.TVFiles
-			summary.OtherFiles += subResp.Summary.OtherFiles
-		}
+		visited := make(map[string]bool)
+		visited[req.Path] = true
+		s.collectFilesRecursive(ctx, directories, req.VideoOnly, visited, &files, &summary)
 	}
 
 	// 5. 应用排序
@@ -216,6 +229,74 @@ func (s *AppFileService) GetFilesByTimeRange(ctx context.Context, req contracts.
 	}, nil
 }
 
+// collectFilesRecursive 递归收集所有子目录的文件
+func (s *AppFileService) collectFilesRecursive(ctx context.Context, directories []contracts.FileResponse, videoOnly bool, visited map[string]bool, files *[]contracts.FileResponse, summary *contracts.FileSummary) {
+	for _, dir := range directories {
+		if visited[dir.Path] {
+			logger.Debug("Directory already visited, skipping", "path", dir.Path)
+			continue
+		}
+		visited[dir.Path] = true
+
+		alistResp, err := s.alistClient.ListFiles(dir.Path, 1, 1000)
+		if err != nil {
+			logger.Warn("Failed to list subdirectory", "path", dir.Path, "error", err)
+			continue
+		}
+
+		var subDirs []contracts.FileResponse
+		for _, item := range alistResp.Data.Content {
+			fileResp := s.convertToFileResponse(item, dir.Path)
+
+			if item.IsDir {
+				subDirs = append(subDirs, fileResp)
+				summary.TotalDirs++
+			} else {
+				if videoOnly && !s.IsVideoFile(item.Name) {
+					continue
+				}
+
+				// 获取文件详细信息（包含真实Size和下载URL）
+				logger.Debug("Getting file info for recursive collection", "file", item.Name, "initialSize", fileResp.Size)
+				filePath := pathutil.JoinPath(dir.Path, item.Name)
+				fileInfo, err := s.alistClient.GetFileInfo(filePath)
+				if err != nil {
+					logger.Warn("Failed to get file info in recursive collection", "file", item.Name, "error", err)
+					// 使用原始Size
+				} else {
+					// 更新Size（解决ListFiles返回Size为0的问题）
+					if fileInfo.Data.Size > 0 {
+						logger.Debug("Updating size in recursive collection", "file", item.Name, "oldSize", fileResp.Size, "newSize", fileInfo.Data.Size)
+						fileResp.Size = fileInfo.Data.Size
+						fileResp.SizeFormatted = strutil.FormatFileSize(fileInfo.Data.Size)
+					} else {
+						logger.Warn("GetFileInfo returned zero size in recursive collection", "file", item.Name)
+					}
+
+					// 更新下载URL
+					originalURL := fileInfo.Data.RawURL
+					internalURL := originalURL
+					if strings.Contains(originalURL, "fcalist-public") {
+						internalURL = strings.ReplaceAll(originalURL, "fcalist-public", "fcalist-internal")
+					}
+					fileResp.InternalURL = internalURL
+					fileResp.ExternalURL = originalURL
+				}
+
+				*files = append(*files, fileResp)
+				summary.TotalFiles++
+				summary.TotalSize += fileResp.Size
+				logger.Debug("File added in recursive collection", "file", item.Name, "size", fileResp.Size, "totalSize", summary.TotalSize)
+				s.updateMediaStats(summary, fileResp.Path, item.Name)
+			}
+		}
+
+		if len(subDirs) > 0 {
+			s.collectFilesRecursive(ctx, subDirs, videoOnly, visited, files, summary)
+		}
+	}
+}
+
 // collectFilesInTimeRange 递归收集在时间范围内的文件
 func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path string, startTime, endTime time.Time, videoOnly bool, result *[]contracts.FileResponse) error {
 	logger.Debug("Collecting files in path", "path", path)
@@ -256,16 +337,41 @@ func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path strin
 			// 对于文件，检查时间范围和视频过滤
 			if inTimeRange {
 				if !videoOnly || s.IsVideoFile(item.Name) {
-					logger.Debug("File matches criteria, adding", "file", item.Name)
-					
-					// 为符合条件的文件获取真实的下载URL
+					logger.Debug("File matches criteria", "file", item.Name, "initialSize", fileResp.Size)
+
+					// 为符合条件的文件获取详细信息（包含真实Size和下载URL）
 					filePath := pathutil.JoinPath(path, item.Name)
-					internalURL, externalURL := s.getRealDownloadURLs(filePath)
-					fileResp.InternalURL = internalURL
-					fileResp.ExternalURL = externalURL
-					logger.Debug("Real download URL obtained", "file", item.Name, "url", internalURL)
-					
+					fileInfo, err := s.alistClient.GetFileInfo(filePath)
+					if err != nil {
+						logger.Warn("Failed to get file info, using basic info", "file", item.Name, "error", err)
+						internalURL, externalURL := s.getRealDownloadURLs(filePath)
+						fileResp.InternalURL = internalURL
+						fileResp.ExternalURL = externalURL
+					} else {
+						logger.Debug("GetFileInfo returned", "file", item.Name, "fileInfoSize", fileInfo.Data.Size, "currentRespSize", fileResp.Size)
+
+						// 更新Size（解决ListFiles返回Size为0的问题）
+						if fileInfo.Data.Size > 0 {
+							logger.Debug("Updating size from GetFileInfo", "file", item.Name, "oldSize", fileResp.Size, "newSize", fileInfo.Data.Size)
+							fileResp.Size = fileInfo.Data.Size
+							fileResp.SizeFormatted = strutil.FormatFileSize(fileInfo.Data.Size)
+						} else {
+							logger.Warn("GetFileInfo returned zero size", "file", item.Name, "path", filePath)
+						}
+
+						// 更新下载URL
+						originalURL := fileInfo.Data.RawURL
+						internalURL := originalURL
+						if strings.Contains(originalURL, "fcalist-public") {
+							internalURL = strings.ReplaceAll(originalURL, "fcalist-public", "fcalist-internal")
+						}
+						fileResp.InternalURL = internalURL
+						fileResp.ExternalURL = originalURL
+						logger.Debug("File processing complete", "file", item.Name, "finalSize", fileResp.Size, "url", internalURL)
+					}
+
 					*result = append(*result, fileResp)
+					logger.Debug("File added to result", "file", item.Name, "size", fileResp.Size)
 				} else {
 					logger.Debug("File not video, skipping", "file", item.Name)
 				}
@@ -366,13 +472,17 @@ func (s *AppFileService) sortFiles(files []contracts.FileResponse, sortBy, sortO
 func (s *AppFileService) calculateFileSummary(files []contracts.FileResponse) contracts.FileSummary {
 	summary := contracts.FileSummary{}
 
+	logger.Debug("Calculating file summary", "fileCount", len(files))
+
 	for _, file := range files {
 		summary.TotalFiles++
+		logger.Debug("Adding file to summary", "file", file.Name, "size", file.Size, "runningTotal", summary.TotalSize)
 		summary.TotalSize += file.Size
 		// 传入完整路径用于路径分类
 		s.updateMediaStats(&summary, file.Path, file.Name)
 	}
 
 	summary.TotalSizeFormatted = strutil.FormatFileSize(summary.TotalSize)
+	logger.Debug("Summary calculation complete", "totalFiles", summary.TotalFiles, "totalSize", summary.TotalSize, "formatted", summary.TotalSizeFormatted)
 	return summary
 }

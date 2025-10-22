@@ -515,6 +515,83 @@ func (h *TaskHandler) GetSchedulerStatus(c *gin.Context) {
 	httputil.Success(c, status)
 }
 
+// StopTask 停止任务
+// @Summary 停止任务
+// @Description 停止正在运行的任务
+// @Tags 定时任务
+// @Produce json
+// @Param id path string true "任务ID"
+// @Success 200 {object} map[string]interface{} "任务停止成功"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /tasks/{id}/stop [post]
+func (h *TaskHandler) StopTask(c *gin.Context) {
+	taskID := c.Param("id")
+	if taskID == "" {
+		httputil.ErrorWithStatus(c, http.StatusBadRequest, 400, "Task ID is required")
+		return
+	}
+
+	taskService := h.container.GetTaskService()
+	err := taskService.StopTask(c.Request.Context(), taskID)
+	if err != nil {
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			httputil.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			httputil.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to stop task: "+err.Error())
+		}
+		return
+	}
+
+	httputil.Success(c, gin.H{
+		"message": "Task stopped successfully",
+		"task_id": taskID,
+	})
+}
+
+// GetUserTasks 获取用户任务
+// @Summary 获取用户任务
+// @Description 获取指定用户的所有任务列表
+// @Tags 定时任务
+// @Produce json
+// @Param user-id path string true "用户ID"
+// @Success 200 {object} map[string]interface{} "用户任务列表"
+// @Failure 400 {object} map[string]interface{} "请求参数错误"
+// @Failure 500 {object} map[string]interface{} "服务器内部错误"
+// @Router /tasks/user/{user-id} [get]
+func (h *TaskHandler) GetUserTasks(c *gin.Context) {
+	userIDStr := c.Param("user-id")
+	if userIDStr == "" {
+		httputil.ErrorWithStatus(c, http.StatusBadRequest, 400, "User ID is required")
+		return
+	}
+
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		httputil.ErrorWithStatus(c, http.StatusBadRequest, 400, "Invalid user ID format")
+		return
+	}
+
+	taskService := h.container.GetTaskService()
+	response, err := taskService.GetUserTasks(c.Request.Context(), userID)
+	if err != nil {
+		if serviceErr, ok := err.(*contracts.ServiceError); ok {
+			statusCode := h.mapErrorCodeToHTTPStatus(serviceErr.Code)
+			httputil.ErrorWithStatus(c, statusCode, statusCode, serviceErr.Message)
+		} else {
+			httputil.ErrorWithStatus(c, http.StatusInternalServerError, 500, "Failed to get user tasks: "+err.Error())
+		}
+		return
+	}
+
+	httputil.Success(c, gin.H{
+		"user_id":     userID,
+		"tasks":       response.Tasks,
+		"total_count": response.TotalCount,
+	})
+}
+
 // ========== 私有方法 ==========
 
 // mapErrorCodeToHTTPStatus 将业务错误码映射到HTTP状态码

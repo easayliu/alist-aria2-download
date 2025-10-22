@@ -6,6 +6,7 @@ import (
 
 type Config struct {
 	Server    ServerConfig    `mapstructure:"server"`
+	Log       LogConfig       `mapstructure:"log"`
 	Aria2     Aria2Config     `mapstructure:"aria2"`
 	Alist     AlistConfig     `mapstructure:"alist"`
 	Telegram  TelegramConfig  `mapstructure:"telegram"`
@@ -16,6 +17,15 @@ type Config struct {
 type ServerConfig struct {
 	Port string `mapstructure:"port"`
 	Mode string `mapstructure:"mode"`
+}
+
+type LogConfig struct {
+	Level     string `mapstructure:"level"`
+	Output    string `mapstructure:"output"`
+	Format    string `mapstructure:"format"`
+	FilePath  string `mapstructure:"file_path"`
+	Colorize  bool   `mapstructure:"colorize"`
+	AddSource bool   `mapstructure:"add_source"`
 }
 
 type Aria2Config struct {
@@ -93,6 +103,12 @@ func LoadConfig() (*Config, error) {
 	// 设置默认值
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
+	viper.SetDefault("log.level", "info")
+	viper.SetDefault("log.output", "console")
+	viper.SetDefault("log.format", "text")
+	viper.SetDefault("log.file_path", "./logs/app.log")
+	viper.SetDefault("log.colorize", true)
+	viper.SetDefault("log.add_source", false)
 	viper.SetDefault("aria2.rpc_url", "http://localhost:6800/jsonrpc")
 	viper.SetDefault("aria2.download_dir", "/downloads")
 	viper.SetDefault("alist.base_url", "http://localhost:5244")

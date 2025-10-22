@@ -73,7 +73,7 @@ const docTemplate = `{
         },
         "/alist/files": {
             "get": {
-                "description": "获取Alist中指定路径的文件列表，需要先调用登录接口。如果不传path参数，将使用配置文件中的默认路径",
+                "description": "获取Alist中指定路径的文件列表",
                 "consumes": [
                     "application/json"
                 ],
@@ -205,7 +205,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.CreateDownloadRequest"
+                            "$ref": "#/definitions/contracts.DownloadRequest"
                         }
                     }
                 ],
@@ -226,6 +226,171 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/downloads/batch": {
+            "post": {
+                "description": "批量创建多个Aria2下载任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "下载管理"
+                ],
+                "summary": "批量创建下载任务",
+                "parameters": [
+                    {
+                        "description": "批量下载请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.BatchDownloadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "批量下载任务创建成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/downloads/pause-all": {
+            "post": {
+                "description": "暂停所有正在进行的下载任务",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "下载管理"
+                ],
+                "summary": "暂停所有下载",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/downloads/resume-all": {
+            "post": {
+                "description": "恢复所有已暂停的下载任务",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "下载管理"
+                ],
+                "summary": "恢复所有下载",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/downloads/statistics": {
+            "get": {
+                "description": "获取下载任务的统计信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "下载管理"
+                ],
+                "summary": "获取下载统计",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/downloads/system-status": {
+            "get": {
+                "description": "获取Aria2系统的状态信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "下载管理"
+                ],
+                "summary": "获取系统状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -386,9 +551,109 @@ const docTemplate = `{
                 }
             }
         },
+        "/files/category/{category}": {
+            "get": {
+                "description": "获取指定分类的文件列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "文件管理"
+                ],
+                "summary": "按分类获取文件",
+                "parameters": [
+                    {
+                        "enum": [
+                            "video",
+                            "audio",
+                            "image",
+                            "document",
+                            "archive",
+                            "other"
+                        ],
+                        "type": "string",
+                        "description": "文件分类",
+                        "name": "category",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "搜索路径",
+                        "name": "path",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分类文件列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/files/classify": {
+            "post": {
+                "description": "将文件列表按照类型进行分类",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "文件管理"
+                ],
+                "summary": "分类文件",
+                "parameters": [
+                    {
+                        "description": "文件分类请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.FileClassificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分类结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/files/download": {
             "post": {
-                "description": "获取指定路径下的所有文件并添加到Aria2下载队列，支持递归下载子目录，支持预览模式",
+                "description": "获取指定路径下的所有文件并添加到Aria2下载队列，支持递归下载子目录",
                 "consumes": [
                     "application/json"
                 ],
@@ -406,7 +671,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.DownloadPathRequest"
+                            "$ref": "#/definitions/contracts.DirectoryDownloadRequest"
                         }
                     }
                 ],
@@ -455,7 +720,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.FileListRequest"
+                            "$ref": "#/definitions/contracts.FileListRequest"
                         }
                     }
                 ],
@@ -504,7 +769,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.ManualDownloadRequest"
+                            "$ref": "#/definitions/contracts.TimeRangeFileRequest"
                         }
                     }
                 ],
@@ -533,9 +798,209 @@ const docTemplate = `{
                 }
             }
         },
+        "/files/recent": {
+            "get": {
+                "description": "获取最近指定小时内修改的文件",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "文件管理"
+                ],
+                "summary": "获取最近文件",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "搜索路径",
+                        "name": "path",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 24,
+                        "description": "小时数",
+                        "name": "hours_ago",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "最近文件列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/files/search": {
+            "post": {
+                "description": "在指定路径中搜索符合条件的文件",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "文件管理"
+                ],
+                "summary": "搜索文件",
+                "parameters": [
+                    {
+                        "description": "搜索请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.FileSearchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "搜索结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/files/single-download": {
+            "post": {
+                "description": "下载指定路径的单个文件到Aria2",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "文件管理"
+                ],
+                "summary": "下载单个文件",
+                "parameters": [
+                    {
+                        "description": "文件下载请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.FileDownloadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "文件下载任务创建成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/files/time-range": {
+            "post": {
+                "description": "获取指定时间范围内修改的文件列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "文件管理"
+                ],
+                "summary": "按时间范围获取文件",
+                "parameters": [
+                    {
+                        "description": "时间范围请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.TimeRangeFileRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "时间范围内的文件列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/files/yesterday": {
             "get": {
-                "description": "批量获取昨天修改的文件信息，并将raw_url中的fcalist-public替换为fcalist-internal",
+                "description": "获取昨天修改的文件列表",
                 "consumes": [
                     "application/json"
                 ],
@@ -574,7 +1039,7 @@ const docTemplate = `{
         },
         "/files/yesterday/download": {
             "post": {
-                "description": "将昨天修改的文件批量添加到Aria2下载队列，使用内部URL，支持预览模式",
+                "description": "将昨天修改的文件批量添加到Aria2下载队列",
                 "consumes": [
                     "application/json"
                 ],
@@ -640,6 +1105,459 @@ const docTemplate = `{
                 }
             }
         },
+        "/notifications/batch": {
+            "post": {
+                "description": "批量发送多个通知消息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "批量发送通知",
+                "parameters": [
+                    {
+                        "description": "批量通知请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.BatchNotificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "批量通知发送结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/config": {
+            "get": {
+                "description": "获取通知系统的配置信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "获取通知配置",
+                "responses": {
+                    "200": {
+                        "description": "通知配置信息",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/download-complete": {
+            "post": {
+                "description": "发送下载完成通知",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "下载完成通知",
+                "parameters": [
+                    {
+                        "description": "下载通知请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.DownloadNotificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "通知发送成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/download-failed": {
+            "post": {
+                "description": "发送下载失败通知",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "下载失败通知",
+                "parameters": [
+                    {
+                        "description": "下载通知请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.DownloadNotificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "通知发送成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/history": {
+            "get": {
+                "description": "获取历史通知记录列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "获取通知历史",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "偏移量",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "通知历史列表",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/send": {
+            "post": {
+                "description": "发送单个通知消息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "发送通知",
+                "parameters": [
+                    {
+                        "description": "通知请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.NotificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "通知发送成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/stats": {
+            "get": {
+                "description": "获取通知系统的统计信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "获取通知统计",
+                "responses": {
+                    "200": {
+                        "description": "通知统计信息",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/system-event": {
+            "post": {
+                "description": "发送系统事件通知",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "系统事件通知",
+                "parameters": [
+                    {
+                        "description": "系统通知请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.SystemNotificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "通知发送成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/task-complete": {
+            "post": {
+                "description": "发送任务完成通知",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "任务完成通知",
+                "parameters": [
+                    {
+                        "description": "任务通知请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.TaskNotificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "通知发送成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/notifications/task-failed": {
+            "post": {
+                "description": "发送任务失败通知",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "任务失败通知",
+                "parameters": [
+                    {
+                        "description": "任务通知请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.TaskNotificationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "通知发送成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/tasks": {
             "get": {
                 "description": "获取所有定时任务的列表",
@@ -653,12 +1571,57 @@ const docTemplate = `{
                     "定时任务"
                 ],
                 "summary": "获取定时任务列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "创建者ID",
+                        "name": "created_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "是否启用",
+                        "name": "enabled",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "任务状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 100,
+                        "description": "限制数量",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 0,
+                        "description": "偏移量",
+                        "name": "offset",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "排序字段",
+                        "name": "sort_by",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "排序方向",
+                        "name": "sort_order",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "任务列表",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/contracts.TaskListResponse"
                         }
                     },
                     "500": {
@@ -689,13 +1652,160 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.CreateTaskRequest"
+                            "$ref": "#/definitions/contracts.TaskRequest"
                         }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "任务创建成功",
+                        "schema": {
+                            "$ref": "#/definitions/contracts.TaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/quick": {
+            "post": {
+                "description": "创建预定义的快捷任务（每日、最近等）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "创建快捷任务",
+                "parameters": [
+                    {
+                        "description": "快捷任务请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/contracts.QuickTaskRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务创建成功",
+                        "schema": {
+                            "$ref": "#/definitions/contracts.TaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/scheduler/status": {
+            "get": {
+                "description": "获取任务调度器的状态信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "获取调度器状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/statistics": {
+            "get": {
+                "description": "获取任务系统的统计信息",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "获取任务统计",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/user/{user-id}": {
+            "get": {
+                "description": "获取指定用户的所有任务列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "获取用户任务",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户ID",
+                        "name": "user-id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "用户任务列表",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -744,7 +1854,7 @@ const docTemplate = `{
                     "200": {
                         "description": "任务详情",
                         "schema": {
-                            "$ref": "#/definitions/entities.ScheduledTask"
+                            "$ref": "#/definitions/contracts.TaskResponse"
                         }
                     },
                     "404": {
@@ -789,7 +1899,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/handlers.UpdateTaskRequest"
+                            "$ref": "#/definitions/contracts.TaskUpdateRequest"
                         }
                     }
                 ],
@@ -797,8 +1907,7 @@ const docTemplate = `{
                     "200": {
                         "description": "任务更新成功",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/contracts.TaskResponse"
                         }
                     },
                     "400": {
@@ -870,6 +1979,100 @@ const docTemplate = `{
                 }
             }
         },
+        "/tasks/{id}/disable": {
+            "post": {
+                "description": "禁用指定ID的定时任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "禁用定时任务",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务禁用成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "任务不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/tasks/{id}/enable": {
+            "post": {
+                "description": "启用指定ID的定时任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "定时任务"
+                ],
+                "summary": "启用定时任务",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "任务ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务启用成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "任务不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/tasks/{id}/preview": {
             "get": {
                 "description": "预览定时任务将要下载的文件，不实际执行下载",
@@ -896,8 +2099,7 @@ const docTemplate = `{
                     "200": {
                         "description": "预览结果",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/contracts.TaskPreviewResponse"
                         }
                     },
                     "404": {
@@ -943,7 +2145,7 @@ const docTemplate = `{
                         "name": "request",
                         "in": "body",
                         "schema": {
-                            "$ref": "#/definitions/handlers.RunTaskRequest"
+                            "$ref": "#/definitions/contracts.TaskRunRequest"
                         }
                     }
                 ],
@@ -951,8 +2153,7 @@ const docTemplate = `{
                     "200": {
                         "description": "任务已开始执行或预览结果",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/contracts.TaskRunResponse"
                         }
                     },
                     "404": {
@@ -972,19 +2173,16 @@ const docTemplate = `{
                 }
             }
         },
-        "/tasks/{id}/toggle": {
+        "/tasks/{id}/stop": {
             "post": {
-                "description": "切换定时任务的启用状态",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "停止正在运行的任务",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "定时任务"
                 ],
-                "summary": "启用或禁用定时任务",
+                "summary": "停止任务",
                 "parameters": [
                     {
                         "type": "string",
@@ -992,25 +2190,18 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "是否启用",
-                        "name": "enabled",
-                        "in": "query",
-                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "状态更新成功",
+                        "description": "任务停止成功",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
                         }
                     },
-                    "404": {
-                        "description": "任务不存在",
+                    "400": {
+                        "description": "请求参数错误",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1028,62 +2219,729 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "entities.ScheduledTask": {
+        "contracts.BatchDownloadRequest": {
             "type": "object",
+            "required": [
+                "items"
+            ],
             "properties": {
-                "auto_preview": {
-                    "description": "是否预览模式",
+                "auto_classify": {
                     "type": "boolean"
                 },
-                "created_at": {
-                    "description": "创建时间",
+                "directory": {
                     "type": "string"
                 },
-                "created_by": {
-                    "description": "创建者Telegram ID",
-                    "type": "integer"
-                },
-                "cron": {
-                    "description": "cron表达式",
-                    "type": "string"
-                },
-                "enabled": {
-                    "description": "是否启用",
-                    "type": "boolean"
-                },
-                "hours_ago": {
-                    "description": "下载多少小时内的文件",
-                    "type": "integer"
-                },
-                "id": {
-                    "description": "任务ID",
-                    "type": "string"
-                },
-                "last_run_at": {
-                    "description": "最后运行时间",
-                    "type": "string"
-                },
-                "name": {
-                    "description": "任务名称",
-                    "type": "string"
-                },
-                "next_run_at": {
-                    "description": "下次运行时间",
-                    "type": "string"
-                },
-                "path": {
-                    "description": "下载路径",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "description": "更新时间",
-                    "type": "string"
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/contracts.DownloadRequest"
+                    }
                 },
                 "video_only": {
-                    "description": "是否只下载视频",
                     "type": "boolean"
                 }
             }
+        },
+        "contracts.BatchNotificationRequest": {
+            "type": "object",
+            "required": [
+                "notifications"
+            ],
+            "properties": {
+                "batch_mode": {
+                    "description": "是否批量发送",
+                    "type": "boolean"
+                },
+                "fail_fast": {
+                    "description": "遇到错误是否立即停止",
+                    "type": "boolean"
+                },
+                "notifications": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/contracts.NotificationRequest"
+                    }
+                }
+            }
+        },
+        "contracts.DirectoryDownloadRequest": {
+            "type": "object",
+            "required": [
+                "directory_path"
+            ],
+            "properties": {
+                "auto_classify": {
+                    "type": "boolean"
+                },
+                "directory_path": {
+                    "type": "string"
+                },
+                "recursive": {
+                    "type": "boolean"
+                },
+                "target_dir": {
+                    "type": "string"
+                },
+                "video_only": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "contracts.DownloadNotificationRequest": {
+            "type": "object"
+        },
+        "contracts.DownloadRequest": {
+            "type": "object",
+            "required": [
+                "url"
+            ],
+            "properties": {
+                "auto_classify": {
+                    "type": "boolean"
+                },
+                "directory": {
+                    "type": "string"
+                },
+                "file_size": {
+                    "description": "文件大小，用于磁盘空间检查",
+                    "type": "integer"
+                },
+                "filename": {
+                    "type": "string"
+                },
+                "options": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "url": {
+                    "type": "string"
+                },
+                "video_only": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "contracts.FileClassificationRequest": {
+            "type": "object",
+            "required": [
+                "files"
+            ],
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/contracts.FileResponse"
+                    }
+                }
+            }
+        },
+        "contracts.FileDownloadRequest": {
+            "type": "object",
+            "required": [
+                "file_path"
+            ],
+            "properties": {
+                "auto_classify": {
+                    "type": "boolean"
+                },
+                "file_path": {
+                    "type": "string"
+                },
+                "options": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "target_dir": {
+                    "type": "string"
+                }
+            }
+        },
+        "contracts.FileListRequest": {
+            "type": "object",
+            "required": [
+                "path"
+            ],
+            "properties": {
+                "page": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "page_size": {
+                    "type": "integer",
+                    "maximum": 1000,
+                    "minimum": 1
+                },
+                "path": {
+                    "type": "string"
+                },
+                "recursive": {
+                    "type": "boolean"
+                },
+                "sort_by": {
+                    "type": "string",
+                    "enum": [
+                        "name",
+                        "size",
+                        "modified"
+                    ]
+                },
+                "sort_order": {
+                    "type": "string",
+                    "enum": [
+                        "asc",
+                        "desc"
+                    ]
+                },
+                "video_only": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "contracts.FilePreview": {
+            "type": "object",
+            "properties": {
+                "download_path": {
+                    "type": "string"
+                },
+                "internal_url": {
+                    "type": "string"
+                },
+                "media_type": {
+                    "type": "string"
+                },
+                "modified": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                }
+            }
+        },
+        "contracts.FileResponse": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "download_path": {
+                    "type": "string"
+                },
+                "external_url": {
+                    "type": "string"
+                },
+                "internal_url": {
+                    "type": "string"
+                },
+                "is_dir": {
+                    "type": "boolean"
+                },
+                "media_type": {
+                    "type": "string"
+                },
+                "modified": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "size_formatted": {
+                    "type": "string"
+                },
+                "thumbnail": {
+                    "type": "string"
+                }
+            }
+        },
+        "contracts.FileSearchRequest": {
+            "type": "object",
+            "required": [
+                "query"
+            ],
+            "properties": {
+                "file_type": {
+                    "type": "string"
+                },
+                "limit": {
+                    "type": "integer",
+                    "maximum": 1000,
+                    "minimum": 1
+                },
+                "max_size": {
+                    "type": "integer"
+                },
+                "min_size": {
+                    "type": "integer"
+                },
+                "modified_after": {
+                    "type": "string"
+                },
+                "modified_before": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "query": {
+                    "type": "string"
+                }
+            }
+        },
+        "contracts.NotificationChannel": {
+            "type": "string",
+            "enum": [
+                "telegram",
+                "webhook",
+                "email",
+                "system"
+            ],
+            "x-enum-varnames": [
+                "ChannelTelegram",
+                "ChannelWebhook",
+                "ChannelEmail",
+                "ChannelSystem"
+            ]
+        },
+        "contracts.NotificationLevel": {
+            "type": "string",
+            "enum": [
+                "info",
+                "warning",
+                "error",
+                "success"
+            ],
+            "x-enum-varnames": [
+                "NotificationLevelInfo",
+                "NotificationLevelWarning",
+                "NotificationLevelError",
+                "NotificationLevelSuccess"
+            ]
+        },
+        "contracts.NotificationRequest": {
+            "type": "object",
+            "required": [
+                "channel",
+                "level",
+                "message",
+                "title"
+            ],
+            "properties": {
+                "channel": {
+                    "$ref": "#/definitions/contracts.NotificationChannel"
+                },
+                "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "level": {
+                    "$ref": "#/definitions/contracts.NotificationLevel"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "target_id": {
+                    "description": "如Telegram chat_id",
+                    "type": "string"
+                },
+                "template": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "contracts.PreviewSummary": {
+            "type": "object",
+            "properties": {
+                "movie_files": {
+                    "type": "integer"
+                },
+                "other_files": {
+                    "type": "integer"
+                },
+                "total_files": {
+                    "type": "integer"
+                },
+                "total_size": {
+                    "type": "string"
+                },
+                "tv_files": {
+                    "type": "integer"
+                },
+                "video_files": {
+                    "type": "integer"
+                }
+            }
+        },
+        "contracts.QuickTaskRequest": {
+            "type": "object",
+            "required": [
+                "created_by",
+                "type"
+            ],
+            "properties": {
+                "created_by": {
+                    "type": "integer"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "daily",
+                        "recent",
+                        "weekly",
+                        "realtime"
+                    ]
+                }
+            }
+        },
+        "contracts.SystemNotificationRequest": {
+            "type": "object",
+            "required": [
+                "component",
+                "event",
+                "level",
+                "message"
+            ],
+            "properties": {
+                "component": {
+                    "description": "aria2, alist, scheduler, etc.",
+                    "type": "string"
+                },
+                "details": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "event": {
+                    "description": "startup, shutdown, error, etc.",
+                    "type": "string"
+                },
+                "level": {
+                    "$ref": "#/definitions/contracts.NotificationLevel"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "metrics": {
+                    "type": "object",
+                    "additionalProperties": true
+                }
+            }
+        },
+        "contracts.TaskListResponse": {
+            "type": "object",
+            "properties": {
+                "summary": {
+                    "$ref": "#/definitions/contracts.TaskSummary"
+                },
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/contracts.TaskResponse"
+                    }
+                },
+                "total_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "contracts.TaskNotificationRequest": {
+            "type": "object"
+        },
+        "contracts.TaskPreviewResponse": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/contracts.FilePreview"
+                    }
+                },
+                "summary": {
+                    "$ref": "#/definitions/contracts.PreviewSummary"
+                },
+                "task": {
+                    "$ref": "#/definitions/contracts.TaskResponse"
+                },
+                "time_range": {
+                    "$ref": "#/definitions/contracts.TimeRange"
+                }
+            }
+        },
+        "contracts.TaskRequest": {
+            "type": "object",
+            "required": [
+                "cron_expr",
+                "hours_ago",
+                "name",
+                "path"
+            ],
+            "properties": {
+                "auto_preview": {
+                    "type": "boolean"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "cron_expr": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "hours_ago": {
+                    "description": "最多1年",
+                    "type": "integer",
+                    "maximum": 8760,
+                    "minimum": 1
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1
+                },
+                "path": {
+                    "type": "string"
+                },
+                "video_only": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "contracts.TaskResponse": {
+            "type": "object",
+            "properties": {
+                "auto_preview": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "cron_expr": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "failure_count": {
+                    "type": "integer"
+                },
+                "hours_ago": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_run_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "next_run_at": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "run_count": {
+                    "type": "integer"
+                },
+                "status": {
+                    "$ref": "#/definitions/entities.TaskStatus"
+                },
+                "success_count": {
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "video_only": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "contracts.TaskRunRequest": {
+            "type": "object",
+            "required": [
+                "task_id"
+            ],
+            "properties": {
+                "force_run": {
+                    "type": "boolean"
+                },
+                "notify_user": {
+                    "type": "boolean"
+                },
+                "preview": {
+                    "type": "boolean"
+                },
+                "task_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "contracts.TaskRunResponse": {
+            "type": "object",
+            "properties": {
+                "download_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "preview": {
+                    "$ref": "#/definitions/contracts.TaskPreviewResponse"
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "task_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "contracts.TaskSummary": {
+            "type": "object",
+            "properties": {
+                "disabled_count": {
+                    "type": "integer"
+                },
+                "enabled_count": {
+                    "type": "integer"
+                },
+                "error_count": {
+                    "type": "integer"
+                },
+                "running_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "contracts.TaskUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "auto_preview": {
+                    "type": "boolean"
+                },
+                "cron_expr": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "hours_ago": {
+                    "type": "integer",
+                    "maximum": 8760,
+                    "minimum": 1
+                },
+                "name": {
+                    "type": "string",
+                    "maxLength": 100,
+                    "minLength": 1
+                },
+                "path": {
+                    "type": "string"
+                },
+                "video_only": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "contracts.TimeRange": {
+            "type": "object",
+            "properties": {
+                "end": {
+                    "type": "string"
+                },
+                "start": {
+                    "type": "string"
+                }
+            }
+        },
+        "contracts.TimeRangeFileRequest": {
+            "type": "object",
+            "required": [
+                "end_time",
+                "path",
+                "start_time"
+            ],
+            "properties": {
+                "end_time": {
+                    "type": "string"
+                },
+                "hours_ago": {
+                    "type": "integer",
+                    "maximum": 8760,
+                    "minimum": 1
+                },
+                "path": {
+                    "type": "string"
+                },
+                "start_time": {
+                    "type": "string"
+                },
+                "video_only": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "entities.TaskStatus": {
+            "type": "string",
+            "enum": [
+                "idle",
+                "running",
+                "success",
+                "error",
+                "stopped"
+            ],
+            "x-enum-comments": {
+                "TaskStatusError": "最后一次执行失败",
+                "TaskStatusIdle": "空闲状态",
+                "TaskStatusRunning": "运行中",
+                "TaskStatusStopped": "已停止",
+                "TaskStatusSuccess": "最后一次执行成功"
+            },
+            "x-enum-descriptions": [
+                "空闲状态",
+                "运行中",
+                "最后一次执行成功",
+                "最后一次执行失败",
+                "已停止"
+            ],
+            "x-enum-varnames": [
+                "TaskStatusIdle",
+                "TaskStatusRunning",
+                "TaskStatusSuccess",
+                "TaskStatusError",
+                "TaskStatusStopped"
+            ]
         },
         "handlers.CreateDownloadRequest": {
             "type": "object",
@@ -1103,165 +2961,6 @@ const docTemplate = `{
                 },
                 "url": {
                     "type": "string"
-                }
-            }
-        },
-        "handlers.CreateTaskRequest": {
-            "type": "object",
-            "required": [
-                "cron_expr",
-                "hours_ago",
-                "name",
-                "path"
-            ],
-            "properties": {
-                "auto_preview": {
-                    "type": "boolean",
-                    "example": false
-                },
-                "created_by": {
-                    "type": "integer",
-                    "example": 63401853
-                },
-                "cron_expr": {
-                    "type": "string",
-                    "example": "0 2 * * *"
-                },
-                "enabled": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "hours_ago": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "example": 24
-                },
-                "name": {
-                    "type": "string",
-                    "example": "每日同步"
-                },
-                "path": {
-                    "type": "string",
-                    "example": "/data/来自：分享"
-                },
-                "video_only": {
-                    "type": "boolean",
-                    "example": true
-                }
-            }
-        },
-        "handlers.DownloadPathRequest": {
-            "type": "object",
-            "required": [
-                "path"
-            ],
-            "properties": {
-                "path": {
-                    "type": "string"
-                },
-                "preview": {
-                    "description": "预览模式，只生成路径不下载",
-                    "type": "boolean"
-                },
-                "recursive": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "handlers.FileListRequest": {
-            "type": "object",
-            "properties": {
-                "page": {
-                    "type": "integer"
-                },
-                "path": {
-                    "description": "路径，为空时使用默认路径",
-                    "type": "string"
-                },
-                "per_page": {
-                    "type": "integer"
-                },
-                "video_only": {
-                    "description": "是否只显示视频文件",
-                    "type": "boolean"
-                }
-            }
-        },
-        "handlers.ManualDownloadRequest": {
-            "type": "object",
-            "properties": {
-                "end_time": {
-                    "description": "结束时间（可选，ISO 8601格式）",
-                    "type": "string",
-                    "example": "2023-12-02T00:00:00Z"
-                },
-                "hours_ago": {
-                    "description": "最近多少小时内的文件（可选，默认24小时）",
-                    "type": "integer",
-                    "example": 24
-                },
-                "path": {
-                    "description": "搜索路径（可选，为空时使用配置的默认路径）",
-                    "type": "string",
-                    "example": "/downloads"
-                },
-                "preview": {
-                    "description": "是否预览模式",
-                    "type": "boolean",
-                    "example": false
-                },
-                "start_time": {
-                    "description": "开始时间（可选，ISO 8601格式）",
-                    "type": "string",
-                    "example": "2023-12-01T00:00:00Z"
-                },
-                "video_only": {
-                    "description": "是否只下载视频文件",
-                    "type": "boolean",
-                    "example": false
-                }
-            }
-        },
-        "handlers.RunTaskRequest": {
-            "type": "object",
-            "properties": {
-                "preview": {
-                    "description": "是否仅预览，不实际下载",
-                    "type": "boolean",
-                    "example": false
-                }
-            }
-        },
-        "handlers.UpdateTaskRequest": {
-            "type": "object",
-            "properties": {
-                "auto_preview": {
-                    "type": "boolean",
-                    "example": false
-                },
-                "cron_expr": {
-                    "type": "string",
-                    "example": "0 2 * * *"
-                },
-                "enabled": {
-                    "type": "boolean",
-                    "example": true
-                },
-                "hours_ago": {
-                    "type": "integer",
-                    "example": 24
-                },
-                "name": {
-                    "type": "string",
-                    "example": "每日同步"
-                },
-                "path": {
-                    "type": "string",
-                    "example": "/data/来自：分享"
-                },
-                "video_only": {
-                    "type": "boolean",
-                    "example": true
                 }
             }
         }

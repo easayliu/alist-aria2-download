@@ -36,6 +36,18 @@ func main() {
 		log.Fatal("Failed to load config:", err)
 	}
 
+	// 初始化日志
+	if err := logger.Init(logger.Options{
+		Level:     cfg.Log.Level,
+		Output:    cfg.Log.Output,
+		Format:    cfg.Log.Format,
+		FilePath:  cfg.Log.FilePath,
+		Colorize:  cfg.Log.Colorize,
+		AddSource: cfg.Log.AddSource,
+	}); err != nil {
+		log.Fatal("Failed to initialize logger:", err)
+	}
+
 	// 设置Gin模式
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -62,7 +74,7 @@ func main() {
 
 	// 启动服务器
 	go func() {
-		logger.Info("Starting server on port", cfg.Server.Port)
+		logger.Info("Starting server on port", "port", cfg.Server.Port)
 		if err := router.Run(":" + cfg.Server.Port); err != nil {
 			log.Fatal("Failed to start server:", err)
 		}
