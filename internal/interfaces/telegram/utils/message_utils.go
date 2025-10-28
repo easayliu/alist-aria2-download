@@ -3,6 +3,8 @@ package utils
 import (
 	"fmt"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/telegram"
@@ -76,20 +78,24 @@ func (mu *MessageUtils) SendMessageMarkdown(chatID int64, text string) {
 }
 
 // SendMessageWithKeyboard sends message with inline keyboard
-func (mu *MessageUtils) SendMessageWithKeyboard(chatID int64, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) {
+func (mu *MessageUtils) SendMessageWithKeyboard(chatID int64, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) int {
 	if mu.telegramClient != nil {
-		messages := mu.SplitMessage(text, 4000) // 留一些余量
+		messages := mu.SplitMessage(text, 4000)
+		var lastMessageID int
 		for i, msg := range messages {
-			// 只在最后一条消息上附加键盘
 			var kb *tgbotapi.InlineKeyboardMarkup
 			if i == len(messages)-1 {
 				kb = keyboard
 			}
-			if err := mu.telegramClient.SendMessageWithKeyboard(chatID, msg, parseMode, kb); err != nil {
+			if msgID, err := mu.telegramClient.SendMessageWithKeyboard(chatID, msg, parseMode, kb); err != nil {
 				logger.Error("Failed to send telegram message with keyboard", "error", err)
+			} else {
+				lastMessageID = msgID
 			}
 		}
+		return lastMessageID
 	}
+	return 0
 }
 
 // SendMessageWithReplyKeyboard sends message with reply keyboard
@@ -104,24 +110,74 @@ func (mu *MessageUtils) SendMessageWithReplyKeyboard(chatID int64, text string) 
 }
 
 // EditMessageWithKeyboard edits message and sets keyboard
-func (mu *MessageUtils) EditMessageWithKeyboard(chatID int64, messageID int, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) {
-	if mu.telegramClient != nil && mu.telegramClient.GetBot() != nil {
-		// 编辑消息文本
-		editMsg := tgbotapi.NewEditMessageText(chatID, messageID, text)
-		editMsg.ParseMode = parseMode
-		if _, err := mu.telegramClient.GetBot().Send(editMsg); err != nil {
-			logger.Error("Failed to edit telegram message text", "error", err)
-			return
-		}
+func (mu *MessageUtils) EditMessageWithKeyboard(chatID int64, messageID int, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) bool {
+	if mu.telegramClient == nil || mu.telegramClient.GetBot() == nil {
+		return false
+	}
 
-		// 编辑消息键盘
-		if keyboard != nil {
-			editKeyboard := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, *keyboard)
-			if _, err := mu.telegramClient.GetBot().Send(editKeyboard); err != nil {
-				logger.Error("Failed to edit telegram message keyboard", "error", err)
+	const maxLength = 4000
+	if len(text) > maxLength {
+		lastNewline := maxLength - 50
+		cutPos := maxLength - 30
+
+		for i := maxLength - 1; i >= lastNewline && i >= 0; i-- {
+			if text[i] == '\n' {
+				cutPos = i
+				break
 			}
 		}
+
+		text = text[:cutPos]
+
+		if parseMode == "HTML" {
+			openTags := []string{}
+			for i := 0; i < len(text); i++ {
+				if text[i] == '<' {
+					endTag := strings.Index(text[i:], ">")
+					if endTag > 0 {
+						tag := text[i+1 : i+endTag]
+						if strings.HasPrefix(tag, "/") {
+							tagName := tag[1:]
+							if len(openTags) > 0 && openTags[len(openTags)-1] == tagName {
+								openTags = openTags[:len(openTags)-1]
+							}
+						} else {
+							tagName := strings.Split(tag, " ")[0]
+							if tagName != "br" {
+								openTags = append(openTags, tagName)
+							}
+						}
+					}
+				}
+			}
+
+			for i := len(openTags) - 1; i >= 0; i-- {
+				text += "</" + openTags[i] + ">"
+			}
+		}
+
+		text += "\n\n... (内容过长已截断)"
 	}
+
+	if !utf8.ValidString(text) {
+		text = strings.ToValidUTF8(text, "?")
+	}
+
+	editMsg := tgbotapi.NewEditMessageText(chatID, messageID, text)
+	editMsg.ParseMode = parseMode
+	if _, err := mu.telegramClient.GetBot().Send(editMsg); err != nil {
+		logger.Error("Failed to edit telegram message text", "error", err)
+		return false
+	}
+
+	if keyboard != nil {
+		editKeyboard := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, *keyboard)
+		if _, err := mu.telegramClient.GetBot().Send(editKeyboard); err != nil {
+			logger.Error("Failed to edit telegram message keyboard", "error", err)
+			return false
+		}
+	}
+	return true
 }
 
 // ClearInlineKeyboard clears inline keyboard
@@ -135,6 +191,23 @@ func (mu *MessageUtils) ClearInlineKeyboard(chatID int64, messageID int) {
 	if _, err := mu.telegramClient.GetBot().Send(edit); err != nil {
 		logger.Warn("Failed to clear inline keyboard", "error", err)
 	}
+}
+
+// DeleteMessageAfterDelay deletes message after specified seconds
+func (mu *MessageUtils) DeleteMessageAfterDelay(chatID int64, messageID int, delaySeconds int) {
+	if mu.telegramClient == nil || mu.telegramClient.GetBot() == nil || delaySeconds <= 0 {
+		return
+	}
+
+	go func() {
+		time.Sleep(time.Duration(delaySeconds) * time.Second)
+		deleteConfig := tgbotapi.NewDeleteMessage(chatID, messageID)
+		if _, err := mu.telegramClient.GetBot().Request(deleteConfig); err != nil {
+			logger.Warn("Failed to delete message", "chatID", chatID, "messageID", messageID, "error", err)
+		} else {
+			logger.Debug("Message deleted successfully", "chatID", chatID, "messageID", messageID)
+		}
+	}()
 }
 
 // SplitMessage splits long messages into multiple messages by specified length

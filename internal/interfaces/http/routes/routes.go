@@ -6,6 +6,7 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/http/middleware"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
+	telegramInfra "github.com/easayliu/alist-aria2-download/internal/infrastructure/telegram"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -117,6 +118,10 @@ func SetupRoutesWithContainer(cfg *config.Config, container *services.ServiceCon
 	// 初始化Telegram Handler
 	var telegramHandler *telegram.TelegramHandler
 	if cfg.Telegram.Enabled {
+		// 创建单例 Telegram Client
+		telegramClient := telegramInfra.NewClient(&cfg.Telegram)
+		container.SetTelegramClient(telegramClient)
+
 		// 从容器获取服务
 		notificationSvc := container.GetNotificationService()
 		fileService := container.GetFileService()
@@ -127,11 +132,15 @@ func SetupRoutesWithContainer(cfg *config.Config, container *services.ServiceCon
 		fileAppSvc, ok2 := fileService.(*services.FileService)
 
 		if ok1 && ok2 {
+			notificationAppSvc.SetTelegramClient(telegramClient)
+
 			telegramHandler = telegram.NewTelegramHandler(
 				cfg,
 				notificationAppSvc,
 				fileAppSvc,
 				schedulerService,
+				container,
+				telegramClient,
 			)
 
 			// 注册Webhook路由

@@ -32,41 +32,49 @@ func NewBasicCommands(downloadService contracts.DownloadService, fileService con
 	}
 }
 
-// HandleStart handles start command
-func (bc *BasicCommands) HandleStart(chatID int64) {
+func (bc *BasicCommands) buildStartContent() (string, tgbotapi.InlineKeyboardMarkup) {
 	message := "<b>欢迎使用 Alist-Aria2 下载管理器</b>\n\n" +
-		"<b>功能模块:</b>\n" +
-		"• 下载管理 - 创建、监控、控制下载任务\n" +
-		"• 文件浏览 - 浏览和搜索Alist文件\n" +
-		"• 系统管理 - 登录、健康检查、设置\n" +
-		"• 状态监控 - 实时状态和下载统计\n\n" +
-		"选择功能模块开始使用："
+		"<b>快捷功能:</b>\n" +
+		"• 浏览文件 - 浏览和下载Alist文件\n" +
+		"• 下载状态 - 查看下载任务进度\n" +
+		"• 定时任务 - 自动下载任务管理\n" +
+		"• 系统状态 - 服务状态和健康检查\n\n" +
+		"选择功能开始使用："
 
-	// Send welcome message with inline keyboard
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("下载管理", "menu_download"),
-			tgbotapi.NewInlineKeyboardButtonData("文件浏览", "menu_files"),
+			tgbotapi.NewInlineKeyboardButtonData("📁 浏览文件", "files_browse"),
+			tgbotapi.NewInlineKeyboardButtonData("📥 下载状态", "download_list"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("系统管理", "menu_system"),
-			tgbotapi.NewInlineKeyboardButtonData("状态监控", "menu_status"),
+			tgbotapi.NewInlineKeyboardButtonData("⏰ 定时任务", "cmd_tasks"),
+			tgbotapi.NewInlineKeyboardButtonData("⚙️ 系统", "system_status"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("帮助说明", "cmd_help"),
+			tgbotapi.NewInlineKeyboardButtonData("❓ 帮助", "cmd_help"),
 		),
 	)
 
+	return message, keyboard
+}
+
+func (bc *BasicCommands) HandleStart(chatID int64) {
+	message, keyboard := bc.buildStartContent()
 	bc.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
 }
 
-// HandleHelp handles help command
-func (bc *BasicCommands) HandleHelp(chatID int64) {
+func (bc *BasicCommands) HandleStartWithEdit(chatID int64, messageID int) {
+	message, keyboard := bc.buildStartContent()
+	bc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+}
+
+func (bc *BasicCommands) buildHelpContent(includeBackButton bool) (string, tgbotapi.InlineKeyboardMarkup) {
 	message := "<b>使用帮助</b>\n\n" +
 		"<b>快捷按钮:</b>\n" +
 		"使用下方键盘按钮进行常用操作\n\n" +
 		"<b>文件操作命令:</b>\n" +
 		"/list [path] - 列出指定路径的文件\n" +
+		"/rename &lt;path&gt; - 智能重命名文件（TMDB）\n" +
 		"/cancel &lt;id&gt; - 取消下载任务\n\n" +
 		"<b>下载命令（支持多种格式）:</b>\n" +
 		"• <code>/download</code> - 预览最近24小时的视频文件（使用 <code>/download confirm</code> 开始下载）\n" +
@@ -92,15 +100,37 @@ func (bc *BasicCommands) HandleHelp(chatID int64) {
 		"• <code>weekly</code> - 每周汇总（7天内文件）\n" +
 		"• <code>realtime</code> - 实时同步（1小时内文件）"
 
-	// Create shortcut action keyboard
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("系统状态", "cmd_status"),
-			tgbotapi.NewInlineKeyboardButtonData("管理面板", "cmd_manage"),
-		),
-	)
+	var keyboard tgbotapi.InlineKeyboardMarkup
+	if includeBackButton {
+		keyboard = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("系统状态", "cmd_status"),
+				tgbotapi.NewInlineKeyboardButtonData("管理面板", "cmd_manage"),
+			),
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("返回主菜单", "back_main"),
+			),
+		)
+	} else {
+		keyboard = tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("系统状态", "cmd_status"),
+				tgbotapi.NewInlineKeyboardButtonData("管理面板", "cmd_manage"),
+			),
+		)
+	}
 
+	return message, keyboard
+}
+
+func (bc *BasicCommands) HandleHelp(chatID int64) {
+	message, keyboard := bc.buildHelpContent(false)
 	bc.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+}
+
+func (bc *BasicCommands) HandleHelpWithEdit(chatID int64, messageID int) {
+	message, keyboard := bc.buildHelpContent(true)
+	bc.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 }
 
 // HandleStatus handles status command

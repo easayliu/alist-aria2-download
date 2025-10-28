@@ -91,3 +91,48 @@ type FileGetResponse struct {
 		Related  interface{} `json:"related"`
 	} `json:"data"`
 }
+
+type RenameRequest struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+}
+
+type RenameResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+type MoveRequest struct {
+	SrcDir string   `json:"src_dir"`
+	DstDir string   `json:"dst_dir"`
+	Names  []string `json:"names"`
+	Overwrite bool  `json:"overwrite"`
+}
+
+type MoveResponse struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+type MkdirRequest struct {
+	Path string `json:"path"`
+}
+
+type MkdirResponse struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+type RemoveRequest struct {
+	Names []string `json:"names"`
+	Dir   string   `json:"dir"`
+}
+
+type RemoveResponse struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}

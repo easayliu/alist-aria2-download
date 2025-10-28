@@ -53,7 +53,8 @@ func (c *Client) SendMessage(chatID int64, text string) error {
 }
 
 func (c *Client) SendMessageWithParseMode(chatID int64, text, parseMode string) error {
-	return c.SendMessageWithKeyboard(chatID, cleanUTF8(text), parseMode, nil)
+	_, err := c.SendMessageWithKeyboard(chatID, cleanUTF8(text), parseMode, nil)
+	return err
 }
 
 // cleanUTF8 确保文本是有效的UTF-8编码
@@ -65,12 +66,11 @@ func cleanUTF8(text string) string {
 	return text
 }
 
-func (c *Client) SendMessageWithKeyboard(chatID int64, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) error {
+func (c *Client) SendMessageWithKeyboard(chatID int64, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) (int, error) {
 	if c.bot == nil {
-		return fmt.Errorf("telegram bot not initialized")
+		return 0, fmt.Errorf("telegram bot not initialized")
 	}
 
-	// 清理文本确保UTF-8编码有效
 	cleanText := cleanUTF8(text)
 
 	msg := tgbotapi.NewMessage(chatID, cleanText)
@@ -81,12 +81,12 @@ func (c *Client) SendMessageWithKeyboard(chatID int64, text, parseMode string, k
 		msg.ReplyMarkup = keyboard
 	}
 
-	_, err := c.bot.Send(msg)
+	sentMsg, err := c.bot.Send(msg)
 	if err != nil {
-		return fmt.Errorf("failed to send telegram message: %w", err)
+		return 0, fmt.Errorf("failed to send telegram message: %w", err)
 	}
 
-	return nil
+	return sentMsg.MessageID, nil
 }
 
 // SendMessageWithAutoDelete 发送消息并在指定时间后自动删除

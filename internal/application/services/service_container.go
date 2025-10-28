@@ -61,6 +61,7 @@ type ServiceContainer struct {
 
 	// 基础设施服务（非contracts）
 	taskRepo        *repository.TaskRepository
+	telegramClient  interface{}  // 单例 Telegram Client
 }
 
 // NewServiceContainer 创建服务容器
@@ -68,7 +69,7 @@ func NewServiceContainer(cfg *config.Config) (*ServiceContainer, error) {
 	container := &ServiceContainer{
 		config: cfg,
 	}
-	
+
 	// 1. 初始化基础设施层
 	dataDir := "./data" // 使用固定的数据目录
 	taskRepo, err := repository.NewTaskRepository(dataDir)
@@ -76,11 +77,11 @@ func NewServiceContainer(cfg *config.Config) (*ServiceContainer, error) {
 		return nil, fmt.Errorf("failed to create task repository: %w", err)
 	}
 	container.taskRepo = taskRepo
-	
+
 	// 2. 初始化应用服务 - 注意依赖顺序
 	// 先初始化不依赖其他服务的服务
-	container.notificationService = notification.NewAppNotificationService(cfg)
-	container.fileService = file.NewAppFileService(cfg, nil) // 暂时传nil，稍后会设置downloadService
+	container.notificationService = notification.NewAppNotificationServiceWithClient(cfg, nil)
+	container.fileService = file.NewAppFileService(cfg, nil)
 	container.downloadService = download.NewAppDownloadService(cfg, container.fileService)
 
 	// 更新fileService的downloadService依赖
@@ -151,4 +152,12 @@ func (c *ServiceContainer) GetConfig() *config.Config {
 // GetSchedulerService 获取调度服务
 func (c *ServiceContainer) GetSchedulerService() *task.SchedulerService {
 	return c.schedulerService
+}
+
+func (c *ServiceContainer) GetTelegramClient() interface{} {
+	return c.telegramClient
+}
+
+func (c *ServiceContainer) SetTelegramClient(client interface{}) {
+	c.telegramClient = client
 }

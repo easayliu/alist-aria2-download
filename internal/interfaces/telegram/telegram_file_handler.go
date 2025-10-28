@@ -24,6 +24,16 @@ func NewFileHandler(controller *TelegramController) *FileHandler {
 	}
 }
 
+func (h *FileHandler) buildFullPath(file contracts.FileResponse, basePath string) string {
+	if file.Path != "" {
+		return file.Path
+	}
+	if basePath == "/" {
+		return "/" + file.Name
+	}
+	return basePath + "/" + file.Name
+}
+
 // ================================
 // File browsing functionality
 // ================================
@@ -59,7 +69,7 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 	}
 
 	if len(files) == 0 {
-		h.controller.messageUtils.SendMessage(chatID, "当前目录为空")
+		h.controller.messageUtils.SendMessageHTMLWithAutoDelete(chatID, "当前目录为空", 30)
 		return
 	}
 
@@ -102,61 +112,24 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 
 		if file.IsDir {
 			prefix = "📁"
-			// Directory click: enter subdirectory
-			// Build full path
-			var fullPath string
-			if file.Path != "" {
-				fullPath = file.Path
-			} else {
-				if path == "/" {
-					fullPath = "/" + file.Name
-				} else {
-					fullPath = path + "/" + file.Name
-				}
-			}
-			callbackData = fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(fullPath), 1)
+			fullPath := h.buildFullPath(file, path)
+			callbackData = fmt.Sprintf("browse_dir:%s:1", h.controller.common.EncodeFilePath(fullPath))
 		} else if h.controller.fileService.IsVideoFile(file.Name) {
 			prefix = "🎬"
-			// Video file click: show operation menu
-			// Build full path
-			var fullPath string
-			if file.Path != "" {
-				fullPath = file.Path
-			} else {
-				if path == "/" {
-					fullPath = "/" + file.Name
-				} else {
-					fullPath = path + "/" + file.Name
-				}
-			}
+			fullPath := h.buildFullPath(file, path)
 			callbackData = fmt.Sprintf("file_menu:%s", h.controller.common.EncodeFilePath(fullPath))
 		} else {
 			prefix = "📄"
-			// Other file click: show operation menu
-			// Build full path
-			var fullPath string
-			if file.Path != "" {
-				fullPath = file.Path
-			} else {
-				if path == "/" {
-					fullPath = "/" + file.Name
-				} else {
-					fullPath = path + "/" + file.Name
-				}
-			}
+			fullPath := h.buildFullPath(file, path)
 			callbackData = fmt.Sprintf("file_menu:%s", h.controller.common.EncodeFilePath(fullPath))
 		}
 
 		fileName := file.Name
-		// Use smart truncation considering Chinese/English character width
-		// Ensure button width matches message content width (42 characters)
-		// emoji (📁/📄) occupies about 2 characters
-		maxWidth := 38  // Directory row: emoji(2) + space(1) + filename(38) = 41 chars
+		maxWidth := 38
 		if !file.IsDir {
-			maxWidth = 30 // File row: emoji(2) + space(1) + filename(30) + button(📥~2) = 35 chars
+			maxWidth = 30
 		}
 
-		// Use formatter's TruncateButtonText method considering emoji space
 		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 		fileName = formatter.TruncateButtonText(fileName, maxWidth)
 
@@ -165,30 +138,7 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 			callbackData,
 		)
 
-		// Add quick download button for files (non-directories)
-		if !file.IsDir {
-			// File row: filename button + quick download button
-			var fullPath string
-			if file.Path != "" {
-				fullPath = file.Path
-			} else {
-				if path == "/" {
-					fullPath = "/" + file.Name
-				} else {
-					fullPath = path + "/" + file.Name
-				}
-			}
-
-			downloadButton := tgbotapi.NewInlineKeyboardButtonData(
-				"📥",
-				fmt.Sprintf("file_download:%s", h.controller.common.EncodeFilePath(fullPath)),
-			)
-
-			keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button, downloadButton})
-		} else {
-			// Directory row: only directory button occupying full width
-			keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})
-		}
+		keyboard = append(keyboard, []tgbotapi.InlineKeyboardButton{button})
 	}
 
 	// Add navigation buttons
@@ -217,11 +167,12 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 	// Add action buttons - first row: download and refresh
 	actionRow1 := []tgbotapi.InlineKeyboardButton{
 		tgbotapi.NewInlineKeyboardButtonData("📥 下载目录", fmt.Sprintf("download_dir:%s", h.controller.common.EncodeFilePath(path))),
+		tgbotapi.NewInlineKeyboardButtonData("📝 批量重命名", fmt.Sprintf("batch_rename:%s", h.controller.common.EncodeFilePath(path))),
 		tgbotapi.NewInlineKeyboardButtonData("🔄 刷新", fmt.Sprintf("browse_refresh:%s:%d", h.controller.common.EncodeFilePath(path), page)),
 	}
 	keyboard = append(keyboard, actionRow1)
 
-	// Add navigation buttons - second row: parent directory and main menu
+	// Add navigation buttons - second row: parent directory, delete directory and main menu
 	actionRow2 := []tgbotapi.InlineKeyboardButton{}
 
 	// Return to parent directory button
@@ -230,6 +181,14 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 		actionRow2 = append(actionRow2, tgbotapi.NewInlineKeyboardButtonData(
 			"⬆️ 上级目录",
 			fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(parentPath), 1),
+		))
+	}
+
+	// Delete directory button (only for non-root directories)
+	if path != "/" {
+		actionRow2 = append(actionRow2, tgbotapi.NewInlineKeyboardButtonData(
+			"🗑️ 删除目录",
+			fmt.Sprintf("dir_delete_confirm:%s", h.controller.common.EncodeFilePath(path)),
 		))
 	}
 
@@ -253,16 +212,14 @@ func (h *FileHandler) HandleBrowseFilesWithEdit(chatID int64, path string, page 
 
 // HandleFileMenu handles file operation menu
 func (h *FileHandler) HandleFileMenu(chatID int64, filePath string) {
-	h.HandleFileMenuWithEdit(chatID, filePath, 0) // 0 means send new message
+	h.HandleFileMenuWithEdit(chatID, filePath, 0)
 }
 
 // HandleFileMenuWithEdit handles file operation menu (supports message editing)
 func (h *FileHandler) HandleFileMenuWithEdit(chatID int64, filePath string, messageID int) {
-	// Get file information
 	fileName := filepath.Base(filePath)
 	fileExt := strings.ToLower(filepath.Ext(fileName))
 
-	// Choose icon based on file type
 	var fileIcon string
 	if h.controller.fileService.IsVideoFile(fileName) {
 		fileIcon = "🎬"
@@ -270,7 +227,6 @@ func (h *FileHandler) HandleFileMenuWithEdit(chatID int64, filePath string, mess
 		fileIcon = "📄"
 	}
 
-	// Use unified formatter
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	fileType := ""
 	if fileExt != "" {
@@ -287,25 +243,92 @@ func (h *FileHandler) HandleFileMenuWithEdit(chatID int64, filePath string, mess
 	}
 	message := formatter.FormatFileOperation(opData)
 
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📥 立即下载", fmt.Sprintf("file_download:%s", h.controller.common.EncodeFilePath(filePath))),
-			tgbotapi.NewInlineKeyboardButtonData("ℹ️ 文件信息", fmt.Sprintf("file_info:%s", h.controller.common.EncodeFilePath(filePath))),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("🔗 获取链接", fmt.Sprintf("file_link:%s", h.controller.common.EncodeFilePath(filePath))),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📁 返回目录", fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(h.getParentPath(filePath)), 1)),
-			tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"),
-		),
-	)
+	isVideo := h.controller.fileService.IsVideoFile(fileName)
+
+	var keyboardRows [][]tgbotapi.InlineKeyboardButton
+
+	keyboardRows = append(keyboardRows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("📥 立即下载", fmt.Sprintf("file_download:%s", h.controller.common.EncodeFilePath(filePath))),
+		tgbotapi.NewInlineKeyboardButtonData("ℹ️ 文件信息", fmt.Sprintf("file_info:%s", h.controller.common.EncodeFilePath(filePath))),
+	))
+
+	keyboardRows = append(keyboardRows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("🔗 获取链接", fmt.Sprintf("file_link:%s", h.controller.common.EncodeFilePath(filePath))),
+	))
+
+	if isVideo {
+		keyboardRows = append(keyboardRows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("✏️ 智能重命名", fmt.Sprintf("file_rename:%s", h.controller.common.EncodeFilePath(filePath))),
+		))
+	}
+
+	keyboardRows = append(keyboardRows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("🗑️ 删除文件", fmt.Sprintf("file_delete_confirm:%s", h.controller.common.EncodeFilePath(filePath))),
+	))
+
+	keyboardRows = append(keyboardRows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("📁 返回目录", fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(h.getParentPath(filePath)), 1)),
+		tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"),
+	))
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(keyboardRows...)
 
 	if messageID > 0 {
-		// Edit existing message
 		h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
 	} else {
-		// Send new message
+		h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+	}
+}
+
+func (h *FileHandler) HandleDirMenu(chatID int64, dirPath string) {
+	h.HandleDirMenuWithEdit(chatID, dirPath, 0)
+}
+
+func (h *FileHandler) HandleDirMenuWithEdit(chatID int64, dirPath string, messageID int) {
+	dirName := filepath.Base(dirPath)
+	if dirPath == "/" {
+		dirName = "根目录"
+	}
+
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+
+	opData := utils.FileOperationData{
+		Icon:       "📁",
+		FileName:   dirName,
+		FilePath:   filepath.Dir(dirPath),
+		FileType:   "目录",
+		Prompt:     "请选择操作：",
+		EscapeHTML: h.controller.messageUtils.EscapeHTML,
+	}
+	message := formatter.FormatFileOperation(opData)
+
+	var keyboardRows [][]tgbotapi.InlineKeyboardButton
+
+	keyboardRows = append(keyboardRows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("📂 进入目录", fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(dirPath), 1)),
+		tgbotapi.NewInlineKeyboardButtonData("📥 下载目录", fmt.Sprintf("download_dir:%s", h.controller.common.EncodeFilePath(dirPath))),
+	))
+
+	keyboardRows = append(keyboardRows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("📝 批量重命名", fmt.Sprintf("batch_rename:%s", h.controller.common.EncodeFilePath(dirPath))),
+	))
+
+	if dirPath != "/" {
+		keyboardRows = append(keyboardRows, tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🗑️ 删除目录", fmt.Sprintf("dir_delete_confirm:%s", h.controller.common.EncodeFilePath(dirPath))),
+		))
+	}
+
+	keyboardRows = append(keyboardRows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData("📁 返回上级", fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(h.getParentPath(dirPath)), 1)),
+		tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"),
+	))
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(keyboardRows...)
+
+	if messageID > 0 {
+		h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+	} else {
 		h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
 	}
 }
@@ -383,6 +406,60 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 	)
 
 	h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+}
+
+func (h *FileHandler) HandleDirDeleteConfirm(chatID int64, dirPath string, messageID int) {
+	dirName := filepath.Base(dirPath)
+	parentDir := filepath.Dir(dirPath)
+
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatTitle("⚠️", "确认删除目录") + "\n\n" +
+		formatter.FormatFieldCode("目录名", h.controller.messageUtils.EscapeHTML(dirName)) + "\n" +
+		formatter.FormatFieldCode("路径", h.controller.messageUtils.EscapeHTML(parentDir)) + "\n\n" +
+		"<b>⚠️ 此操作不可撤销，将删除目录及其所有内容，确认删除吗？</b>"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("✅ 确认删除", fmt.Sprintf("dir_delete:%s", h.controller.common.EncodeFilePath(dirPath))),
+			tgbotapi.NewInlineKeyboardButtonData("❌ 取消", fmt.Sprintf("dir_menu:%s", h.controller.common.EncodeFilePath(dirPath))),
+		),
+	)
+
+	if messageID > 0 {
+		h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+	} else {
+		h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+	}
+}
+
+func (h *FileHandler) HandleDirDelete(chatID int64, dirPath string, messageID int) {
+	dirName := filepath.Base(dirPath)
+	parentDir := filepath.Dir(dirPath)
+
+	ctx := context.Background()
+	if err := h.controller.fileService.DeleteFile(ctx, dirPath); err != nil {
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("删除目录", err))
+		return
+	}
+
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatTitle("✅", "目录删除成功") + "\n\n" +
+		formatter.FormatFieldCode("目录名", h.controller.messageUtils.EscapeHTML(dirName)) + "\n" +
+		formatter.FormatFieldCode("原路径", h.controller.messageUtils.EscapeHTML(parentDir))
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📁 返回上级", fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(parentDir), 1)),
+			tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"),
+		),
+	)
+
+	if messageID > 0 {
+		h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+	} else {
+		h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+	}
 }
 
 // HandleFileInfo handles file information viewing
@@ -659,123 +736,6 @@ func (h *FileHandler) HandleFilesBrowseWithEdit(chatID int64, messageID int) {
 	h.HandleBrowseFilesWithEdit(chatID, defaultPath, 1, messageID)
 }
 
-// HandleFilesSearchWithEdit handles file search (supports message editing)
-func (h *FileHandler) HandleFilesSearchWithEdit(chatID int64, messageID int) {
-	// Use unified formatter
-	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-	var lines []string
-
-	// Title
-	lines = append(lines, formatter.FormatTitle("🔍", "文件搜索功能"))
-	lines = append(lines, "")
-
-	// Search instructions
-	lines = append(lines, formatter.FormatSection("搜索说明"))
-	lines = append(lines, formatter.FormatListItem("•", "支持文件名关键词搜索"))
-	lines = append(lines, formatter.FormatListItem("•", "支持路径模糊匹配"))
-	lines = append(lines, formatter.FormatListItem("•", "支持文件类型过滤"))
-	lines = append(lines, "")
-
-	// Usage instructions
-	lines = append(lines, formatter.FormatSection("请输入搜索关键词"))
-	lines = append(lines, "格式: <code>/search &lt;关键词&gt;</code>")
-	lines = append(lines, "")
-
-	// Quick search
-	lines = append(lines, formatter.FormatSection("快速搜索"))
-
-	message := strings.Join(lines, "\n")
-
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("搜索电影", "search_movies"),
-			tgbotapi.NewInlineKeyboardButtonData("搜索剧集", "search_tv"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("返回文件浏览", "menu_files"),
-		),
-	)
-
-	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
-}
-
-// HandleFilesInfoWithEdit handles file information viewing (supports message editing)
-func (h *FileHandler) HandleFilesInfoWithEdit(chatID int64, messageID int) {
-	// Use unified formatter
-	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-	var lines []string
-
-	// Title
-	lines = append(lines, formatter.FormatTitle("ℹ️", "文件信息查看"))
-	lines = append(lines, "")
-
-	// Viewable information
-	lines = append(lines, formatter.FormatSection("可查看信息"))
-	lines = append(lines, formatter.FormatListItem("•", "文件基本属性"))
-	lines = append(lines, formatter.FormatListItem("•", "文件大小和修改时间"))
-	lines = append(lines, formatter.FormatListItem("•", "下载链接和路径"))
-	lines = append(lines, formatter.FormatListItem("•", "媒体类型识别"))
-	lines = append(lines, "")
-
-	// Operation prompt
-	lines = append(lines, formatter.FormatSection("请选择操作方式"))
-
-	message := strings.Join(lines, "\n")
-
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("浏览选择", "files_browse"),
-			tgbotapi.NewInlineKeyboardButtonData("定时任务", "cmd_tasks"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("返回文件浏览", "menu_files"),
-		),
-	)
-
-	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
-}
-
-// HandleFilesDownloadWithEdit handles path download functionality (supports message editing)
-func (h *FileHandler) HandleFilesDownloadWithEdit(chatID int64, messageID int) {
-	// Use unified formatter
-	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-	var lines []string
-
-	// Title
-	lines = append(lines, formatter.FormatTitle("📥", "路径下载功能"))
-	lines = append(lines, "")
-
-	// Download options
-	lines = append(lines, formatter.FormatSection("下载选项"))
-	lines = append(lines, formatter.FormatListItem("•", "指定路径批量下载"))
-	lines = append(lines, formatter.FormatListItem("•", "递归下载子目录"))
-	lines = append(lines, formatter.FormatListItem("•", "预览模式（不下载）"))
-	lines = append(lines, formatter.FormatListItem("•", "过滤文件类型"))
-	lines = append(lines, "")
-
-	// Usage format
-	lines = append(lines, formatter.FormatSection("使用格式"))
-	lines = append(lines, "<code>/path_download /movies/2024</code>")
-	lines = append(lines, "")
-
-	// Quick download
-	lines = append(lines, formatter.FormatSection("快速下载"))
-
-	message := strings.Join(lines, "\n")
-
-	keyboard := tgbotapi.NewInlineKeyboardMarkup(
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("定时任务", "cmd_tasks"),
-			tgbotapi.NewInlineKeyboardButtonData("浏览下载", "files_browse"),
-		),
-		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("返回文件浏览", "menu_files"),
-		),
-	)
-
-	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
-}
-
 // HandleAlistFilesWithEdit handles getting Alist file list (supports message editing)
 func (h *FileHandler) HandleAlistFilesWithEdit(chatID int64, messageID int) {
 	h.HandleBrowseFilesWithEdit(chatID, h.controller.config.Alist.DefaultPath, 1, messageID)
@@ -871,4 +831,58 @@ type DirectoryDownloadResult struct {
 	SuccessCount int
 	FailedCount  int
 	FailedFiles  []string
+}
+
+func (h *FileHandler) HandleFileDeleteConfirm(chatID int64, filePath string, messageID int) {
+	fileName := filepath.Base(filePath)
+	parentDir := filepath.Dir(filePath)
+
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatTitle("⚠️", "确认删除文件") + "\n\n" +
+		formatter.FormatFieldCode("文件名", h.controller.messageUtils.EscapeHTML(fileName)) + "\n" +
+		formatter.FormatFieldCode("路径", h.controller.messageUtils.EscapeHTML(parentDir)) + "\n\n" +
+		"<b>⚠️ 此操作不可撤销，确认删除吗？</b>"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("✅ 确认删除", fmt.Sprintf("file_delete:%s", h.controller.common.EncodeFilePath(filePath))),
+			tgbotapi.NewInlineKeyboardButtonData("❌ 取消", fmt.Sprintf("file_menu:%s", h.controller.common.EncodeFilePath(filePath))),
+		),
+	)
+
+	if messageID > 0 {
+		h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+	} else {
+		h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+	}
+}
+
+func (h *FileHandler) HandleFileDelete(chatID int64, filePath string, messageID int) {
+	fileName := filepath.Base(filePath)
+	parentDir := filepath.Dir(filePath)
+
+	ctx := context.Background()
+	if err := h.controller.fileService.DeleteFile(ctx, filePath); err != nil {
+		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("删除文件", err))
+		return
+	}
+
+	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
+	message := formatter.FormatTitle("✅", "文件删除成功") + "\n\n" +
+		formatter.FormatFieldCode("文件名", h.controller.messageUtils.EscapeHTML(fileName)) + "\n" +
+		formatter.FormatFieldCode("原路径", h.controller.messageUtils.EscapeHTML(parentDir))
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📁 返回目录", fmt.Sprintf("browse_dir:%s:%d", h.controller.common.EncodeFilePath(parentDir), 1)),
+			tgbotapi.NewInlineKeyboardButtonData("🏠 主菜单", "back_main"),
+		),
+	)
+
+	if messageID > 0 {
+		h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", &keyboard)
+	} else {
+		h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+	}
 }

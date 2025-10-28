@@ -144,6 +144,18 @@ type FileSearchRequest struct {
 	Limit       int    `json:"limit,omitempty" validate:"min=1,max=1000"`
 }
 
+type RenameSuggestion struct {
+	NewName      string  `json:"new_name"`
+	NewPath      string  `json:"new_path"`
+	MediaType    string  `json:"media_type"`
+	TMDBID       int     `json:"tmdb_id"`
+	Title        string  `json:"title"`
+	Year         int     `json:"year"`
+	Season       int     `json:"season,omitempty"`
+	Episode      int     `json:"episode,omitempty"`
+	Confidence   float64 `json:"confidence"`
+}
+
 // FileService 文件服务业务契约
 type FileService interface {
 	// 基础文件操作
@@ -174,4 +186,14 @@ type FileService interface {
 	
 	// 系统功能
 	GetStorageInfo(ctx context.Context, path string) (map[string]interface{}, error)
+
+	// 文件重命名
+	RenameFile(ctx context.Context, path, newName string) error
+	RenameAndMoveFile(ctx context.Context, oldPath, newPath string) error
+	GetRenameSuggestions(ctx context.Context, path string) ([]RenameSuggestion, error)
+	GetBatchRenameSuggestions(ctx context.Context, paths []string) (map[string][]RenameSuggestion, error)
+
+	// 文件删除
+	DeleteFile(ctx context.Context, path string) error
+	DeleteFiles(ctx context.Context, paths []string) error
 }

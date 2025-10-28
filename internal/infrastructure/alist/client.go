@@ -337,3 +337,128 @@ func (c *Client) GetFileInfoWithContext(ctx context.Context, path string) (*File
 
 	return &getResp, nil
 }
+
+func (c *Client) Rename(path, newName string) error {
+	return c.RenameWithContext(context.Background(), path, newName)
+}
+
+func (c *Client) RenameWithContext(ctx context.Context, path, newName string) error {
+	reqData := RenameRequest{
+		Path: path,
+		Name: newName,
+	}
+
+	var renameResp RenameResponse
+	if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/rename", reqData, &renameResp); err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+
+	if renameResp.Code == 401 {
+		c.ClearToken()
+
+		if err := c.ensureValidToken(ctx); err != nil {
+			return fmt.Errorf("failed to refresh token after 401: %w", err)
+		}
+
+		if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/rename", reqData, &renameResp); err != nil {
+			return fmt.Errorf("failed to send request after token refresh: %w", err)
+		}
+	}
+
+	if renameResp.Code != 200 && renameResp.Code != 0 {
+		return fmt.Errorf("rename failed: code=%d, message=%s", renameResp.Code, renameResp.Message)
+	}
+
+	return nil
+}
+
+func (c *Client) Move(ctx context.Context, srcDir, dstDir string, names []string) error {
+	reqData := MoveRequest{
+		SrcDir: srcDir,
+		DstDir: dstDir,
+		Names:  names,
+		Overwrite: true,
+	}
+
+	var moveResp MoveResponse
+	if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/move", reqData, &moveResp); err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+
+	if moveResp.Code == 401 {
+		c.ClearToken()
+
+		if err := c.ensureValidToken(ctx); err != nil {
+			return fmt.Errorf("failed to refresh token after 401: %w", err)
+		}
+
+		if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/move", reqData, &moveResp); err != nil {
+			return fmt.Errorf("failed to send request after token refresh: %w", err)
+		}
+	}
+
+	if moveResp.Code != 200 && moveResp.Code != 0 {
+		return fmt.Errorf("move failed: code=%d, message=%s", moveResp.Code, moveResp.Message)
+	}
+
+	return nil
+}
+
+func (c *Client) Mkdir(ctx context.Context, path string) error {
+	reqData := MkdirRequest{
+		Path: path,
+	}
+
+	var mkdirResp MkdirResponse
+	if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/mkdir", reqData, &mkdirResp); err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+
+	if mkdirResp.Code == 401 {
+		c.ClearToken()
+
+		if err := c.ensureValidToken(ctx); err != nil {
+			return fmt.Errorf("failed to refresh token after 401: %w", err)
+		}
+
+		if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/mkdir", reqData, &mkdirResp); err != nil {
+			return fmt.Errorf("failed to send request after token refresh: %w", err)
+		}
+	}
+
+	if mkdirResp.Code != 200 && mkdirResp.Code != 0 {
+		return fmt.Errorf("mkdir failed: code=%d, message=%s", mkdirResp.Code, mkdirResp.Message)
+	}
+
+	return nil
+}
+
+func (c *Client) Remove(ctx context.Context, dir string, names []string) error {
+	reqData := RemoveRequest{
+		Dir:   dir,
+		Names: names,
+	}
+
+	var removeResp RemoveResponse
+	if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/remove", reqData, &removeResp); err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+
+	if removeResp.Code == 401 {
+		c.ClearToken()
+
+		if err := c.ensureValidToken(ctx); err != nil {
+			return fmt.Errorf("failed to refresh token after 401: %w", err)
+		}
+
+		if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/remove", reqData, &removeResp); err != nil {
+			return fmt.Errorf("failed to send request after token refresh: %w", err)
+		}
+	}
+
+	if removeResp.Code != 200 && removeResp.Code != 0 {
+		return fmt.Errorf("remove failed: code=%d, message=%s", removeResp.Code, removeResp.Message)
+	}
+
+	return nil
+}

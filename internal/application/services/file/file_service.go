@@ -8,10 +8,12 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	pathservices "github.com/easayliu/alist-aria2-download/internal/application/services/path"
+	aiservices "github.com/easayliu/alist-aria2-download/internal/domain/services/ai"
 	mediaservices "github.com/easayliu/alist-aria2-download/internal/domain/services/media"
 	domainpathservices "github.com/easayliu/alist-aria2-download/internal/domain/services/path"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
+	"github.com/easayliu/alist-aria2-download/internal/infrastructure/tmdb"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	pathutil "github.com/easayliu/alist-aria2-download/pkg/utils/path"
 	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
@@ -24,16 +26,17 @@ type AppFileService struct {
 	alistClient        *alist.Client
 	downloadService    contracts.DownloadService
 
-	// 专职服务（单一职责）
-	pathStrategy       *pathservices.PathStrategyService           // 路径策略
-	pathCategory       *domainpathservices.PathCategoryService     // 路径分类
-	pathGenerator      *pathservices.PathGenerationService         // 路径生成
-	mediaClassifier    *mediaservices.MediaClassificationService   // 媒体分类
+	pathStrategy       *pathservices.PathStrategyService
+	pathCategory       *domainpathservices.PathCategoryService
+	pathGenerator      *pathservices.PathGenerationService
+	mediaClassifier    *mediaservices.MediaClassificationService
+
+	tmdbClient         *tmdb.Client
+	renameSuggester    *aiservices.RenameSuggester
 }
 
 // NewAppFileService 创建应用文件服务
 func NewAppFileService(cfg *config.Config, downloadService contracts.DownloadService) contracts.FileService {
-	// 初始化基础服务
 	pathCategory := domainpathservices.NewPathCategoryService()
 	mediaClassifier := mediaservices.NewMediaClassificationService(cfg, pathCategory)
 
@@ -45,13 +48,23 @@ func NewAppFileService(cfg *config.Config, downloadService contracts.DownloadSer
 		mediaClassifier: mediaClassifier,
 	}
 
-	// 立即初始化 pathStrategy（不需要依赖 downloadService）
 	service.pathStrategy = pathservices.NewPathStrategyService(cfg, service)
 	logger.Debug("PathStrategyService initialized (NewAppFileService)")
 
-	// 立即初始化 pathGenerator
 	service.pathGenerator = pathservices.NewPathGenerationService(cfg, service.pathStrategy, pathCategory, mediaClassifier)
 	logger.Debug("PathGenerationService initialized (NewAppFileService)")
+
+	if cfg.TMDB.APIKey != "" {
+		service.tmdbClient = tmdb.NewClient(cfg.TMDB.APIKey)
+		if cfg.TMDB.Language != "" {
+			service.tmdbClient.SetLanguage(cfg.TMDB.Language)
+		}
+		if cfg.TMDB.QPS > 0 {
+			service.tmdbClient.SetQPS(cfg.TMDB.QPS)
+		}
+		service.renameSuggester = aiservices.NewRenameSuggester(service.tmdbClient, cfg.TMDB.QualityDirPatterns)
+		logger.Debug("TMDB Client and RenameSuggester initialized")
+	}
 
 	return service
 }

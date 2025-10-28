@@ -91,6 +91,23 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		return
 	}
 
+	if strings.HasPrefix(data, "rename_apply|") {
+		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "正在重命名")
+		if callback.Message != nil {
+			h.handleRenameApply(chatID, data, callback.Message.MessageID)
+		}
+		return
+	}
+
+	if data == "rename_cancel" {
+		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "已取消")
+		if callback.Message != nil {
+			h.controller.messageUtils.ClearInlineKeyboard(chatID, callback.Message.MessageID)
+			h.controller.messageUtils.DeleteMessageAfterDelay(chatID, callback.Message.MessageID, 30)
+		}
+		return
+	}
+
 	// First respond to callback query
 	h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "")
 
@@ -142,6 +159,12 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		return
 	}
 
+	if strings.HasPrefix(data, "dir_menu:") {
+		dirPath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "dir_menu:"))
+		h.controller.fileHandler.HandleDirMenuWithEdit(chatID, dirPath, callback.Message.MessageID)
+		return
+	}
+
 	if strings.HasPrefix(data, "file_download:") {
 		filePath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "file_download:"))
 		h.controller.fileHandler.HandleFileDownload(chatID, filePath)
@@ -160,6 +183,52 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		return
 	}
 
+	if strings.HasPrefix(data, "file_rename:") {
+		filePath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "file_rename:"))
+		h.controller.fileHandler.HandleFileRename(chatID, filePath)
+		return
+	}
+
+	if strings.HasPrefix(data, "file_delete_confirm:") {
+		filePath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "file_delete_confirm:"))
+		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "")
+		h.controller.fileHandler.HandleFileDeleteConfirm(chatID, filePath, callback.Message.MessageID)
+		return
+	}
+
+	if strings.HasPrefix(data, "file_delete:") {
+		filePath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "file_delete:"))
+		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "正在删除文件")
+		h.controller.fileHandler.HandleFileDelete(chatID, filePath, callback.Message.MessageID)
+		return
+	}
+
+	if strings.HasPrefix(data, "dir_delete_confirm:") {
+		dirPath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "dir_delete_confirm:"))
+		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "")
+		h.controller.fileHandler.HandleDirDeleteConfirm(chatID, dirPath, callback.Message.MessageID)
+		return
+	}
+
+	if strings.HasPrefix(data, "dir_delete:") {
+		dirPath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "dir_delete:"))
+		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "正在删除目录")
+		h.controller.fileHandler.HandleDirDelete(chatID, dirPath, callback.Message.MessageID)
+		return
+	}
+
+	if strings.HasPrefix(data, "batch_rename:") {
+		dirPath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "batch_rename:"))
+		h.controller.fileHandler.HandleBatchRename(chatID, dirPath)
+		return
+	}
+
+	if strings.HasPrefix(data, "batch_rename_confirm:") {
+		dirPath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "batch_rename_confirm:"))
+		h.controller.fileHandler.HandleBatchRenameConfirm(chatID, dirPath, callback.Message.MessageID)
+		return
+	}
+
 	if strings.HasPrefix(data, "download_dir:") {
 		dirPath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "download_dir:"))
 		h.controller.fileHandler.HandleDownloadDirectory(chatID, dirPath)
@@ -172,59 +241,20 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		h.controller.menuCallbacks.HandleHelpWithEdit(chatID, callback.Message.MessageID)
 	case "cmd_status":
 		h.controller.menuCallbacks.HandleStatusWithEdit(chatID, callback.Message.MessageID)
-	case "cmd_manage":
-		h.controller.menuCallbacks.HandleManageWithEdit(chatID, callback.Message.MessageID)
-	case "menu_download":
-		h.controller.menuCallbacks.HandleDownloadMenuWithEdit(chatID, callback.Message.MessageID)
-	case "menu_files":
-		h.controller.menuCallbacks.HandleFilesMenuWithEdit(chatID, callback.Message.MessageID)
-	case "menu_system":
-		h.controller.menuCallbacks.HandleSystemMenuWithEdit(chatID, callback.Message.MessageID)
-	case "menu_status":
-		h.controller.menuCallbacks.HandleStatusMenuWithEdit(chatID, callback.Message.MessageID)
-	case "show_yesterday_options", "api_yesterday_files", "api_yesterday_files_preview", "api_yesterday_download":
-		// Yesterday files feature removed, redirect to scheduled tasks
-		h.controller.taskHandler.HandleTasksWithEdit(chatID, userID, callback.Message.MessageID)
 	case "cmd_tasks":
 		h.controller.taskHandler.HandleTasksWithEdit(chatID, userID, callback.Message.MessageID)
-	case "api_download_status":
+	case "system_status":
+		h.controller.menuCallbacks.HandleSystemStatusWithEdit(chatID, callback.Message.MessageID)
+	case "back_main":
+		h.controller.menuCallbacks.HandleStartWithEdit(chatID, callback.Message.MessageID)
+	case "download_list":
 		h.controller.statusHandler.HandleDownloadStatusAPIWithEdit(chatID, callback.Message.MessageID)
+	case "files_browse":
+		h.controller.fileHandler.HandleFilesBrowseWithEdit(chatID, callback.Message.MessageID)
 	case "api_alist_login":
 		h.controller.statusHandler.HandleAlistLoginWithEdit(chatID, callback.Message.MessageID)
 	case "api_health_check":
 		h.controller.statusHandler.HandleHealthCheckWithEdit(chatID, callback.Message.MessageID)
-	case "back_main":
-		h.controller.menuCallbacks.HandleStartWithEdit(chatID, callback.Message.MessageID)
-	// Download management functions
-	case "download_list":
-		h.controller.statusHandler.HandleDownloadStatusAPIWithEdit(chatID, callback.Message.MessageID)
-	case "download_create":
-		h.controller.downloadHandler.HandleDownloadCreateWithEdit(chatID, callback.Message.MessageID)
-	case "download_control":
-		h.controller.downloadHandler.HandleDownloadControlWithEdit(chatID, callback.Message.MessageID)
-	case "download_delete":
-		h.controller.downloadHandler.HandleDownloadDeleteWithEdit(chatID, callback.Message.MessageID)
-	// File browsing functions
-	case "files_browse":
-		h.controller.fileHandler.HandleFilesBrowseWithEdit(chatID, callback.Message.MessageID)
-	case "files_search":
-		h.controller.fileHandler.HandleFilesSearchWithEdit(chatID, callback.Message.MessageID)
-	case "files_info":
-		h.controller.fileHandler.HandleFilesInfoWithEdit(chatID, callback.Message.MessageID)
-	case "files_download":
-		h.controller.fileHandler.HandleFilesDownloadWithEdit(chatID, callback.Message.MessageID)
-	case "api_alist_files":
-		h.controller.fileHandler.HandleAlistFilesWithEdit(chatID, callback.Message.MessageID)
-	// System management functions
-	case "system_info":
-		h.controller.menuCallbacks.HandleSystemInfoWithEdit(chatID, callback.Message.MessageID)
-	// Status monitoring functions
-	case "status_realtime":
-		h.controller.statusHandler.HandleStatusRealtimeWithEdit(chatID, callback.Message.MessageID)
-	case "status_storage":
-		h.controller.statusHandler.HandleStatusStorageWithEdit(chatID, callback.Message.MessageID)
-	case "status_history":
-		h.controller.statusHandler.HandleStatusHistoryWithEdit(chatID, callback.Message.MessageID)
 	default:
 		h.controller.messageUtils.SendMessage(chatID, "未知操作")
 	}

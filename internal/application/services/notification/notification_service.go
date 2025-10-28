@@ -30,6 +30,18 @@ func NewAppNotificationService(cfg *config.Config) contracts.NotificationService
 	}
 }
 
+// NewAppNotificationServiceWithClient 使用现有client创建应用通知服务
+func NewAppNotificationServiceWithClient(cfg *config.Config, client *telegram.Client) contracts.NotificationService {
+	return &AppNotificationService{
+		config:         cfg,
+		telegramClient: client,
+	}
+}
+
+func (s *AppNotificationService) SetTelegramClient(client *telegram.Client) {
+	s.telegramClient = client
+}
+
 // SendNotification 发送通知
 func (s *AppNotificationService) SendNotification(ctx context.Context, req contracts.NotificationRequest) (*contracts.NotificationResponse, error) {
 	if s.telegramClient == nil {

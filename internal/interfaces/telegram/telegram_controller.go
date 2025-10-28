@@ -11,7 +11,7 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
-	"github.com/easayliu/alist-aria2-download/internal/infrastructure/telegram"
+	telegramInfra "github.com/easayliu/alist-aria2-download/internal/infrastructure/telegram"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	"github.com/gin-gonic/gin"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -21,7 +21,7 @@ import (
 // Responsible for request routing and dependency management
 type TelegramController struct {
 	// Core dependencies - using contracts interface for API First architecture
-	telegramClient      *telegram.Client
+	telegramClient      *telegramInfra.Client
 	notificationService *services.NotificationService
 	fileService         contracts.FileService
 	downloadService     contracts.DownloadService
@@ -54,22 +54,9 @@ type TelegramController struct {
 
 // NewTelegramController creates a new Telegram controller instance
 // Implements API First architecture by obtaining contract interfaces through ServiceContainer
-func NewTelegramController(cfg *config.Config, notificationService *services.NotificationService, fileService *services.FileService, schedulerService *services.SchedulerService) *TelegramController {
-	var telegramClient *telegram.Client
-	if cfg.Telegram.Enabled {
-		telegramClient = telegram.NewClient(&cfg.Telegram)
-	}
-
+func NewTelegramController(cfg *config.Config, notificationService *services.NotificationService, fileService *services.FileService, schedulerService *services.SchedulerService, container *services.ServiceContainer, telegramClient *telegramInfra.Client) *TelegramController {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Create service container for dependency injection
-	container, err := services.NewServiceContainer(cfg)
-	if err != nil {
-		logger.Error("Failed to create service container", "error", err)
-		panic("Service container initialization failed")
-	}
-
-	// Create and initialize main controller instance
 	controller := &TelegramController{
 		telegramClient:      telegramClient,
 		notificationService: notificationService,
@@ -80,7 +67,6 @@ func NewTelegramController(cfg *config.Config, notificationService *services.Not
 		cancel:              cancel,
 	}
 
-	// Initialize all modular components
 	controller.initializeModules()
 
 	return controller
@@ -100,8 +86,7 @@ func (c *TelegramController) initializeModules() {
 	c.downloadCommands = commands.NewDownloadCommands(c.container, c.messageUtils)
 	c.taskCommands = commands.NewTaskCommands(c.schedulerService, c.config, c.messageUtils)
 
-	// Create callback handlers for inline keyboard interactions
-	c.menuCallbacks = callbacks.NewMenuCallbacks(c.downloadService, c.config, c.messageUtils)
+	c.menuCallbacks = callbacks.NewMenuCallbacks(c.downloadService, c.config, c.messageUtils, c.basicCommands)
 
 	// Initialize specialized function handlers
 	c.messageHandler = NewMessageHandler(c)
@@ -202,7 +187,7 @@ func (c *TelegramController) FormatFileSize(size int64) string {
 }
 
 // Getter methods providing access to internal components for other modules
-func (c *TelegramController) GetTelegramClient() *telegram.Client {
+func (c *TelegramController) GetTelegramClient() *telegramInfra.Client {
 	return c.telegramClient
 }
 

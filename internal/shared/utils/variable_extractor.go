@@ -103,7 +103,7 @@ func (e *VariableExtractor) extractShowName(path string) string {
 			afterPattern := path[idx+len(pattern):]
 			parts := strings.Split(afterPattern, "/")
 
-			// 跳过常见分类目录和年份目录
+			// 跳过常见分类目录、年份目录和季度目录
 			for _, part := range parts {
 				if part == "" {
 					continue
@@ -112,6 +112,12 @@ func (e *VariableExtractor) extractShowName(path string) string {
 				// 使用增强的跳过检测（包含年份）
 				if pathutil.ShouldSkipDirectoryAdvanced(part) {
 					logger.Debug("Skipping category directory", "dir", part)
+					continue
+				}
+
+				// 跳过季度目录
+				if strutil.IsSeasonDirectory(part) {
+					logger.Debug("Skipping season directory", "dir", part)
 					continue
 				}
 
@@ -181,7 +187,7 @@ func (e *VariableExtractor) extractMovieTitle(path string) string {
 		afterMovies := path[idx+8:] // "/movies/" 长度为8
 		parts := strings.Split(afterMovies, "/")
 
-		// 跳过常见分类目录和年份目录
+		// 跳过常见分类目录、年份目录和季度目录
 		for _, part := range parts {
 			if part == "" {
 				continue
@@ -190,6 +196,12 @@ func (e *VariableExtractor) extractMovieTitle(path string) string {
 			// 使用增强的跳过检测（包含年份）
 			if pathutil.ShouldSkipDirectoryAdvanced(part) {
 				logger.Debug("Skipping movie category directory", "dir", part)
+				continue
+			}
+
+			// 跳过季度目录
+			if strutil.IsSeasonDirectory(part) {
+				logger.Debug("Skipping season directory in movie path", "dir", part)
 				continue
 			}
 

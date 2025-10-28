@@ -100,9 +100,6 @@ func (s *PathStrategyService) GenerateDownloadPath(
 				"category", category,
 				"path", downloadPath)
 		} else {
-			// 非模板模式：PathStrategyService 不应被调用
-			// 如果到这里，说明配置有问题，返回错误
-			logger.Error("PathStrategyService called without template mode enabled")
 			return "", fmt.Errorf("PathStrategyService requires template mode to be enabled")
 		}
 	}

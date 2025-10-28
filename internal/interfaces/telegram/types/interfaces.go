@@ -31,11 +31,11 @@ type MessageSender interface {
 	SendMessageMarkdown(chatID int64, text string)
 	
 	// Message sending with keyboard
-	SendMessageWithKeyboard(chatID int64, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup)
+	SendMessageWithKeyboard(chatID int64, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) int
 	SendMessageWithReplyKeyboard(chatID int64, text string)
 	
 	// Message editing
-	EditMessageWithKeyboard(chatID int64, messageID int, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup)
+	EditMessageWithKeyboard(chatID int64, messageID int, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) bool
 	ClearInlineKeyboard(chatID int64, messageID int)
 	
 	// Utility methods
@@ -43,7 +43,7 @@ type MessageSender interface {
 	FormatFileSize(size int64) string
 	SplitMessage(text string, maxLength int) []string
 	GetDefaultReplyKeyboard() tgbotapi.ReplyKeyboardMarkup
-	GetFormatter() interface{} // 返回 *MessageFormatter，避免循环导入
+	GetFormatter() interface{}
 
 	// Download result formatting methods - unified format
 	FormatDownloadDirectoryResult(summary DownloadResultSummary) string
@@ -54,6 +54,4 @@ type MessageSender interface {
 type DownloadCommandHandler interface {
 	HandleDownload(chatID int64, command string)
 	HandleCancel(chatID int64, command string)
-	HandleYesterdayFiles(chatID int64)
-	HandleYesterdayDownload(chatID int64)
 }

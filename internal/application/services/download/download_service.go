@@ -12,8 +12,8 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/aria2"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
-	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 	fileutil "github.com/easayliu/alist-aria2-download/pkg/utils/file"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 )
 
 // AppDownloadService 应用层下载服务 - 负责业务流程编排
@@ -42,7 +42,7 @@ func NewAppDownloadService(cfg *config.Config, fileService contracts.FileService
 
 // CreateDownload 创建下载任务 - 统一的业务逻辑
 func (s *AppDownloadService) CreateDownload(ctx context.Context, req contracts.DownloadRequest) (*contracts.DownloadResponse, error) {
-	logger.Info("Creating download", "url", req.URL, "filename", req.Filename, "directory", req.Directory)
+	logger.Debug("Creating download", "url", req.URL, "filename", req.Filename, "directory", req.Directory)
 
 	// 1. 参数验证
 	if err := s.validateDownloadRequest(req); err != nil {
@@ -226,7 +226,7 @@ func (s *AppDownloadService) CreateBatchDownload(ctx context.Context, req contra
 
 			// 更新摘要统计 - 使用最终下载目录路径进行正确分类
 			summary.TotalFiles++
-			summary.TotalSize += item.FileSize  // 累加文件大小
+			summary.TotalSize += item.FileSize // 累加文件大小
 			logger.Debug("Batch download: added file to summary", "file", download.Filename, "fileSize", item.FileSize, "totalSize", summary.TotalSize)
 
 			if s.isVideoFile(download.Filename) {
@@ -450,7 +450,7 @@ func (s *AppDownloadService) isMovieFile(filepath string) bool {
 	if filepath == "" {
 		return false
 	}
-	
+
 	// 使用文件服务的智能媒体类型判断
 	mediaType := s.fileService.GetMediaType(filepath)
 	return mediaType == "movie"
@@ -461,7 +461,7 @@ func (s *AppDownloadService) isTVFile(filepath string) bool {
 	if filepath == "" {
 		return false
 	}
-	
+
 	// 使用文件服务的智能媒体类型判断
 	mediaType := s.fileService.GetMediaType(filepath)
 	return mediaType == "tv"
@@ -549,4 +549,3 @@ func (s *AppDownloadService) sortDownloads(downloads []contracts.DownloadRespons
 	// 简单实现，实际可以使用更复杂的排序逻辑
 	return downloads
 }
-

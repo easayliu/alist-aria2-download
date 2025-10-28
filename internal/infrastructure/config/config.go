@@ -12,6 +12,7 @@ type Config struct {
 	Telegram  TelegramConfig  `mapstructure:"telegram"`
 	Download  DownloadConfig  `mapstructure:"download"`
 	Scheduler SchedulerConfig `mapstructure:"scheduler"`
+	TMDB      TMDBConfig      `mapstructure:"tmdb"`
 }
 
 type ServerConfig struct {
@@ -94,6 +95,14 @@ type ScheduledTask struct {
 	AutoPreview bool   `mapstructure:"auto_preview"` // 是否自动预览模式
 }
 
+type TMDBConfig struct {
+	APIKey                string   `mapstructure:"api_key"`
+	Language              string   `mapstructure:"language"`
+	QPS                   int      `mapstructure:"qps"`
+	BatchRenameLimit      int      `mapstructure:"batch_rename_limit"`
+	QualityDirPatterns    []string `mapstructure:"quality_dir_patterns"`
+}
+
 func LoadConfig() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -140,6 +149,34 @@ func LoadConfig() (*Config, error) {
 	// 调度器配置默认值
 	viper.SetDefault("scheduler.enabled", false)
 	viper.SetDefault("scheduler.tasks", []ScheduledTask{})
+
+	// TMDB配置默认值
+	viper.SetDefault("tmdb.language", "zh-CN")
+	viper.SetDefault("tmdb.qps", 40)
+	viper.SetDefault("tmdb.batch_rename_limit", 20)
+	viper.SetDefault("tmdb.quality_dir_patterns", []string{
+		`(?i)\d{3,4}[pP]`,
+		`(?i)\d+K`,
+		`(?i)\d+FPS`,
+		`(?i)BluRay`,
+		`(?i)WEB-?DL`,
+		`(?i)WEBRip`,
+		`(?i)HDRip`,
+		`(?i)BDRip`,
+		`(?i)x264`,
+		`(?i)x265`,
+		`(?i)H\.?264`,
+		`(?i)H\.?265`,
+		`(?i)HEVC`,
+		`(?i)HDR`,
+		`(?i)DoVi`,
+		`(?i)DTS`,
+		`(?i)AAC`,
+		`(?i)AC3`,
+		`(?i)MAX\+?`,
+		`(?i)IMAX`,
+		`(?i)Atmos`,
+	})
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

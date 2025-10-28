@@ -55,6 +55,35 @@ download:
     # {year}/{month}/{day} - 当前日期
     # {filename} - 原始文件名
 
+# TMDB配置（用于文件重命名）
+tmdb:
+  api_key: ""                        # TMDB API密钥，从https://www.themoviedb.org/settings/api获取
+  language: "zh-CN"                  # 语言设置，默认中文
+  qps: 40                            # 每秒请求数限制
+  batch_rename_limit: 20             # 批量重命名文件数量限制，避免超时，0表示不限制
+  quality_dir_patterns:              # 视频质量/格式目录匹配模式（正则表达式）
+    - '(?i)\d{3,4}[pP]'              # 720p, 1080p, 2160p
+    - '(?i)\d+K'                     # 4K, 8K
+    - '(?i)\d+FPS'                   # 60FPS, 120FPS
+    - '(?i)BluRay'                   # BluRay
+    - '(?i)WEB-?DL'                  # WEB-DL, WEBDL
+    - '(?i)WEBRip'                   # WEBRip
+    - '(?i)HDRip'                    # HDRip
+    - '(?i)BDRip'                    # BDRip
+    - '(?i)x264'                     # x264
+    - '(?i)x265'                     # x265
+    - '(?i)H\.?264'                  # H.264, H264
+    - '(?i)H\.?265'                  # H.265, H265
+    - '(?i)HEVC'                     # HEVC
+    - '(?i)HDR'                      # HDR
+    - '(?i)DoVi'                     # Dolby Vision
+    - '(?i)DTS'                      # DTS
+    - '(?i)AAC'                      # AAC
+    - '(?i)AC3'                      # AC3
+    - '(?i)MAX\+?'                   # MAX, MAX+
+    - '(?i)IMAX'                     # IMAX
+    - '(?i)Atmos'                    # Atmos
+
 # 定时任务配置
 scheduler:
   enabled: false                     # 是否启用定时任务

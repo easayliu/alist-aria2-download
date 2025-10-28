@@ -3,6 +3,7 @@ package telegram
 import (
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
+	telegramInfra "github.com/easayliu/alist-aria2-download/internal/infrastructure/telegram"
 	"github.com/gin-gonic/gin"
 )
 
@@ -12,10 +13,8 @@ type TelegramHandler struct {
 	controller *TelegramController
 }
 
-// NewTelegramHandler creates a new Telegram handler (compatibility interface)
-// Maintains exact same function signature as the legacy version
-func NewTelegramHandler(cfg *config.Config, notificationService *services.NotificationService, fileService *services.FileService, schedulerService *services.SchedulerService) *TelegramHandler {
-	controller := NewTelegramController(cfg, notificationService, fileService, schedulerService)
+func NewTelegramHandler(cfg *config.Config, notificationService *services.NotificationService, fileService *services.FileService, schedulerService *services.SchedulerService, container *services.ServiceContainer, telegramClient *telegramInfra.Client) *TelegramHandler {
+	controller := NewTelegramController(cfg, notificationService, fileService, schedulerService, container, telegramClient)
 	return &TelegramHandler{
 		controller: controller,
 	}

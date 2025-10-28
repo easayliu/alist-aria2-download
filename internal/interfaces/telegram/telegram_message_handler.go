@@ -73,6 +73,8 @@ func (h *MessageHandler) HandleMessage(update *tgbotapi.Update) {
 		h.controller.downloadCommands.HandleDownload(chatID, command)
 	case strings.HasPrefix(command, "/list"):
 		h.controller.basicCommands.HandleList(chatID, command)
+	case strings.HasPrefix(command, "/rename"):
+		h.controller.basicCommands.HandleRename(chatID, command)
 	case strings.HasPrefix(command, "/cancel"):
 		h.controller.downloadCommands.HandleCancel(chatID, command)
 	case strings.HasPrefix(command, "/tasks"):
@@ -85,10 +87,6 @@ func (h *MessageHandler) HandleMessage(update *tgbotapi.Update) {
 		h.controller.taskCommands.HandleDeleteTask(chatID, msg.From.ID, command)
 	case strings.HasPrefix(command, "/runtask"):
 		h.controller.taskCommands.HandleRunTask(chatID, msg.From.ID, command)
-	case command == "昨日文件":
-		h.controller.downloadCommands.HandleYesterdayFiles(chatID)
-	case command == "下载昨日":
-		h.controller.downloadCommands.HandleYesterdayDownload(chatID)
 	default:
 		h.controller.messageUtils.SendMessage(chatID, "未知命令，发送 /help 查看可用命令")
 	}
