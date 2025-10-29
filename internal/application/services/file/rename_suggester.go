@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -223,7 +224,7 @@ func (rs *RenameSuggester) suggestMovieName(ctx context.Context, fullPath string
 		if err != nil {
 			logger.Warn("Failed to get movie details", "movieID", result.ID, "title", result.Title, "error", err)
 			newName := fmt.Sprintf("%s (%d)%s", result.Title, year, info.Extension)
-			newPath := rs.buildMoviePath(result.Title, year, newName)
+			newPath := rs.buildMoviePath(fullPath, result.Title, year, newName)
 
 			suggestions = append(suggestions, SuggestedName{
 				NewName:    newName,
@@ -243,7 +244,7 @@ func (rs *RenameSuggester) suggestMovieName(ctx context.Context, fullPath string
 		}
 
 		newName := fmt.Sprintf("%s (%d)%s", title, year, info.Extension)
-		newPath := rs.buildMoviePath(title, year, newName)
+		newPath := rs.buildMoviePath(fullPath, title, year, newName)
 
 		logger.Info("Generated movie rename suggestion",
 			"originalPath", fullPath,
@@ -418,6 +419,14 @@ func (rs *RenameSuggester) searchTVByQuery(ctx context.Context, fullPath string,
 func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName string, season int) {
 	parts := strings.Split(fullPath, "/")
 
+	var candidates []string
+	var seasonCandidates []struct {
+		name   string
+		season int
+	}
+
+	logger.Debug("Extracting TV info from path", "fullPath", fullPath, "parts", parts)
+
 	for i := len(parts) - 1; i >= 0; i-- {
 		part := parts[i]
 
@@ -447,6 +456,7 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 				nameBeforeSeason := strings.Split(part, "第")[0]
 				if strings.TrimSpace(nameBeforeSeason) != "" {
 					showName = strings.TrimSpace(nameBeforeSeason)
+					logger.Debug("Found season in Chinese format", "part", part, "showName", showName, "season", season)
 					return
 				}
 				continue
@@ -468,6 +478,7 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 			if match := seasonPattern.FindStringSubmatch(strings.ToLower(part)); len(match) > 1 {
 				if num, err := strconv.Atoi(match[1]); err == nil {
 					season = num
+					logger.Debug("Found season with SeasonPattern", "part", part, "season", season)
 				}
 			}
 		}
@@ -480,23 +491,85 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 		if match := seasonPattern.FindStringSubmatch(strings.ToLower(part)); len(match) > 1 {
 			if num, err := strconv.Atoi(match[1]); err == nil && season == 0 {
 				season = num
+				logger.Debug("Found season with SeasonStrictPattern", "part", part, "season", season)
 			}
 			continue
 		}
 
-		if showName == "" && !strutil.IsSeasonDirectory(part) && !strings.Contains(part, "全") && !rs.isQualityOrFormatDir(part) {
+		if !strutil.IsSeasonDirectory(part) && !strings.Contains(part, "全") && !rs.isQualityOrFormatDir(part) {
 			cleaned := strutil.CleanShowName(part)
 			if cleaned != "" && len(cleaned) > 1 {
-				showName = cleaned
+				seasonNum := rs.extractSeasonFromDirName(part)
+				if seasonNum > 0 {
+					seasonCandidates = append(seasonCandidates, struct {
+						name   string
+						season int
+					}{cleaned, seasonNum})
+					logger.Debug("Found season candidate", "part", part, "cleaned", cleaned, "season", seasonNum)
+				} else {
+					candidates = append(candidates, cleaned)
+					logger.Debug("Found show name candidate", "part", part, "cleaned", cleaned)
+				}
 			}
 		}
 	}
 
-	if season == 0 {
-		season = 1
+	if len(candidates) > 0 {
+		showName = candidates[len(candidates)-1]
+		logger.Debug("Selected show name from candidates", "showName", showName, "totalCandidates", len(candidates))
 	}
 
+	if len(seasonCandidates) > 0 && season == 0 {
+		bottomCandidate := seasonCandidates[0]
+		season = bottomCandidate.season
+		logger.Debug("Extracted season from directory",
+			"showName", showName,
+			"season", season,
+			"seasonDirName", bottomCandidate.name)
+	}
+
+	if season == 0 {
+		season = 1
+		logger.Debug("Defaulting to season 1", "showName", showName)
+	}
+
+	logger.Debug("Final extraction result", "showName", showName, "season", season)
 	return
+}
+
+func (rs *RenameSuggester) extractSeasonFromDirName(dirName string) int {
+	dirNameLower := strings.ToLower(dirName)
+
+	seasonPatterns := []struct {
+		regex *regexp.Regexp
+		group int
+	}{
+		{regexp.MustCompile(`(?i)^season[\s\-_]*(\d+)$`), 1},
+		{regexp.MustCompile(`(?i)^s(\d{1,2})$`), 1},
+		{regexp.MustCompile(`^(.+?)[\s\-_]*(\d{1,2})$`), 2},
+	}
+
+	for i, pattern := range seasonPatterns {
+		var match []string
+		if i < 2 {
+			match = pattern.regex.FindStringSubmatch(dirNameLower)
+		} else {
+			match = pattern.regex.FindStringSubmatch(dirName)
+		}
+
+		if len(match) > pattern.group {
+			seasonStr := match[pattern.group]
+			if num, err := strconv.Atoi(seasonStr); err == nil && num > 0 && num < 100 {
+				logger.Debug("Extracted season from directory name",
+					"dirName", dirName,
+					"pattern", i,
+					"season", num)
+				return num
+			}
+		}
+	}
+
+	return 0
 }
 
 func (rs *RenameSuggester) isQualityOrFormatDir(dir string) bool {
@@ -666,8 +739,8 @@ func (rs *RenameSuggester) getPartIndex(part string, totalEpisodes int) int {
 	}
 }
 
-func (rs *RenameSuggester) buildEmbyPath(_ string, seriesName string, year, season int, fileName string) string {
-	baseDir := "/data/tvs"
+func (rs *RenameSuggester) buildEmbyPath(originalPath string, seriesName string, year, season int, fileName string) string {
+	dir := filepath.Dir(originalPath)
 
 	var seriesDir string
 	if year > 0 {
@@ -678,11 +751,12 @@ func (rs *RenameSuggester) buildEmbyPath(_ string, seriesName string, year, seas
 
 	seasonDir := fmt.Sprintf("Season %02d", season)
 
-	return filepath.Join(baseDir, seriesDir, seasonDir, fileName)
+	parentDir := filepath.Dir(filepath.Dir(dir))
+	return filepath.Join(parentDir, seriesDir, seasonDir, fileName)
 }
 
-func (rs *RenameSuggester) buildMoviePath(movieTitle string, year int, fileName string) string {
-	baseDir := "/data/movies"
+func (rs *RenameSuggester) buildMoviePath(fullPath, movieTitle string, year int, fileName string) string {
+	parentDir := filepath.Dir(filepath.Dir(fullPath))
 
 	var movieDir string
 	if year > 0 {
@@ -691,7 +765,7 @@ func (rs *RenameSuggester) buildMoviePath(movieTitle string, year int, fileName 
 		movieDir = movieTitle
 	}
 
-	return filepath.Join(baseDir, movieDir, fileName)
+	return filepath.Join(parentDir, movieDir, fileName)
 }
 
 func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []string) (map[string][]SuggestedName, error) {
@@ -745,13 +819,39 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 
 		seasonMap := make(map[int][]string)
 		for _, path := range versionPaths {
+			_, pathSeason := rs.extractTVInfoFromPath(path)
 			info := rs.ParseFileName(path)
+
+			detectedSeason := pathSeason
+			seasonSource := "path"
 			if info.Season > 0 {
-				seasonMap[info.Season] = append(seasonMap[info.Season], path)
+				detectedSeason = info.Season
+				seasonSource = "filename"
+			}
+
+			logger.Info("Season detection detail",
+				"path", path,
+				"pathSeason", pathSeason,
+				"fileNameSeason", info.Season,
+				"finalSeason", detectedSeason,
+				"seasonSource", seasonSource,
+				"episode", info.Episode)
+
+			if detectedSeason > 0 {
+				seasonMap[detectedSeason] = append(seasonMap[detectedSeason], path)
 			} else {
 				seasonMap[1] = append(seasonMap[1], path)
 			}
 		}
+
+		logger.Info("Season distribution summary", "searchQuery", searchQuery, "seasonMap", func() string {
+			var parts []string
+			for s, paths := range seasonMap {
+				parts = append(parts, fmt.Sprintf("S%02d: %d files", s, len(paths)))
+			}
+			sort.Strings(parts)
+			return strings.Join(parts, ", ")
+		}())
 
 		versionResults, err := rs.batchSearchTVByQuery(ctx, searchQuery, seasonMap)
 		if err != nil {

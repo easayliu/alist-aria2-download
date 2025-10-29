@@ -93,8 +93,9 @@ type FileGetResponse struct {
 }
 
 type RenameRequest struct {
-	Path string `json:"path"`
-	Name string `json:"name"`
+	Path      string `json:"path"`
+	Name      string `json:"name"`
+	Overwrite bool   `json:"overwrite,omitempty"`
 }
 
 type RenameResponse struct {

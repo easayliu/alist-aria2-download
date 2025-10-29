@@ -344,8 +344,9 @@ func (c *Client) Rename(path, newName string) error {
 
 func (c *Client) RenameWithContext(ctx context.Context, path, newName string) error {
 	reqData := RenameRequest{
-		Path: path,
-		Name: newName,
+		Path:      path,
+		Name:      newName,
+		Overwrite: true,
 	}
 
 	var renameResp RenameResponse
