@@ -45,14 +45,24 @@ type TVResult struct {
 }
 
 type MovieDetails struct {
-	ID               int      `json:"id"`
-	Title            string   `json:"title"`
-	OriginalTitle    string   `json:"original_title"`
-	ReleaseDate      string   `json:"release_date"`
-	Runtime          int      `json:"runtime"`
-	Overview         string   `json:"overview"`
-	Genres           []Genre  `json:"genres"`
+	ID                  int                 `json:"id"`
+	Title               string              `json:"title"`
+	OriginalTitle       string              `json:"original_title"`
+	ReleaseDate         string              `json:"release_date"`
+	Runtime             int                 `json:"runtime"`
+	Overview            string              `json:"overview"`
+	Genres              []Genre             `json:"genres"`
 	ProductionCompanies []ProductionCompany `json:"production_companies"`
+	PosterPath          string              `json:"poster_path"`
+	BackdropPath        string              `json:"backdrop_path"`
+	VoteAverage         float64             `json:"vote_average"`
+	VoteCount           int                 `json:"vote_count"`
+	Popularity          float64             `json:"popularity"`
+	OriginalLanguage    string              `json:"original_language"`
+	Budget              int64               `json:"budget"`
+	Revenue             int64               `json:"revenue"`
+	Tagline             string              `json:"tagline"`
+	Adult               bool                `json:"adult"`
 }
 
 type TVDetails struct {

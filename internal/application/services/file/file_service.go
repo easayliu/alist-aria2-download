@@ -8,7 +8,6 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	pathservices "github.com/easayliu/alist-aria2-download/internal/application/services/path"
-	aiservices "github.com/easayliu/alist-aria2-download/internal/domain/services/ai"
 	mediaservices "github.com/easayliu/alist-aria2-download/internal/domain/services/media"
 	domainpathservices "github.com/easayliu/alist-aria2-download/internal/domain/services/path"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
@@ -32,7 +31,7 @@ type AppFileService struct {
 	mediaClassifier    *mediaservices.MediaClassificationService
 
 	tmdbClient         *tmdb.Client
-	renameSuggester    *aiservices.RenameSuggester
+	renameSuggester    *RenameSuggester
 }
 
 // NewAppFileService 创建应用文件服务
@@ -62,7 +61,7 @@ func NewAppFileService(cfg *config.Config, downloadService contracts.DownloadSer
 		if cfg.TMDB.QPS > 0 {
 			service.tmdbClient.SetQPS(cfg.TMDB.QPS)
 		}
-		service.renameSuggester = aiservices.NewRenameSuggester(service.tmdbClient, cfg.TMDB.QualityDirPatterns)
+		service.renameSuggester = NewRenameSuggester(service.tmdbClient, cfg.TMDB.QualityDirPatterns)
 		logger.Debug("TMDB Client and RenameSuggester initialized")
 	}
 

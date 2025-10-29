@@ -139,9 +139,20 @@ func (s *AppFileService) GetBatchRenameSuggestions(ctx context.Context, paths []
 
 	logger.Info("Getting batch rename suggestions", "fileCount", len(paths))
 
-	suggestionsMap, err := s.renameSuggester.BatchSuggestTVNames(ctx, paths)
+	firstPath := paths[0]
+	info := s.renameSuggester.ParseFileName(firstPath)
+
+	var suggestionsMap map[string][]SuggestedName
+	var err error
+
+	if info.MediaType == "movie" {
+		suggestionsMap, err = s.renameSuggester.BatchSuggestMovieNames(ctx, paths)
+	} else {
+		suggestionsMap, err = s.renameSuggester.BatchSuggestTVNames(ctx, paths)
+	}
+
 	if err != nil {
-		logger.Error("Failed to get batch rename suggestions", "error", err)
+		logger.Error("Failed to get batch rename suggestions", "mediaType", info.MediaType, "error", err)
 		return nil, fmt.Errorf("failed to get batch rename suggestions: %w", err)
 	}
 

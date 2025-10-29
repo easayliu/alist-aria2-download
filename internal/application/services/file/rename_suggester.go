@@ -1,4 +1,4 @@
-package ai
+package file
 
 import (
 	"context"
@@ -120,20 +120,56 @@ func (rs *RenameSuggester) ParseFileName(fullPath string) *MediaInfo {
 
 	cleanRegex := regexp.MustCompile(`[._\-\s]+`)
 	if info.Title == "" {
-		cleanedName := strings.TrimSuffix(nameWithoutExt, fmt.Sprintf(" (%d)", info.Year))
+		cleanedName := nameWithoutExt
 		cleanedName = seasonEpisodeRegex.ReplaceAllString(cleanedName, "")
-		info.Title = strings.TrimSpace(cleanRegex.ReplaceAllString(cleanedName, " "))
 
 		removePatterns := []string{
-			`\d{3,4}[pP]`, `BluRay`, `WEB-?DL`, `WEBRip`, `HDRip`, `x264`, `x265`, `H\.264`, `H\.265`,
-			`AAC`, `AC3`, `DTS`, `HEVC`, `10bit`, `8bit`, `HDR`, `DoVi`,
+			`\d{3,4}[pP]`,
+			`\d+fps`, `\d+帧`,
+			`UHD`, `FHD`, `4K`, `2K`, `HQ`,
+			`BluRay`, `Blu-?ray`, `WEB-?DL`, `WEBRip`, `HDRip`, `BDRip`, `DVDRip`, `BD\d*`,
+			`x264`, `x265`, `H\.?264`, `H\.?265`, `HEVC`, `AVC`, `X\.?264`, `X\.?265`,
+			`AAC[\d.]*`, `AC3`, `DTS-?[XMA]*[\d.]*`, `DD[P]?[\d.]*`, `Atmos`, `TrueHD[\d.]*`, `MA[\d.]*`,
+			`10bit`, `8bit`, `HDR\d*`, `DoVi`, `DV`,
+			`MultiAudio`, `Dual[\s-]?Audio`, `Multi`, `Mandarin`, `English`, `CHS`, `CHT`, `ENG`,
+			`&[A-Za-z]+`,
+			`-[A-Z][a-zA-Z0-9]+$`,
 		}
-		for _, pattern := range removePatterns {
-			re := regexp.MustCompile(`(?i)` + pattern)
-			info.Title = re.ReplaceAllString(info.Title, "")
+		hasChinese := regexp.MustCompile(`[\p{Han}]`).MatchString(cleanedName)
+
+		if hasChinese {
+			englishParts := regexp.MustCompile(`[A-Za-z0-9]+(?:[\s.][A-Za-z0-9]+)*`).FindAllString(cleanedName, -1)
+			var longestEnglish string
+			for _, part := range englishParts {
+				trimmed := strings.TrimSpace(part)
+				if len(trimmed) > len(longestEnglish) {
+					longestEnglish = trimmed
+				}
+			}
+			if len(longestEnglish) > 5 {
+				cleanedName = longestEnglish
+			}
 		}
 
-		info.Title = strings.TrimSpace(cleanRegex.ReplaceAllString(info.Title, " "))
+		for _, pattern := range removePatterns {
+			re := regexp.MustCompile(`(?i)` + pattern)
+			cleanedName = re.ReplaceAllString(cleanedName, " ")
+		}
+
+		cleanedName = regexp.MustCompile(`\s+bit\b`).ReplaceAllString(cleanedName, "")
+
+		if info.Year > 0 {
+			yearPatterns := []string{
+				fmt.Sprintf(`[\.\s_-]*\(?%d\)?[\.\s_-]*`, info.Year),
+				fmt.Sprintf(`[\.\s_-]+%d[\.\s_-]*`, info.Year),
+			}
+			for _, pattern := range yearPatterns {
+				re := regexp.MustCompile(pattern)
+				cleanedName = re.ReplaceAllString(cleanedName, " ")
+			}
+		}
+
+		info.Title = strings.TrimSpace(cleanRegex.ReplaceAllString(cleanedName, " "))
 	}
 
 	return info
@@ -183,23 +219,48 @@ func (rs *RenameSuggester) suggestMovieName(ctx context.Context, fullPath string
 			confidence += 0.2
 		}
 
-		newName := fmt.Sprintf("%s (%d)%s", result.Title, year, info.Extension)
-		newPath := rs.buildMoviePath(result.Title, year, newName)
+		details, err := rs.tmdbClient.GetMovieDetails(ctx, result.ID)
+		if err != nil {
+			logger.Warn("Failed to get movie details", "movieID", result.ID, "title", result.Title, "error", err)
+			newName := fmt.Sprintf("%s (%d)%s", result.Title, year, info.Extension)
+			newPath := rs.buildMoviePath(result.Title, year, newName)
+
+			suggestions = append(suggestions, SuggestedName{
+				NewName:    newName,
+				NewPath:    newPath,
+				MediaType:  tmdb.MediaTypeMovie,
+				TMDBID:     result.ID,
+				Title:      result.Title,
+				Year:       year,
+				Confidence: confidence,
+			})
+			continue
+		}
+
+		title := details.Title
+		if details.OriginalTitle != "" && details.OriginalLanguage != "en" {
+			title = details.OriginalTitle
+		}
+
+		newName := fmt.Sprintf("%s (%d)%s", title, year, info.Extension)
+		newPath := rs.buildMoviePath(title, year, newName)
 
 		logger.Info("Generated movie rename suggestion",
 			"originalPath", fullPath,
 			"newName", newName,
 			"newPath", newPath,
-			"tmdbID", result.ID,
-			"title", result.Title,
-			"year", year)
+			"tmdbID", details.ID,
+			"title", title,
+			"originalTitle", details.OriginalTitle,
+			"year", year,
+			"runtime", details.Runtime)
 
 		suggestions = append(suggestions, SuggestedName{
 			NewName:    newName,
 			NewPath:    newPath,
 			MediaType:  tmdb.MediaTypeMovie,
-			TMDBID:     result.ID,
-			Title:      result.Title,
+			TMDBID:     details.ID,
+			Title:      title,
 			Year:       year,
 			Confidence: confidence,
 		})
@@ -856,6 +917,37 @@ func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query strin
 		if successCount > 0 {
 			break
 		}
+	}
+
+	return result, nil
+}
+
+func (rs *RenameSuggester) BatchSuggestMovieNames(ctx context.Context, paths []string) (map[string][]SuggestedName, error) {
+	if len(paths) == 0 {
+		return make(map[string][]SuggestedName), nil
+	}
+
+	result := make(map[string][]SuggestedName)
+
+	for _, path := range paths {
+		info := rs.ParseFileName(path)
+
+		if info.MediaType != tmdb.MediaTypeMovie {
+			logger.Warn("Skipping non-movie file", "path", path, "detectedType", info.MediaType)
+			continue
+		}
+
+		suggestions, err := rs.suggestMovieName(ctx, path, info)
+		if err != nil {
+			logger.Warn("Failed to suggest movie name", "path", path, "title", info.Title, "error", err)
+			continue
+		}
+
+		result[path] = suggestions
+	}
+
+	if len(result) == 0 {
+		return nil, fmt.Errorf("未能为任何电影文件生成重命名建议")
 	}
 
 	return result, nil
