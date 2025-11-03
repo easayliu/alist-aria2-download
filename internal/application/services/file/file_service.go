@@ -22,21 +22,21 @@ import (
 
 // AppFileService 应用层文件服务 - 负责文件业务流程编排（重构为纯编排层）
 type AppFileService struct {
-	config             *config.Config
-	alistClient        *alist.Client
-	downloadService    contracts.DownloadService
-	llmService         contracts.LLMService  // LLM服务
+	config          *config.Config
+	alistClient     *alist.Client
+	downloadService contracts.DownloadService
+	llmService      contracts.LLMService // LLM服务
 
-	pathStrategy       *pathservices.PathStrategyService
-	pathCategory       *domainpathservices.PathCategoryService
-	pathGenerator      *pathservices.PathGenerationService
-	mediaClassifier    *mediaservices.MediaClassificationService
+	pathStrategy    *pathservices.PathStrategyService
+	pathCategory    *domainpathservices.PathCategoryService
+	pathGenerator   *pathservices.PathGenerationService
+	mediaClassifier *mediaservices.MediaClassificationService
 
-	tmdbClient         *tmdb.Client
-	renameSuggester    *RenameSuggester
+	tmdbClient      *tmdb.Client
+	renameSuggester *RenameSuggester
 
 	// LLM相关
-	llmSuggester        *filename.LLMSuggester // LLM文件名推断器
+	llmSuggester *filename.LLMSuggester // LLM文件名推断器
 }
 
 // NewAppFileService 创建应用文件服务
@@ -129,7 +129,7 @@ func (s *AppFileService) GetFileInfo(ctx context.Context, path string) (*contrac
 	for _, item := range listResp.Data.Content {
 		if item.Name == fileName {
 			fileResp := s.convertToFileResponse(item, parentDir)
-			
+
 			// 如果不是目录，获取实际的raw_url用于下载
 			if !item.IsDir {
 				logger.Debug("Getting real download URL", "file", fileName, "path", path)
@@ -138,7 +138,7 @@ func (s *AppFileService) GetFileInfo(ctx context.Context, path string) (*contrac
 				fileResp.ExternalURL = externalURL
 				logger.Debug("File response URLs updated", "internal", internalURL, "external", externalURL)
 			}
-			
+
 			return &fileResp, nil
 		}
 	}
@@ -161,22 +161,22 @@ func (s *AppFileService) GetStorageInfo(ctx context.Context, path string) (map[s
 	}
 
 	return map[string]interface{}{
-		"path":              path,
-		"total_files":       listResp.Summary.TotalFiles,
-		"total_directories": listResp.Summary.TotalDirs,
-		"total_size":        listResp.Summary.TotalSize,
+		"path":                 path,
+		"total_files":          listResp.Summary.TotalFiles,
+		"total_directories":    listResp.Summary.TotalDirs,
+		"total_size":           listResp.Summary.TotalSize,
 		"total_size_formatted": listResp.Summary.TotalSizeFormatted,
-		"video_files":       listResp.Summary.VideoFiles,
-		"movie_files":       listResp.Summary.MovieFiles,
-		"tv_files":          listResp.Summary.TVFiles,
-		"other_files":       listResp.Summary.OtherFiles,
+		"video_files":          listResp.Summary.VideoFiles,
+		"movie_files":          listResp.Summary.MovieFiles,
+		"tv_files":             listResp.Summary.TVFiles,
+		"other_files":          listResp.Summary.OtherFiles,
 	}, nil
 }
 
 // convertToFileResponse 转换AList文件对象到响应格式
 func (s *AppFileService) convertToFileResponse(item alist.FileItem, basePath string) contracts.FileResponse {
 	fullPath := pathutil.JoinPath(basePath, item.Name)
-	
+
 	// 解析修改时间
 	logger.Debug("Parsing time", "file", item.Name, "modifiedString", item.Modified)
 
@@ -187,7 +187,7 @@ func (s *AppFileService) convertToFileResponse(item alist.FileItem, basePath str
 	} else {
 		logger.Debug("Time parsed successfully", "file", item.Name, "parsedTime", modifiedTime.Format("2006-01-02 15:04:05 -07:00"), "unix", modifiedTime.Unix(), "location", modifiedTime.Location().String())
 	}
-	
+
 	resp := contracts.FileResponse{
 		Name:          item.Name,
 		Path:          fullPath,
@@ -208,8 +208,8 @@ func (s *AppFileService) convertToFileResponse(item alist.FileItem, basePath str
 
 		// 直接获取真实的raw_url用于下载（采用延迟加载方式避免性能问题）
 		// URL将在实际需要时通过getRealDownloadURLs方法获取
-		resp.InternalURL = ""  // 将在需要时填充
-		resp.ExternalURL = ""  // 将在需要时填充
+		resp.InternalURL = "" // 将在需要时填充
+		resp.ExternalURL = "" // 将在需要时填充
 	}
 
 	return resp
@@ -224,7 +224,7 @@ func (s *AppFileService) getRealDownloadURLs(filePath string) (internalURL, exte
 	if !hasToken || !isValid {
 		logger.Debug("Token invalid, will refresh on request", "hasToken", hasToken, "isValid", isValid)
 	}
-	
+
 	// 获取文件详细信息（包含raw_url）
 	fileInfo, err := s.alistClient.GetFileInfo(filePath)
 	if err != nil {
@@ -238,7 +238,7 @@ func (s *AppFileService) getRealDownloadURLs(filePath string) (internalURL, exte
 	// 使用旧实现的简单逻辑：直接获取raw_url并做域名替换
 	originalURL := fileInfo.Data.RawURL
 	logger.Debug("Got original raw URL", "raw_url", originalURL)
-	
+
 	// 如果raw_url为空，使用回退逻辑
 	if originalURL == "" {
 		logger.Error("Raw URL is empty, this should not happen", "path", filePath, "fileInfo", fileInfo.Data)
@@ -247,7 +247,7 @@ func (s *AppFileService) getRealDownloadURLs(filePath string) (internalURL, exte
 		logger.Debug("Using fallback URL", "internal", fallbackInternal, "external", fallbackExternal)
 		return fallbackInternal, fallbackExternal
 	}
-	
+
 	// 采用旧实现的简单替换逻辑：只在包含fcalist-public时替换
 	internalURL = originalURL
 	externalURL = originalURL
@@ -267,7 +267,7 @@ func (s *AppFileService) getRealDownloadURLs(filePath string) (internalURL, exte
 		"internal_url", internalURL,
 		"external_url", externalURL,
 		"url_replaced", strings.Contains(originalURL, "fcalist-public"))
-	
+
 	return internalURL, externalURL
 }
 

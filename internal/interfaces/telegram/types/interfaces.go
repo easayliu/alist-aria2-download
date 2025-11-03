@@ -14,12 +14,12 @@ type DownloadResult struct {
 
 // DownloadResultSummary download result summary
 type DownloadResultSummary struct {
-	DirectoryPath  string           `json:"directory_path"`
-	TotalFiles     int              `json:"total_files"`
-	VideoFiles     int              `json:"video_files"`
-	SuccessCount   int              `json:"success_count"`
-	FailureCount   int              `json:"failure_count"`
-	Results        []DownloadResult `json:"results"`
+	DirectoryPath string           `json:"directory_path"`
+	TotalFiles    int              `json:"total_files"`
+	VideoFiles    int              `json:"video_files"`
+	SuccessCount  int              `json:"success_count"`
+	FailureCount  int              `json:"failure_count"`
+	Results       []DownloadResult `json:"results"`
 }
 
 // MessageSender unified message sending interface
@@ -29,15 +29,15 @@ type MessageSender interface {
 	SendMessage(chatID int64, text string)
 	SendMessageHTML(chatID int64, text string)
 	SendMessageMarkdown(chatID int64, text string)
-	
+
 	// Message sending with keyboard
 	SendMessageWithKeyboard(chatID int64, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) int
 	SendMessageWithReplyKeyboard(chatID int64, text string)
-	
+
 	// Message editing
 	EditMessageWithKeyboard(chatID int64, messageID int, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) bool
 	ClearInlineKeyboard(chatID int64, messageID int)
-	
+
 	// Utility methods
 	EscapeHTML(text string) string
 	FormatFileSize(size int64) string

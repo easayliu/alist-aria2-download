@@ -283,4 +283,3 @@ func ResumeDownload(c *gin.Context) {
 		"message": "Download " + gid + " resumed successfully",
 	})
 }
-

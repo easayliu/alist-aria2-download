@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/shared/utils"
-	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 	pathutil "github.com/easayliu/alist-aria2-download/pkg/utils/path"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 )
 
 // MediaType 媒体类型
@@ -107,7 +107,7 @@ func (s *FileMediaService) determineMediaTypeAndPath(fullPath, fileName string) 
 					return MediaTypeTV, downloadPath
 				}
 			}
-			
+
 			// 提取剧集信息
 			showName, seasonInfo := s.extractTVShowInfo(fullPath)
 			if showName != "" && seasonInfo != "" {
@@ -163,7 +163,7 @@ func (s *FileMediaService) determineMediaTypeAndPath(fullPath, fileName string) 
 	// 默认其他类型
 	mediaType := MediaTypeOther
 	downloadPath := "/downloads"
-	
+
 	// 应用源路径到下载路径的映射
 	return mediaType, s.pathSvc.ApplyPathMapping(fullPath, downloadPath)
 }
@@ -347,7 +347,7 @@ func (s *FileMediaService) isYear(str string) bool {
 // extractTVShowInfo 提取电视剧信息
 func (s *FileMediaService) extractTVShowInfo(fullPath string) (showName, seasonInfo string) {
 	parts := strings.Split(fullPath, "/")
-	
+
 	// 首先检查文件名是否包含S##E##格式，如果有，优先使用
 	fileName := filepath.Base(fullPath)
 	if seasonFromFile := s.extractSeasonFromFileName(fileName); seasonFromFile != "" {
@@ -356,26 +356,26 @@ func (s *FileMediaService) extractTVShowInfo(fullPath string) (showName, seasonI
 
 	// 收集所有包含季度信息的部分，按距离文件的远近排序（近的优先）
 	var seasonParts []struct {
-		index      int
-		part       string
-		seasonNum  int
-		seasonStr  string
+		index     int
+		part      string
+		seasonNum int
+		seasonStr string
 	}
 
 	// 从后往前遍历，离文件越近的季度信息优先级越高
 	for i := len(parts) - 1; i >= 0; i-- {
 		part := parts[i]
-		
+
 		// 检查中文季度格式 "第 X 季"
 		if strings.Contains(part, "第") && strings.Contains(part, "季") {
 			if extractedSeason := s.extractSeasonFromChinese(part); extractedSeason != "" {
 				// 提取季度数字用于比较
 				seasonNum := s.parseSeasonNumber(extractedSeason)
 				seasonParts = append(seasonParts, struct {
-					index      int
-					part       string
-					seasonNum  int
-					seasonStr  string
+					index     int
+					part      string
+					seasonNum int
+					seasonStr string
 				}{i, part, seasonNum, extractedSeason})
 			}
 		}
@@ -385,10 +385,10 @@ func (s *FileMediaService) extractTVShowInfo(fullPath string) (showName, seasonI
 			if extractedSeason := s.extractSeasonNumber(part); extractedSeason != "" {
 				seasonNum := s.parseSeasonNumber(extractedSeason)
 				seasonParts = append(seasonParts, struct {
-					index      int
-					part       string
-					seasonNum  int
-					seasonStr  string
+					index     int
+					part      string
+					seasonNum int
+					seasonStr string
 				}{i, part, seasonNum, extractedSeason})
 			}
 		}
@@ -407,7 +407,7 @@ func (s *FileMediaService) extractTVShowInfo(fullPath string) (showName, seasonI
 				bestSeason = sp
 			}
 		}
-		
+
 		if seasonInfo == "" {
 			seasonInfo = bestSeason.seasonStr
 		}
@@ -460,40 +460,40 @@ func (s *FileMediaService) extractShowNameFromPath(parts []string, seasonIndex i
 		if pathutil.ShouldSkipDirectory(part) {
 			continue
 		}
-		
+
 		// 检查是否是版本/质量目录（通常不是剧名）
 		if s.filterSvc.IsVersionDirectory(part) {
 			continue
 		}
-		
+
 		// 提取候选剧名
 		cleanName := s.extractMainShowName(part)
 		if cleanName != "" {
 			candidateNames = append(candidateNames, cleanName)
 		}
 	}
-	
+
 	// 如果有多个候选剧名，选择最合适的
 	if len(candidateNames) > 0 {
 		// 优先选择不包含"全"、"合集"等集合标识的剧名
 		for _, name := range candidateNames {
-			if !strings.Contains(name, "全") && !strings.Contains(name, "合集") && 
-			   !strings.Contains(name, "1-") && !strings.Contains(name, "1~") {
+			if !strings.Contains(name, "全") && !strings.Contains(name, "合集") &&
+				!strings.Contains(name, "1-") && !strings.Contains(name, "1~") {
 				return name
 			}
 		}
-		
+
 		// 其次选择不包含季度信息的剧名
 		for _, name := range candidateNames {
 			if !strings.Contains(name, "第") || !strings.Contains(name, "季") {
 				return name
 			}
 		}
-		
+
 		// 最后返回第一个
 		return candidateNames[0]
 	}
-	
+
 	return ""
 }
 
@@ -520,12 +520,12 @@ func (s *FileMediaService) extractShowNameFromFullPath(fullPath string) string {
 
 // extractMainShowName 提取主要剧名（移除版本信息等）
 func (s *FileMediaService) extractMainShowName(name string) string {
-	// 移除常见的版本和格式信息  
+	// 移除常见的版本和格式信息
 	patterns := []string{
 		" 三季合集",
 		" 合集",
 		" 全1-3季",
-		" 全1~3季", 
+		" 全1~3季",
 		" 全集",
 		" 1080P",
 		" 1080p",
@@ -555,7 +555,7 @@ func (s *FileMediaService) extractMainShowName(name string) string {
 		cleanName = seasonSuffixRegex.ReplaceAllString(cleanName, "")
 		cleanName = strings.TrimSpace(cleanName)
 	}
-	
+
 	// 处理括号内的年份等信息（如"毛骗 第二季 (2011)"）
 	if idx := strings.Index(cleanName, "("); idx > 0 {
 		cleanName = strings.TrimSpace(cleanName[:idx])
@@ -576,18 +576,18 @@ func (s *FileMediaService) extractMainShowName(name string) string {
 func (s *FileMediaService) standardizeShowName(name string) string {
 	// 标准化常见节目名称
 	showNameMap := map[string]string{
-		"大侦探": "明星大侦探",
+		"大侦探":   "明星大侦探",
 		"明Xd侦探": "明星大侦探",
 		"明星大侦探": "明星大侦探",
 	}
-	
+
 	// 检查是否需要标准化
 	for variant, standard := range showNameMap {
 		if strings.Contains(name, variant) {
 			return standard
 		}
 	}
-	
+
 	return name
 }
 
@@ -632,12 +632,12 @@ func (s *FileMediaService) extractSeasonNumber(part string) string {
 // extractTVShowWithVersion 从路径提取剧名和版本/质量路径
 func (s *FileMediaService) extractTVShowWithVersion(fullPath string) (showName, versionPath string) {
 	parts := strings.Split(fullPath, "/")
-	
+
 	// 查找包含版本/质量信息的目录（通常是文件的直接父目录）
 	if len(parts) >= 2 {
 		// 获取文件的直接父目录
 		parentDir := parts[len(parts)-2]
-		
+
 		// 检查是否是版本/质量目录（包含[]或特定关键词）
 		if s.filterSvc.IsVersionDirectory(parentDir) {
 			// 对于混合季度和质量信息的目录，提取季度信息作为版本路径
@@ -650,12 +650,12 @@ func (s *FileMediaService) extractTVShowWithVersion(fullPath string) (showName, 
 				}
 			} else {
 				// 纯质量目录（如 "4K[DV][60帧][高码率]"）才保留完整路径
-				if strings.Contains(parentDir, "[") || 
-				   (!strings.Contains(parentDir, "第") && !strings.Contains(parentDir, "季")) {
+				if strings.Contains(parentDir, "[") ||
+					(!strings.Contains(parentDir, "第") && !strings.Contains(parentDir, "季")) {
 					versionPath = parentDir
 				}
 			}
-			
+
 			// 继续向上查找剧名
 			if len(parts) >= 3 {
 				// 获取上上级目录，可能是剧名
@@ -668,7 +668,7 @@ func (s *FileMediaService) extractTVShowWithVersion(fullPath string) (showName, 
 			}
 		}
 	}
-	
+
 	// 如果没找到版本目录，使用标准提取逻辑
 	showName = s.extractShowNameFromFullPath(fullPath)
 	return showName, ""
@@ -678,26 +678,26 @@ func (s *FileMediaService) extractTVShowWithVersion(fullPath string) (showName, 
 func (s *FileMediaService) extractCleanShowName(name string) string {
 	// 移除常见的版本后缀
 	cleanName := name
-	
+
 	// 移除版本标识
 	versionSuffixes := []string{
 		"4K收藏版", "4K版", "高清版", "蓝光版",
 		"完整版", "未删减版", "导演剪辑版",
 		"收藏版", "珍藏版", "典藏版",
 	}
-	
+
 	for _, suffix := range versionSuffixes {
 		if strings.HasSuffix(cleanName, suffix) {
 			cleanName = strings.TrimSuffix(cleanName, suffix)
 			break
 		}
 	}
-	
+
 	// 如果名称太短，返回原始名称
 	if len(cleanName) < 2 {
 		cleanName = name
 	}
-	
+
 	return s.pathSvc.CleanFolderName(cleanName)
 }
 

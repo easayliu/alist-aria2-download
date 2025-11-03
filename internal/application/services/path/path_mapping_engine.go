@@ -16,20 +16,20 @@ import (
 
 // PathMappingEngine 路径映射规则引擎 - 支持复杂的路径转换规则
 type PathMappingEngine struct {
-	config   *config.Config
-	rules    []*PathMappingRule
-	renderer *utils.TemplateRenderer
+	config    *config.Config
+	rules     []*PathMappingRule
+	renderer  *utils.TemplateRenderer
 	extractor *utils.VariableExtractor
 }
 
 // PathMappingRule 路径映射规则
 type PathMappingRule struct {
-	ID          string           // 规则ID
-	Name        string           // 规则名称
-	Enabled     bool             // 是否启用
-	Priority    int              // 优先级（数字越大优先级越高）
-	SourceMatch SourceMatchRule  // 源匹配规则
-	Transform   TransformRule    // 转换规则
+	ID          string          // 规则ID
+	Name        string          // 规则名称
+	Enabled     bool            // 是否启用
+	Priority    int             // 优先级（数字越大优先级越高）
+	SourceMatch SourceMatchRule // 源匹配规则
+	Transform   TransformRule   // 转换规则
 }
 
 // SourceMatchRule 源匹配规则

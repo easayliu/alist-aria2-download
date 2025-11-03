@@ -62,12 +62,12 @@ type WebhookConfig struct {
 }
 
 type DownloadConfig struct {
-	VideoOnly   bool           `mapstructure:"video_only"`
-	VideoExts   []string       `mapstructure:"video_extensions"`
-	ExcludeExts []string       `mapstructure:"exclude_extensions"`
-	MinFileSize int64          `mapstructure:"min_file_size_mb"`
-	MaxFileSize int64          `mapstructure:"max_file_size_mb"`
-	PathConfig  PathConfig     `mapstructure:"path_config"` // 路径配置
+	VideoOnly   bool       `mapstructure:"video_only"`
+	VideoExts   []string   `mapstructure:"video_extensions"`
+	ExcludeExts []string   `mapstructure:"exclude_extensions"`
+	MinFileSize int64      `mapstructure:"min_file_size_mb"`
+	MaxFileSize int64      `mapstructure:"max_file_size_mb"`
+	PathConfig  PathConfig `mapstructure:"path_config"` // 路径配置
 }
 
 // PathConfig 路径配置
@@ -99,33 +99,33 @@ type ScheduledTask struct {
 }
 
 type TMDBConfig struct {
-	APIKey                string   `mapstructure:"api_key"`
-	Language              string   `mapstructure:"language"`
-	QPS                   int      `mapstructure:"qps"`
-	BatchRenameLimit      int      `mapstructure:"batch_rename_limit"`
-	QualityDirPatterns    []string `mapstructure:"quality_dir_patterns"`
+	APIKey             string   `mapstructure:"api_key"`
+	Language           string   `mapstructure:"language"`
+	QPS                int      `mapstructure:"qps"`
+	BatchRenameLimit   int      `mapstructure:"batch_rename_limit"`
+	QualityDirPatterns []string `mapstructure:"quality_dir_patterns"`
 }
 
 // LLMConfig LLM配置
 type LLMConfig struct {
-	Enabled   bool              `mapstructure:"enabled"`    // 是否启用LLM功能
-	Provider  string            `mapstructure:"provider"`   // 提供商: openai, anthropic, ollama, custom
-	OpenAI    OpenAIConfig      `mapstructure:"openai"`     // OpenAI配置
-	Anthropic AnthropicConfig   `mapstructure:"anthropic"`  // Anthropic配置(预留)
-	Ollama    OllamaConfig      `mapstructure:"ollama"`     // Ollama配置(预留)
-	Features  LLMFeatures       `mapstructure:"features"`   // 功能开关
-	Batch     LLMBatchConfig    `mapstructure:"batch"`      // 批处理配置
+	Enabled   bool            `mapstructure:"enabled"`   // 是否启用LLM功能
+	Provider  string          `mapstructure:"provider"`  // 提供商: openai, anthropic, ollama, custom
+	OpenAI    OpenAIConfig    `mapstructure:"openai"`    // OpenAI配置
+	Anthropic AnthropicConfig `mapstructure:"anthropic"` // Anthropic配置(预留)
+	Ollama    OllamaConfig    `mapstructure:"ollama"`    // Ollama配置(预留)
+	Features  LLMFeatures     `mapstructure:"features"`  // 功能开关
+	Batch     LLMBatchConfig  `mapstructure:"batch"`     // 批处理配置
 }
 
 // OpenAIConfig OpenAI配置
 type OpenAIConfig struct {
-	APIKey      string  `mapstructure:"api_key"`      // API密钥
-	BaseURL     string  `mapstructure:"base_url"`     // API基础URL,支持第三方API
-	Model       string  `mapstructure:"model"`        // 模型名称
-	Temperature float32 `mapstructure:"temperature"`  // 温度参数
-	MaxTokens   int     `mapstructure:"max_tokens"`   // 最大Token数
-	Timeout     int     `mapstructure:"timeout"`      // 超时时间(秒)
-	QPS         int     `mapstructure:"qps"`          // 每秒请求数限制
+	APIKey      string  `mapstructure:"api_key"`     // API密钥
+	BaseURL     string  `mapstructure:"base_url"`    // API基础URL,支持第三方API
+	Model       string  `mapstructure:"model"`       // 模型名称
+	Temperature float32 `mapstructure:"temperature"` // 温度参数
+	MaxTokens   int     `mapstructure:"max_tokens"`  // 最大Token数
+	Timeout     int     `mapstructure:"timeout"`     // 超时时间(秒)
+	QPS         int     `mapstructure:"qps"`         // 每秒请求数限制
 }
 
 // AnthropicConfig Anthropic配置(预留)

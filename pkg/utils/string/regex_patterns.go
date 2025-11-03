@@ -6,15 +6,15 @@ import "regexp"
 
 var (
 	// Season 相关模式
-	SeasonPattern        = regexp.MustCompile(`[sS](\d{1,2})`)                      // S01, S1, s01
-	SeasonPatternCI      = regexp.MustCompile(`(?i)(^|[/\s])s(\d{1,2})($|[/\s])`)  // 不区分大小写
-	SeasonEnglishPattern = regexp.MustCompile(`(?i)season[\s_-]?(\d+)`)            // Season 1, season1
-	SeasonStrictPattern  = regexp.MustCompile(`^(?:s|season\s*)(\d{1,2})$`)        // 严格匹配
-	ChineseSeasonPattern = regexp.MustCompile(`第([零一二三四五六七八九十百\d]+)季`)       // 第1季, 第一季
+	SeasonPattern        = regexp.MustCompile(`[sS](\d{1,2})`)                    // S01, S1, s01
+	SeasonPatternCI      = regexp.MustCompile(`(?i)(^|[/\s])s(\d{1,2})($|[/\s])`) // 不区分大小写
+	SeasonEnglishPattern = regexp.MustCompile(`(?i)season[\s_-]?(\d+)`)           // Season 1, season1
+	SeasonStrictPattern  = regexp.MustCompile(`^(?:s|season\s*)(\d{1,2})$`)       // 严格匹配
+	ChineseSeasonPattern = regexp.MustCompile(`第([零一二三四五六七八九十百\d]+)季`)            // 第1季, 第一季
 
 	// Episode 相关模式
-	EpisodePattern        = regexp.MustCompile(`[eE](\d{1,3})`)                 // E01, E1
-	EpisodeEPPattern      = regexp.MustCompile(`(?i)ep[\s_-]?(\d{1,3})`)       // EP01, ep1
+	EpisodePattern        = regexp.MustCompile(`[eE](\d{1,3})`)          // E01, E1
+	EpisodeEPPattern      = regexp.MustCompile(`(?i)ep[\s_-]?(\d{1,3})`) // EP01, ep1
 	EpisodePatternCI      = regexp.MustCompile(`(?i)(^|[^A-Za-z])(E|EP)(\d{1,3})($|[^0-9])`)
 	ChineseEpisodePattern = regexp.MustCompile(`第([零一二三四五六七八九十百\d]+)集`) // 第1集, 第一集
 

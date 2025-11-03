@@ -14,8 +14,8 @@ import (
 
 // Client OpenAI API客户端
 type Client struct {
-	config      *Config               // 配置
-	httpClient  *http.Client          // HTTP客户端
+	config      *Config                // 配置
+	httpClient  *http.Client           // HTTP客户端
 	rateLimiter *ratelimit.RateLimiter // 速率限制器
 }
 

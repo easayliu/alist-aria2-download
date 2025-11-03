@@ -9,8 +9,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/easayliu/alist-aria2-download/internal/domain/models/rename"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/tmdb"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
+	"github.com/easayliu/alist-aria2-download/pkg/utils/media"
 	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 )
 
@@ -37,18 +39,6 @@ type MediaInfo struct {
 	Extension    string
 	AirDate      string
 	Version      string
-}
-
-type SuggestedName struct {
-	NewName      string
-	NewPath      string
-	MediaType    tmdb.MediaType
-	TMDBID       int
-	Title        string
-	Year         int
-	Season       int
-	Episode      int
-	Confidence   float64
 }
 
 func (rs *RenameSuggester) ParseFileName(fullPath string) *MediaInfo {
@@ -176,7 +166,7 @@ func (rs *RenameSuggester) ParseFileName(fullPath string) *MediaInfo {
 	return info
 }
 
-func (rs *RenameSuggester) SearchAndSuggest(ctx context.Context, fullPath string) ([]SuggestedName, error) {
+func (rs *RenameSuggester) SearchAndSuggest(ctx context.Context, fullPath string) ([]rename.Suggestion, error) {
 	info := rs.ParseFileName(fullPath)
 
 	// 对于TV剧集,优先从路径中提取剧集名和季度
@@ -220,7 +210,7 @@ func (rs *RenameSuggester) SearchAndSuggest(ctx context.Context, fullPath string
 	return rs.suggestMovieName(ctx, fullPath, info)
 }
 
-func (rs *RenameSuggester) suggestMovieName(ctx context.Context, fullPath string, info *MediaInfo) ([]SuggestedName, error) {
+func (rs *RenameSuggester) suggestMovieName(ctx context.Context, fullPath string, info *MediaInfo) ([]rename.Suggestion, error) {
 	resp, err := rs.tmdbClient.SearchMovie(ctx, info.Title, info.Year)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search movie: %w", err)
@@ -230,7 +220,7 @@ func (rs *RenameSuggester) suggestMovieName(ctx context.Context, fullPath string
 		return nil, fmt.Errorf("TMDB数据库中未找到电影 '%s'，可能是因为：\n1. 电影名称不准确\n2. TMDB未收录该影片\n3. 需要使用英文名称搜索", info.Title)
 	}
 
-	suggestions := make([]SuggestedName, 0, len(resp.Results))
+	suggestions := make([]rename.Suggestion, 0, len(resp.Results))
 	for i, result := range resp.Results {
 		year := 0
 		if result.ReleaseDate != "" {
@@ -250,14 +240,15 @@ func (rs *RenameSuggester) suggestMovieName(ctx context.Context, fullPath string
 			newName := fmt.Sprintf("%s (%d)%s", result.Title, year, info.Extension)
 			newPath := rs.buildMoviePath(fullPath, result.Title, year, newName)
 
-			suggestions = append(suggestions, SuggestedName{
+			suggestions = append(suggestions, rename.Suggestion{
 				NewName:    newName,
 				NewPath:    newPath,
-				MediaType:  tmdb.MediaTypeMovie,
+				MediaType:  rename.FromTMDBMediaType(tmdb.MediaTypeMovie),
 				TMDBID:     result.ID,
 				Title:      result.Title,
 				Year:       year,
 				Confidence: confidence,
+				Source:     rename.SourceTMDB,
 			})
 			continue
 		}
@@ -280,21 +271,23 @@ func (rs *RenameSuggester) suggestMovieName(ctx context.Context, fullPath string
 			"year", year,
 			"runtime", details.Runtime)
 
-		suggestions = append(suggestions, SuggestedName{
+		sug := rename.Suggestion{
 			NewName:    newName,
 			NewPath:    newPath,
-			MediaType:  tmdb.MediaTypeMovie,
+			MediaType:  rename.FromTMDBMediaType(tmdb.MediaTypeMovie),
 			TMDBID:     details.ID,
 			Title:      title,
 			Year:       year,
 			Confidence: confidence,
-		})
+			Source:     rename.SourceTMDB,
+		}
+		suggestions = append(suggestions, sug)
 	}
 
 	return suggestions, nil
 }
 
-func (rs *RenameSuggester) suggestTVName(ctx context.Context, fullPath string, info *MediaInfo) ([]SuggestedName, error) {
+func (rs *RenameSuggester) suggestTVName(ctx context.Context, fullPath string, info *MediaInfo) ([]rename.Suggestion, error) {
 	searchQuery := info.Title
 	if info.Version != "" {
 		searchQuery = fmt.Sprintf("%s %s", info.Title, info.Version)
@@ -304,7 +297,7 @@ func (rs *RenameSuggester) suggestTVName(ctx context.Context, fullPath string, i
 	return rs.searchTVByQuery(ctx, fullPath, info, searchQuery, info.Version != "")
 }
 
-func (rs *RenameSuggester) searchTVByQuery(ctx context.Context, fullPath string, info *MediaInfo, query string, isVersionSearch bool) ([]SuggestedName, error) {
+func (rs *RenameSuggester) searchTVByQuery(ctx context.Context, fullPath string, info *MediaInfo, query string, isVersionSearch bool) ([]rename.Suggestion, error) {
 	logger.Info("Searching TMDB TV series", "query", query, "year", info.Year, "season", info.Season)
 
 	resp, err := rs.tmdbClient.SearchTV(ctx, query, info.Year)
@@ -319,7 +312,7 @@ func (rs *RenameSuggester) searchTVByQuery(ctx context.Context, fullPath string,
 		return nil, fmt.Errorf("TMDB数据库中未找到剧集 '%s' (Season %d)，可能原因：\n1. 剧集名称提取不准确\n2. TMDB未收录该节目（如部分综艺、国产剧）\n3. 需要使用英文或原始名称\n\n建议：使用/rename命令时手动指定完整文件名", query, info.Season)
 	}
 
-	suggestions := make([]SuggestedName, 0, len(resp.Results))
+	suggestions := make([]rename.Suggestion, 0, len(resp.Results))
 	for i, result := range resp.Results {
 		year := 0
 		if result.FirstAirDate != "" {
@@ -420,17 +413,19 @@ func (rs *RenameSuggester) searchTVByQuery(ctx context.Context, fullPath string,
 			"season", info.Season,
 			"episode", matchedEpisode)
 
-		suggestions = append(suggestions, SuggestedName{
+		sug := rename.Suggestion{
 			NewName:    newName,
 			NewPath:    newPath,
-			MediaType:  tmdb.MediaTypeTV,
+			MediaType:  rename.FromTMDBMediaType(tmdb.MediaTypeTV),
 			TMDBID:     result.ID,
 			Title:      displayName,
 			Year:       year,
-			Season:     info.Season,
-			Episode:    matchedEpisode,
 			Confidence: confidence,
-		})
+			Source:     rename.SourceTMDB,
+		}
+		sug.SetSeason(info.Season)
+		sug.SetEpisode(matchedEpisode)
+		suggestions = append(suggestions, sug)
 	}
 
 	if len(suggestions) == 0 {
@@ -675,7 +670,8 @@ func (rs *RenameSuggester) extractNumericEpisode(fileName string) int {
 }
 
 func (rs *RenameSuggester) extractEpisodeAndPart(fileName string) (int, string) {
-	if rs.isSpecialContent(fileName) {
+	if media.IsSpecialContent(fileName) {
+		logger.Info("Special content detected, skipping match", "fileName", fileName)
 		return 0, ""
 	}
 
@@ -748,23 +744,6 @@ func (rs *RenameSuggester) extractPart(fileName string) string {
 	return ""
 }
 
-func (rs *RenameSuggester) isSpecialContent(fileName string) bool {
-	specialKeywords := []string{
-		"加更", "花絮", "预告", "片花", "彩蛋", "幕后", "特辑",
-		"番外", "访谈", "采访", "回顾", "精彩", "集锦", "合集",
-		"trailer", "preview", "bonus", "extra", "special", "behind",
-	}
-
-	lowerFileName := strings.ToLower(fileName)
-	for _, keyword := range specialKeywords {
-		if strings.Contains(lowerFileName, keyword) {
-			logger.Info("Special content detected, skipping match", "fileName", fileName, "keyword", keyword)
-			return true
-		}
-	}
-	return false
-}
-
 func (rs *RenameSuggester) extractVersion(fileName string) string {
 	versionPatterns := []string{
 		"沉浸版", "加长版", "未删减版", "导演剪辑版", "特别版",
@@ -833,9 +812,9 @@ func (rs *RenameSuggester) buildMoviePath(fullPath, movieTitle string, year int,
 	return filepath.Join(dir, fileName)
 }
 
-func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []string) (map[string][]SuggestedName, error) {
+func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []string) (map[string][]rename.Suggestion, error) {
 	if len(paths) == 0 {
-		return make(map[string][]SuggestedName), nil
+		return make(map[string][]rename.Suggestion), nil
 	}
 
 	firstTVPath := ""
@@ -871,7 +850,7 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 		pathsByVersion[version] = append(pathsByVersion[version], path)
 	}
 
-	result := make(map[string][]SuggestedName)
+	result := make(map[string][]rename.Suggestion)
 
 	for version, versionPaths := range pathsByVersion {
 		searchQuery := showName
@@ -936,7 +915,7 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 	return result, nil
 }
 
-func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query string, seasonMap map[int][]string) (map[string][]SuggestedName, error) {
+func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query string, seasonMap map[int][]string) (map[string][]rename.Suggestion, error) {
 	totalFiles := 0
 	for _, paths := range seasonMap {
 		totalFiles += len(paths)
@@ -968,7 +947,7 @@ func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query strin
 		}
 	}
 
-	result := make(map[string][]SuggestedName)
+	result := make(map[string][]rename.Suggestion)
 
 	for _, tvResult := range resp.Results {
 		year := 0
@@ -1063,17 +1042,19 @@ func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query strin
 						"season", season,
 						"episode", matchedEpisode)
 
-					result[path] = append(result[path], SuggestedName{
+					sug := rename.Suggestion{
 						NewName:    newName,
 						NewPath:    newPath,
-						MediaType:  tmdb.MediaTypeTV,
+						MediaType:  rename.FromTMDBMediaType(tmdb.MediaTypeTV),
 						TMDBID:     tvResult.ID,
 						Title:      displayName,
 						Year:       year,
-						Season:     season,
-						Episode:    matchedEpisode,
 						Confidence: 1.0,
-					})
+						Source:     rename.SourceTMDB,
+					}
+					sug.SetSeason(season)
+					sug.SetEpisode(matchedEpisode)
+					result[path] = append(result[path], sug)
 					successCount++
 				}
 			}
@@ -1087,12 +1068,12 @@ func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query strin
 	return result, nil
 }
 
-func (rs *RenameSuggester) BatchSuggestMovieNames(ctx context.Context, paths []string) (map[string][]SuggestedName, error) {
+func (rs *RenameSuggester) BatchSuggestMovieNames(ctx context.Context, paths []string) (map[string][]rename.Suggestion, error) {
 	if len(paths) == 0 {
-		return make(map[string][]SuggestedName), nil
+		return make(map[string][]rename.Suggestion), nil
 	}
 
-	result := make(map[string][]SuggestedName)
+	result := make(map[string][]rename.Suggestion)
 
 	for _, path := range paths {
 		info := rs.ParseFileName(path)

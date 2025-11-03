@@ -336,10 +336,10 @@ func (s *SchedulerService) executeTask(task *entities.ScheduledTask) {
 				TotalSize:  downloadedSize,
 				Duration:   time.Since(executionStart),
 				Extra: map[string]interface{}{
-					"path":            task.Path,
-					"hours_ago":       task.HoursAgo,
+					"path":             task.Path,
+					"hours_ago":        task.HoursAgo,
 					"downloaded_files": downloadedFiles,
-					"total_files":     len(files),
+					"total_files":      len(files),
 				},
 			}
 			s.notificationSvc.NotifyTaskComplete(ctx, completeReq)

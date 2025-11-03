@@ -6,11 +6,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
@@ -291,7 +291,7 @@ func (bc *BasicCommands) HandleAlistLogin(chatID int64) {
 
 	// Get token status
 	hasToken, isValid, expiryTime := alistClient.GetTokenStatus()
-	message := fmt.Sprintf("Alist连接成功！\n有效Token: %v\nToken有效: %v\n过期时间: %s", 
+	message := fmt.Sprintf("Alist连接成功！\n有效Token: %v\nToken有效: %v\n过期时间: %s",
 		hasToken, isValid, expiryTime.Format("2006-01-02 15:04:05"))
 	bc.messageUtils.SendMessage(chatID, message)
 }

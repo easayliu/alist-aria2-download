@@ -76,12 +76,13 @@ func (f *Factory) CreateDefaultProvider() (Provider, error) {
 //   - error: 错误信息
 //
 // 使用示例:
-//   factory := NewFactory(config)
-//   client, err := factory.CreateClient()
-//   if err != nil {
-//       log.Fatal(err)
-//   }
-//   text, err := client.Generate(ctx, "你好")
+//
+//	factory := NewFactory(config)
+//	client, err := factory.CreateClient()
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	text, err := client.Generate(ctx, "你好")
 func (f *Factory) CreateClient() (*Client, error) {
 	provider, err := f.CreateDefaultProvider()
 	if err != nil {

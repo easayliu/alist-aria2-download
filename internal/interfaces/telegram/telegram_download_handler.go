@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	"github.com/easayliu/alist-aria2-download/pkg/utils/time"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -42,7 +42,7 @@ type TimeParseResult struct {
 // DownloadHandler handles download-related functions
 type DownloadHandler struct {
 	controller *TelegramController
-	
+
 	// Manual download context management
 	manualMutex    sync.Mutex
 	manualContexts map[string]*ManualDownloadContext
@@ -159,7 +159,7 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 		EndTime:   timeResult.EndTime,
 		VideoOnly: true,
 	}
-	
+
 	ctx := context.Background()
 	timeRangeResp, err := h.controller.fileService.GetFilesByTimeRange(ctx, timeRangeReq)
 	if err != nil {
@@ -167,7 +167,7 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("处理", err))
 		return
 	}
-	
+
 	files := timeRangeResp.Files
 
 	if len(files) == 0 {
@@ -187,7 +187,7 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 	summary := timeRangeResp.Summary
 	totalFiles := summary.TotalFiles
 	totalSizeStr := summary.TotalSizeFormatted
-	
+
 	// 重新构建媒体统计结构以保持兼容性
 	mediaStats := struct {
 		TV    int
@@ -279,9 +279,9 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 		// 创建下载任务 - 使用contracts接口
 		for _, file := range files {
 			downloadReq := contracts.DownloadRequest{
-				URL:         file.InternalURL,
-				Filename:    file.Name,
-				Directory:   file.DownloadPath,
+				URL:          file.InternalURL,
+				Filename:     file.Name,
+				Directory:    file.DownloadPath,
 				AutoClassify: true,
 			}
 
@@ -416,7 +416,7 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 		EndTime:   endTime,
 		VideoOnly: req.VideoOnly,
 	}
-	
+
 	requestCtx := context.Background()
 	timeRangeResp, err := h.controller.fileService.GetFilesByTimeRange(requestCtx, timeRangeReq)
 	if err != nil {
@@ -424,7 +424,7 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("创建下载任务", err))
 		return
 	}
-	
+
 	files := timeRangeResp.Files
 
 	if len(files) == 0 {
@@ -438,7 +438,7 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 	summary := timeRangeResp.Summary
 	totalFiles := summary.TotalFiles
 	totalSizeStr := summary.TotalSizeFormatted
-	
+
 	// 重新构建媒体统计结构以保持兼容性
 	mediaStats := struct {
 		TV    int
@@ -457,12 +457,12 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 
 	for _, file := range files {
 		downloadReq := contracts.DownloadRequest{
-			URL:         file.InternalURL,
-			Filename:    file.Name,
-			Directory:   file.DownloadPath,
+			URL:          file.InternalURL,
+			Filename:     file.Name,
+			Directory:    file.DownloadPath,
 			AutoClassify: true,
 		}
-		
+
 		_, err := h.controller.downloadService.CreateDownload(requestCtx, downloadReq)
 		if err != nil {
 			failCount++
@@ -505,7 +505,6 @@ func (h *DownloadHandler) HandleManualCancel(chatID int64, token string, message
 // ================================
 // 下载管理功能
 // ================================
-
 
 // ================================
 // 辅助函数

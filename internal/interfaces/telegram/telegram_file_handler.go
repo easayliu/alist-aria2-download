@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -370,9 +370,9 @@ func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
 
 	// Create download task - using contracts interface
 	downloadReq := contracts.DownloadRequest{
-		URL:         targetFileInfo.InternalURL,
-		Filename:    targetFileInfo.Name,
-		Directory:   targetFileInfo.DownloadPath,
+		URL:          targetFileInfo.InternalURL,
+		Filename:     targetFileInfo.Name,
+		Directory:    targetFileInfo.DownloadPath,
 		AutoClassify: true,
 	}
 
@@ -620,10 +620,10 @@ func (h *FileHandler) handleDownloadDirectoryByPath(chatID int64, dirPath string
 	req := contracts.DirectoryDownloadRequest{
 		DirectoryPath: dirPath,
 		Recursive:     true,
-		VideoOnly:     true,  // Only download video files
+		VideoOnly:     true, // Only download video files
 		AutoClassify:  true,
 	}
-	
+
 	result, err := h.controller.fileService.DownloadDirectory(ctx, req)
 	if err != nil {
 		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("处理", err))
@@ -752,7 +752,7 @@ func (h *FileHandler) listFilesSimple(path string, page, perPage int) ([]contrac
 		Page:     page,
 		PageSize: perPage,
 	}
-	
+
 	ctx := context.Background()
 	resp, err := h.controller.fileService.ListFiles(ctx, req)
 	if err != nil {
@@ -763,7 +763,7 @@ func (h *FileHandler) listFilesSimple(path string, page, perPage int) ([]contrac
 	var allItems []contracts.FileResponse
 	allItems = append(allItems, resp.Directories...)
 	allItems = append(allItems, resp.Files...)
-	
+
 	return allItems, nil
 }
 
@@ -774,13 +774,13 @@ func (h *FileHandler) getFilesFromPath(basePath string, recursive bool) ([]contr
 		Recursive: recursive,
 		PageSize:  10000, // Get all files
 	}
-	
+
 	ctx := context.Background()
 	resp, err := h.controller.fileService.ListFiles(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return resp.Files, nil
 }
 

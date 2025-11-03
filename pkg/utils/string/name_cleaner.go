@@ -11,13 +11,13 @@ var (
 	// 网站水印模式
 	websitePattern1 = regexp.MustCompile(`【[^】]*(?:www\.|\.com|\.cn|\.org|发布|高清|影视|字幕组|下载)[^】]*】`)
 	websitePattern2 = regexp.MustCompile(`\[[^\]]*(?:www\.|\.com|\.cn|\.org|发布|高清|影视|字幕组|下载)[^\]]*\]`)
-	websitePattern3 = regexp.MustCompile(`【[^】]+】`) // 移除所有【】括号内容
+	websitePattern3 = regexp.MustCompile(`【[^】]+】`)    // 移除所有【】括号内容
 	websitePattern4 = regexp.MustCompile(`\[[^\]]+\]`) // 移除所有[]括号内容
 
 	// 视频质量和编码信息（按从复杂到简单的顺序，避免部分匹配）
-	qualityPattern1 = regexp.MustCompile(`(?i)\d{3,4}p`)                                                    // 1080p, 2160p, 4K, 8K
+	qualityPattern1 = regexp.MustCompile(`(?i)\d{3,4}p`)                                                     // 1080p, 2160p, 4K, 8K
 	qualityPattern2 = regexp.MustCompile(`(?i)WEB-DL|WEB-RIP|WEBRip|BluRay|Blu-ray|BDRip|HDTV|DVDRip|REMUX`) // 🔥 片源（增加REMUX）
-	qualityPattern3 = regexp.MustCompile(`(?i)H\.?264|H\.?265|H\.?266|x264|x265|HEVC|AVC|AV1|VP9`)         // 🔥 编码（增加AV1, VP9, H266）
+	qualityPattern3 = regexp.MustCompile(`(?i)H\.?264|H\.?265|H\.?266|x264|x265|HEVC|AVC|AV1|VP9`)           // 🔥 编码（增加AV1, VP9, H266）
 
 	// 🔥 版本标记（REPACK, PROPER, EXTENDED等）
 	versionPattern = regexp.MustCompile(`(?i)\b(REPACK|PROPER|EXTENDED|UNRATED|DC|DIRECTORS?\.CUT|LIMITED|ANNIVERSARY\.EDITION|REMASTERED)\b`)
@@ -29,13 +29,13 @@ var (
 	// 🔥 声道信息（7.1, 5.1, 2.0等）
 	channelPattern = regexp.MustCompile(`\.?[\d]+\.[\d]`)
 
-	qualityPattern5 = regexp.MustCompile(`(?i)-[A-Z][a-zA-Z0-9]+$`)                           // 发布组名
-	qualityPattern7 = regexp.MustCompile(`(?i)\d+bit`)                                        // 位深（10bit, 8bit）
-	qualityPattern8 = regexp.MustCompile(`(?i)\d+Audio`)                                      // 多音轨（2Audio等）
-	otherQualityPattern = regexp.MustCompile(`(?i)UHD|4K|8K`)                                 // 超高清标记
+	qualityPattern5     = regexp.MustCompile(`(?i)-[A-Z][a-zA-Z0-9]+$`) // 发布组名
+	qualityPattern7     = regexp.MustCompile(`(?i)\d+bit`)              // 位深（10bit, 8bit）
+	qualityPattern8     = regexp.MustCompile(`(?i)\d+Audio`)            // 多音轨（2Audio等）
+	otherQualityPattern = regexp.MustCompile(`(?i)UHD|4K|8K`)           // 超高清标记
 
 	// 🔥 多余的描述信息模式（多音轨、字幕等）
-	descriptorPattern = regexp.MustCompile(`(?i)[.\s]*(国台粤英?|国粤英?|国英|台英|粤英|多音轨|特效字幕|中[英日韩法]?字幕|内嵌?字幕|双语字幕|简[繁]?[中英日]?字幕|无字幕)[.\s]*`)
+	descriptorPattern  = regexp.MustCompile(`(?i)[.\s]*(国台粤英?|国粤英?|国英|台英|粤英|多音轨|特效字幕|中[英日韩法]?字幕|内嵌?字幕|双语字幕|简[繁]?[中英日]?字幕|无字幕)[.\s]*`)
 	qualityDescPattern = regexp.MustCompile(`(?i)[.\s]*(高清|超清|蓝光|原盘|修复版|导演剪辑版|加长版|未删减版|完整版)[.\s]*`)
 
 	// 🔥 年份模式（独立的4位数年份：1900-2099）
@@ -75,21 +75,21 @@ func CleanShowName(name string) string {
 	cleaned = websitePattern4.ReplaceAllString(cleaned, "")
 
 	// 2. 移除视频质量和编码信息（按从复杂到简单的顺序）
-	cleaned = yearRangePattern.ReplaceAllString(cleaned, "")  // 🔥 先移除年份范围（避免与单独年份冲突）
-	cleaned = yearPattern.ReplaceAllString(cleaned, "")       // 🔥 移除年份
-	cleaned = descriptorPattern.ReplaceAllString(cleaned, "") // 🔥 移除多余描述信息（多音轨、字幕等）
-	cleaned = qualityDescPattern.ReplaceAllString(cleaned, "") // 🔥 移除质量描述（高清、蓝光等）
-	cleaned = versionPattern.ReplaceAllString(cleaned, "")    // 🔥 版本标记（REPACK, PROPER等）
-	cleaned = qualityPattern6.ReplaceAllString(cleaned, "")   // 🔥 先移除复杂音频格式（DTS-HDMA, TrueHD, DTS:X等）
-	cleaned = channelPattern.ReplaceAllString(cleaned, "")    // 🔥 移除声道信息（7.1, 5.1等）
-	cleaned = qualityPattern8.ReplaceAllString(cleaned, "")   // 🔥 移除多音轨标记（2Audio）
+	cleaned = yearRangePattern.ReplaceAllString(cleaned, "")    // 🔥 先移除年份范围（避免与单独年份冲突）
+	cleaned = yearPattern.ReplaceAllString(cleaned, "")         // 🔥 移除年份
+	cleaned = descriptorPattern.ReplaceAllString(cleaned, "")   // 🔥 移除多余描述信息（多音轨、字幕等）
+	cleaned = qualityDescPattern.ReplaceAllString(cleaned, "")  // 🔥 移除质量描述（高清、蓝光等）
+	cleaned = versionPattern.ReplaceAllString(cleaned, "")      // 🔥 版本标记（REPACK, PROPER等）
+	cleaned = qualityPattern6.ReplaceAllString(cleaned, "")     // 🔥 先移除复杂音频格式（DTS-HDMA, TrueHD, DTS:X等）
+	cleaned = channelPattern.ReplaceAllString(cleaned, "")      // 🔥 移除声道信息（7.1, 5.1等）
+	cleaned = qualityPattern8.ReplaceAllString(cleaned, "")     // 🔥 移除多音轨标记（2Audio）
 	cleaned = otherQualityPattern.ReplaceAllString(cleaned, "") // 🔥 移除UHD, 4K, 8K
-	cleaned = qualityPattern1.ReplaceAllString(cleaned, "")   // 分辨率
-	cleaned = qualityPattern2.ReplaceAllString(cleaned, "")   // 来源（REMUX, BluRay等）
-	cleaned = qualityPattern3.ReplaceAllString(cleaned, "")   // 编码（AV1, VP9, HEVC等）
-	cleaned = qualityPattern4.ReplaceAllString(cleaned, "")   // 基础音视频格式
-	cleaned = qualityPattern7.ReplaceAllString(cleaned, "")   // 位深
-	cleaned = qualityPattern5.ReplaceAllString(cleaned, "")   // 发布组名（最后清理）
+	cleaned = qualityPattern1.ReplaceAllString(cleaned, "")     // 分辨率
+	cleaned = qualityPattern2.ReplaceAllString(cleaned, "")     // 来源（REMUX, BluRay等）
+	cleaned = qualityPattern3.ReplaceAllString(cleaned, "")     // 编码（AV1, VP9, HEVC等）
+	cleaned = qualityPattern4.ReplaceAllString(cleaned, "")     // 基础音视频格式
+	cleaned = qualityPattern7.ReplaceAllString(cleaned, "")     // 位深
+	cleaned = qualityPattern5.ReplaceAllString(cleaned, "")     // 发布组名（最后清理）
 
 	// 3. 优先提取中文部分（如果存在混合的英文和中文）
 	// 匹配中文名称，移除英文部分
@@ -137,9 +137,9 @@ func CleanShowName(name string) string {
 	// 移除所有点号（无论是否包含中文）
 	cleaned = strings.ReplaceAll(cleaned, ".", "")
 
-	cleaned = strings.ReplaceAll(cleaned, ":", "")   // 英文冒号
-	cleaned = strings.ReplaceAll(cleaned, "：", "")  // 中文冒号
-	cleaned = strings.ReplaceAll(cleaned, "·", "")   // 中文间隔号
+	cleaned = strings.ReplaceAll(cleaned, ":", "") // 英文冒号
+	cleaned = strings.ReplaceAll(cleaned, "：", "") // 中文冒号
+	cleaned = strings.ReplaceAll(cleaned, "·", "") // 中文间隔号
 
 	// 7. 去除前后空白
 	cleaned = strings.TrimSpace(cleaned)

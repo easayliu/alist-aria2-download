@@ -12,7 +12,7 @@ import (
 // StreamHandler 流式响应处理器
 // 负责解析OpenAI SSE格式的流式响应
 type StreamHandler struct {
-	reader  io.Reader     // 原始响应流
+	reader  io.Reader      // 原始响应流
 	scanner *bufio.Scanner // 行扫描器
 }
 
@@ -33,13 +33,14 @@ func NewStreamHandler(reader io.Reader) *StreamHandler {
 // 返回Channel供消费者读取
 //
 // 使用示例:
-//   chunkChan, errChan := handler.ReadStream(ctx)
-//   for chunk := range chunkChan {
-//       // 处理chunk
-//   }
-//   if err := <-errChan; err != nil {
-//       // 处理错误
-//   }
+//
+//	chunkChan, errChan := handler.ReadStream(ctx)
+//	for chunk := range chunkChan {
+//	    // 处理chunk
+//	}
+//	if err := <-errChan; err != nil {
+//	    // 处理错误
+//	}
 func (h *StreamHandler) ReadStream(ctx context.Context) (<-chan StreamChunk, <-chan error) {
 	chunkChan := make(chan StreamChunk, 10)
 	errChan := make(chan error, 1)

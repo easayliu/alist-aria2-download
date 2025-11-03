@@ -6,8 +6,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/telegram"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	"github.com/easayliu/alist-aria2-download/pkg/utils/string"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -218,13 +218,13 @@ func (mu *MessageUtils) SplitMessage(text string, maxLength int) []string {
 
 	var messages []string
 	runes := []rune(text)
-	
+
 	for len(runes) > 0 {
 		end := maxLength
 		if end > len(runes) {
 			end = len(runes)
 		}
-		
+
 		// 尝试在换行符处分割
 		if end < len(runes) {
 			for i := end - 1; i >= maxLength*3/4; i-- { // 在后1/4处查找换行符
@@ -234,11 +234,11 @@ func (mu *MessageUtils) SplitMessage(text string, maxLength int) []string {
 				}
 			}
 		}
-		
+
 		messages = append(messages, string(runes[:end]))
 		runes = runes[end:]
 	}
-	
+
 	return messages
 }
 
@@ -308,8 +308,8 @@ func (mu *MessageUtils) FormatDownloadDirectoryResult(summary types.DownloadResu
 						fileName = parts[len(parts)-1]
 					}
 				}
-				resultMessage += fmt.Sprintf("• <code>%s</code>: %s\\n", 
-					mu.EscapeHTML(fileName), 
+				resultMessage += fmt.Sprintf("• <code>%s</code>: %s\\n",
+					mu.EscapeHTML(fileName),
 					result.Error)
 			}
 		} else {

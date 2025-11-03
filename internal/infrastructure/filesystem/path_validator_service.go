@@ -203,12 +203,12 @@ func (s *PathValidatorService) replaceSafeChars(path string) string {
 	if s.platform == "windows" {
 		// Windows: 替换不允许的字符
 		replacer := strings.NewReplacer(
-			":", "-",  // 冒号替换为破折号
-			"?", "",   // 问号移除
-			"*", "",   // 星号移除
-			"<", "",   // 移除
-			">", "",   // 移除
-			"|", "-",  // 管道符替换为破折号
+			":", "-", // 冒号替换为破折号
+			"?", "", // 问号移除
+			"*", "", // 星号移除
+			"<", "", // 移除
+			">", "", // 移除
+			"|", "-", // 管道符替换为破折号
 			"\"", "'", // 双引号替换为单引号
 		)
 		return replacer.Replace(path)

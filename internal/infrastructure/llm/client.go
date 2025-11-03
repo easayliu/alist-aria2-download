@@ -37,8 +37,9 @@ func NewClient(provider Provider) *Client {
 //   - error: 错误信息
 //
 // 使用示例:
-//   client := llm.NewClient(provider)
-//   text, err := client.Generate(ctx, "你好", llm.WithTemperature(0.7))
+//
+//	client := llm.NewClient(provider)
+//	text, err := client.Generate(ctx, "你好", llm.WithTemperature(0.7))
 func (c *Client) Generate(ctx context.Context, prompt string, opts ...Option) (string, error) {
 	if !c.provider.IsAvailable() {
 		return "", fmt.Errorf("provider %s 不可用", c.provider.Name())
@@ -60,13 +61,14 @@ func (c *Client) Generate(ctx context.Context, prompt string, opts ...Option) (s
 //   - <-chan error: 错误通道
 //
 // 使用示例:
-//   textChan, errChan := client.GenerateStream(ctx, "讲个故事")
-//   for text := range textChan {
-//       fmt.Print(text)
-//   }
-//   if err := <-errChan; err != nil {
-//       log.Fatal(err)
-//   }
+//
+//	textChan, errChan := client.GenerateStream(ctx, "讲个故事")
+//	for text := range textChan {
+//	    fmt.Print(text)
+//	}
+//	if err := <-errChan; err != nil {
+//	    log.Fatal(err)
+//	}
 func (c *Client) GenerateStream(ctx context.Context, prompt string, opts ...Option) (<-chan string, <-chan error) {
 	if !c.provider.IsAvailable() {
 		errChan := make(chan error, 1)
@@ -93,12 +95,13 @@ func (c *Client) GenerateStream(ctx context.Context, prompt string, opts ...Opti
 //   - error: 错误信息，成功时schema会被填充数据
 //
 // 使用示例:
-//   type Result struct {
-//       Title string `json:"title"`
-//       Year  int    `json:"year"`
-//   }
-//   var result Result
-//   err := client.GenerateStructured(ctx, "分析这个文件名", &result)
+//
+//	type Result struct {
+//	    Title string `json:"title"`
+//	    Year  int    `json:"year"`
+//	}
+//	var result Result
+//	err := client.GenerateStructured(ctx, "分析这个文件名", &result)
 func (c *Client) GenerateStructured(ctx context.Context, prompt string, schema interface{}, opts ...Option) error {
 	if !c.provider.IsAvailable() {
 		return fmt.Errorf("provider %s 不可用", c.provider.Name())

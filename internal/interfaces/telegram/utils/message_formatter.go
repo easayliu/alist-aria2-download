@@ -519,13 +519,13 @@ func (mf *MessageFormatter) FormatBatchResult(data BatchResultData) string {
 
 // FormatFileInfo 格式化文件信息 - 固定宽度布局
 type FileInfoData struct {
-	Icon      string
-	Name      string
-	Path      string
-	Type      string
-	Size      string
-	Modified  string
-	IsDir     bool
+	Icon       string
+	Name       string
+	Path       string
+	Type       string
+	Size       string
+	Modified   string
+	IsDir      bool
 	EscapeHTML func(string) string
 }
 
@@ -561,11 +561,11 @@ func (mf *MessageFormatter) FormatFileInfo(data FileInfoData) string {
 
 // FormatFileOperation 格式化文件操作 - 固定宽度布局
 type FileOperationData struct {
-	Icon      string
-	FileName  string
-	FilePath  string
-	FileType  string
-	Prompt    string
+	Icon       string
+	FileName   string
+	FilePath   string
+	FileType   string
+	Prompt     string
 	EscapeHTML func(string) string
 }
 
@@ -623,7 +623,7 @@ func (mf *MessageFormatter) FormatTaskList(data TaskListData) string {
 	if data.TotalCount == 0 {
 		lines = append(lines, "暂无定时任务")
 		message := strings.Join(lines, "\n")
-	return message
+		return message
 	}
 
 	// 任务列表
@@ -656,14 +656,14 @@ func (mf *MessageFormatter) FormatTaskList(data TaskListData) string {
 
 // FormatFileBrowser 格式化文件浏览器 - 固定宽度布局
 type FileBrowserData struct {
-	Path        string
-	Page        int
-	TotalPages  int
-	TotalFiles  int
-	DirCount    int
-	FileCount   int
-	VideoCount  int
-	EscapeHTML  func(string) string
+	Path       string
+	Page       int
+	TotalPages int
+	TotalFiles int
+	DirCount   int
+	FileCount  int
+	VideoCount int
+	EscapeHTML func(string) string
 }
 
 func (mf *MessageFormatter) FormatFileBrowser(data FileBrowserData) string {
@@ -761,7 +761,6 @@ func (mf *MessageFormatter) FormatDownloadControl(data DownloadControlData) stri
 	message := strings.Join(lines, "\n")
 	return message
 }
-
 
 // FormatFileBrowseCenter 格式化文件浏览中心
 func (mf *MessageFormatter) FormatFileBrowseCenter() string {
@@ -1005,14 +1004,14 @@ func (mf *MessageFormatter) FormatNoFilesFound(title, timeDescription string) st
 
 // FormatYesterdayFiles 格式化昨日文件列表
 type YesterdayFilesData struct {
-	TotalCount    int
-	DisplayFiles  []YesterdayFileItem
-	TotalSize     string
-	TVCount       int
-	MovieCount    int
-	OtherCount    int
+	TotalCount     int
+	DisplayFiles   []YesterdayFileItem
+	TotalSize      string
+	TVCount        int
+	MovieCount     int
+	OtherCount     int
 	RemainingCount int
-	EscapeHTML    func(string) string
+	EscapeHTML     func(string) string
 }
 
 type YesterdayFileItem struct {

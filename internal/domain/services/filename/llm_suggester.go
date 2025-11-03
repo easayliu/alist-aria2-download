@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
+	"github.com/easayliu/alist-aria2-download/internal/domain/models/rename"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 )
@@ -61,21 +62,21 @@ type FileNameRequest struct {
 
 // FileNameSuggestion 文件名建议
 type FileNameSuggestion struct {
-	MediaType    string  `json:"media_type"`     // tv 或 movie
-	Title        string  `json:"title"`          // 英文标题
-	TitleCN      string  `json:"title_cn"`       // 中文标题
-	Year         int     `json:"year"`           // 年份
-	Season       *int    `json:"season"`         // 季度（仅剧集）
-	Episode      *int    `json:"episode"`        // 集数（仅剧集）
-	EpisodeTitle string  `json:"episode_title"`  // 集数标题（如果有）
+	MediaType    string `json:"media_type"`    // tv 或 movie
+	Title        string `json:"title"`         // 英文标题
+	TitleCN      string `json:"title_cn"`      // 中文标题
+	Year         int    `json:"year"`          // 年份
+	Season       *int   `json:"season"`        // 季度（仅剧集）
+	Episode      *int   `json:"episode"`       // 集数（仅剧集）
+	EpisodeTitle string `json:"episode_title"` // 集数标题（如果有）
 
 	// 路径相关字段（由LLM直接生成完整路径）
-	NewFileName  string  `json:"new_file_name"`  // 新文件名（如: "Breaking Bad - S01E01.mkv"）
+	NewFileName   string `json:"new_file_name"`  // 新文件名（如: "Breaking Bad - S01E01.mkv"）
 	DirectoryPath string `json:"directory_path"` // 目录路径（如: "/TVs/Breaking Bad/Season 01"）
 
-	Confidence   float32 `json:"confidence"`     // 置信度 (0.0-1.0)
-	RawResponse  string  `json:"raw_response"`   // LLM原始响应（调试用）
-	Source       string  `json:"source"`         // 数据来源：llm
+	Confidence  float32 `json:"confidence"`   // 置信度 (0.0-1.0)
+	RawResponse string  `json:"raw_response"` // LLM原始响应（调试用）
+	Source      string  `json:"source"`       // 数据来源：llm
 }
 
 // ToEmbyFormat 转换为Emby命名格式
@@ -112,14 +113,8 @@ func (s *FileNameSuggestion) ToEmbyFormat(extension string) string {
 	return fmt.Sprintf("%s - S%02dE%02d%s", title, season, episode, extension)
 }
 
-// ToPlexFormat 转换为Plex命名格式
-// 与Emby基本相同
-func (s *FileNameSuggestion) ToPlexFormat(extension string) string {
-	return s.ToEmbyFormat(extension)
-}
-
 // SuggestFileName 推断文件名
-func (s *LLMSuggester) SuggestFileName(ctx context.Context, req FileNameRequest) (*FileNameSuggestion, error) {
+func (s *LLMSuggester) SuggestFileName(ctx context.Context, req FileNameRequest) (*rename.Suggestion, error) {
 	logger.Info("LLM filename inference started",
 		"originalName", req.OriginalName,
 		"filePath", req.FilePath,
@@ -128,11 +123,11 @@ func (s *LLMSuggester) SuggestFileName(ctx context.Context, req FileNameRequest)
 	// 构建prompt
 	prompt := s.buildPrompt(req)
 
-	// 创建用于接收结果的结构体
-	var suggestion FileNameSuggestion
+	// 创建用于接收结果的结构体(临时用于JSON解析)
+	var llmOutput FileNameSuggestion
 
 	// 调用LLM生成结构化输出（新接口）
-	err := s.llmService.GenerateStructured(ctx, prompt, &suggestion,
+	err := s.llmService.GenerateStructured(ctx, prompt, &llmOutput,
 		contracts.WithLLMTemperature(0.3), // 较低温度以保证准确性
 		contracts.WithLLMMaxTokens(500))   // 限制token数
 	if err != nil {
@@ -141,13 +136,13 @@ func (s *LLMSuggester) SuggestFileName(ctx context.Context, req FileNameRequest)
 	}
 
 	// 验证输出合理性
-	if err := s.validateSuggestion(&suggestion); err != nil {
-		logger.Warn("LLM output validation failed", "error", err, "suggestion", suggestion)
+	if err := s.validateSuggestion(&llmOutput); err != nil {
+		logger.Warn("LLM output validation failed", "error", err, "suggestion", llmOutput)
 		return nil, fmt.Errorf("LLM output validation failed: %w", err)
 	}
 
-	// 设置来源
-	suggestion.Source = "llm"
+	// 转换为统一的rename.Suggestion模型
+	suggestion := s.convertToRenameSuggestion(req, &llmOutput)
 
 	logger.Info("LLM filename inference succeeded",
 		"mediaType", suggestion.MediaType,
@@ -156,7 +151,7 @@ func (s *LLMSuggester) SuggestFileName(ctx context.Context, req FileNameRequest)
 		"year", suggestion.Year,
 		"confidence", suggestion.Confidence)
 
-	return &suggestion, nil
+	return suggestion, nil
 }
 
 // buildPrompt 构建LLM prompt
@@ -285,60 +280,40 @@ func (s *LLMSuggester) validateSuggestion(suggestion *FileNameSuggestion) error 
 	return nil
 }
 
-// SuggestFileNameStream 流式推断文件名
-// 实时返回推断进度
-func (s *LLMSuggester) SuggestFileNameStream(ctx context.Context, req FileNameRequest, callback func(partialText string) error) (*FileNameSuggestion, error) {
-	logger.Info("LLM stream filename inference started", "originalName", req.OriginalName)
-
-	// 构建prompt
-	prompt := s.buildPrompt(req)
-
-	// 调用LLM流式生成（新接口）
-	textChan, errChan := s.llmService.GenerateTextStream(ctx, prompt,
-		contracts.WithLLMTemperature(0.3))
-
-	var accumulated strings.Builder
-	for {
-		select {
-		case text, ok := <-textChan:
-			if !ok {
-				// 流结束，解析最终结果
-				finalText := accumulated.String()
-				logger.Debug("LLM stream generation completed", "response", finalText)
-
-				suggestion, err := s.parseResponse(finalText)
-				if err != nil {
-					return nil, fmt.Errorf("failed to parse final result: %w", err)
-				}
-
-				if err := s.validateSuggestion(suggestion); err != nil {
-					return nil, fmt.Errorf("failed to validate final result: %w", err)
-				}
-
-				suggestion.RawResponse = finalText
-				suggestion.Source = "llm"
-
-				return suggestion, nil
+// convertToRenameSuggestion 将LLM输出转换为统一的rename.Suggestion模型
+func (s *LLMSuggester) convertToRenameSuggestion(req FileNameRequest, llmOutput *FileNameSuggestion) *rename.Suggestion {
+	// 构建新路径
+	// 优先使用LLM生成的DirectoryPath，否则保留原始文件的目录
+	newPath := req.FilePath
+	if llmOutput.DirectoryPath != "" && llmOutput.NewFileName != "" {
+		newPath = llmOutput.DirectoryPath + "/" + llmOutput.NewFileName
+	} else if llmOutput.NewFileName != "" {
+		// 保留原始目录，只替换文件名
+		dir := ""
+		if req.FilePath != "" {
+			lastSlash := strings.LastIndex(req.FilePath, "/")
+			if lastSlash >= 0 {
+				dir = req.FilePath[:lastSlash+1]
 			}
-
-			// 累积文本
-			accumulated.WriteString(text)
-
-			// 回调给上层（如Telegram）
-			if callback != nil {
-				if err := callback(accumulated.String()); err != nil {
-					logger.Warn("Stream callback failed", "error", err)
-					return nil, fmt.Errorf("stream callback failed: %w", err)
-				}
-			}
-
-		case err := <-errChan:
-			logger.Error("LLM stream generation failed", "error", err)
-			return nil, fmt.Errorf("LLM stream generation failed: %w", err)
-
-		case <-ctx.Done():
-			logger.Info("LLM stream inference cancelled")
-			return nil, ctx.Err()
 		}
+		newPath = dir + llmOutput.NewFileName
 	}
+
+	suggestion := &rename.Suggestion{
+		OriginalPath: req.FilePath,
+		NewName:      llmOutput.NewFileName,
+		NewPath:      newPath,
+		MediaType:    rename.MediaType(llmOutput.MediaType),
+		Title:        llmOutput.Title,
+		TitleCN:      llmOutput.TitleCN,
+		Year:         llmOutput.Year,
+		Season:       llmOutput.Season,
+		Episode:      llmOutput.Episode,
+		EpisodeTitle: llmOutput.EpisodeTitle,
+		Confidence:   float64(llmOutput.Confidence),
+		Source:       rename.SourceLLM,
+		RawResponse:  llmOutput.RawResponse,
+	}
+
+	return suggestion
 }

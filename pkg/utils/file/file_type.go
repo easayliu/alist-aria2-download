@@ -42,9 +42,10 @@ func IsVideoFile(filename string, videoExts ...[]string) bool {
 
 // ExtractExtension 从文件名中提取扩展名（不带点号，小写）
 // 例如：
-//   "video.mp4" -> "mp4"
-//   "movie.MKV" -> "mkv"
-//   "/path/to/file.AVI" -> "avi"
+//
+//	"video.mp4" -> "mp4"
+//	"movie.MKV" -> "mkv"
+//	"/path/to/file.AVI" -> "avi"
 func ExtractExtension(filename string) string {
 	if filename == "" {
 		return ""

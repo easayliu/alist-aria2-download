@@ -12,10 +12,10 @@ import (
 )
 
 type TaskRepository struct {
-	filePath   string
-	mu         sync.RWMutex
-	tasks      map[string]*entities.ScheduledTask
-	jsonUtils  *httputil.JSONFileUtils
+	filePath  string
+	mu        sync.RWMutex
+	tasks     map[string]*entities.ScheduledTask
+	jsonUtils *httputil.JSONFileUtils
 }
 
 func NewTaskRepository(dataDir string) (*TaskRepository, error) {

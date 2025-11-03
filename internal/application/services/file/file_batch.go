@@ -14,7 +14,7 @@ func (s *AppFileService) DownloadFiles(ctx context.Context, req contracts.BatchF
 	if s.downloadService == nil {
 		return nil, fmt.Errorf("download service not available")
 	}
-	
+
 	var downloadRequests []contracts.DownloadRequest
 
 	for _, fileReq := range req.Files {
@@ -63,7 +63,7 @@ func (s *AppFileService) DownloadDirectory(ctx context.Context, req contracts.Di
 	if s.downloadService == nil {
 		return nil, fmt.Errorf("download service not available")
 	}
-	
+
 	// 获取目录下的所有文件
 	listReq := contracts.FileListRequest{
 		Path:      req.DirectoryPath,
@@ -89,7 +89,7 @@ func (s *AppFileService) DownloadDirectory(ctx context.Context, req contracts.Di
 			Filename:     file.Name,
 			Directory:    req.TargetDir,
 			AutoClassify: req.AutoClassify,
-			FileSize:     file.Size,  // 设置文件大小用于统计
+			FileSize:     file.Size, // 设置文件大小用于统计
 		}
 
 		if downloadReq.Directory == "" {

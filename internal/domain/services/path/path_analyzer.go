@@ -19,14 +19,14 @@ func NewPathAnalyzer() *PathAnalyzer {
 
 // PathInfo 路径信息
 type PathInfo struct {
-	Path         valueobjects.FilePath
-	Dir          valueobjects.FilePath
-	Filename     string
-	Extension    string
-	IsAbsolute   bool
-	Depth        int           // 路径深度
-	Components   []string      // 路径组件
-	MediaType    valueobjects.MediaType
+	Path       valueobjects.FilePath
+	Dir        valueobjects.FilePath
+	Filename   string
+	Extension  string
+	IsAbsolute bool
+	Depth      int      // 路径深度
+	Components []string // 路径组件
+	MediaType  valueobjects.MediaType
 }
 
 // Analyze 分析路径
@@ -61,7 +61,7 @@ func (a *PathAnalyzer) detectMediaTypeFromPath(path string) valueobjects.MediaTy
 		return valueobjects.MediaTypeMovie
 	}
 	if strings.Contains(lowerPath, "/tvs/") || strings.Contains(lowerPath, "/tv shows/") ||
-	   strings.Contains(lowerPath, "/剧集/") || strings.Contains(lowerPath, "/电视剧/") {
+		strings.Contains(lowerPath, "/剧集/") || strings.Contains(lowerPath, "/电视剧/") {
 		return valueobjects.MediaTypeTV
 	}
 	if strings.Contains(lowerPath, "/variety/") || strings.Contains(lowerPath, "/综艺/") {

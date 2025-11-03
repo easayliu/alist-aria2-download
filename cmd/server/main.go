@@ -7,9 +7,9 @@ import (
 	"syscall"
 
 	_ "github.com/easayliu/alist-aria2-download/docs"
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/http/routes"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/http/routes"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	"github.com/gin-gonic/gin"
 )

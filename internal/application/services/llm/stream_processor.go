@@ -43,11 +43,12 @@ func NewStreamProcessorWithBuffer(handler UpdateHandler, bufferSize int) *Stream
 // 自动累积文本，实时触发回调
 //
 // 使用示例:
-//   processor := NewStreamProcessor(func(accumulated, delta string) error {
-//       fmt.Printf("累积文本长度: %d, 新增: %s\n", len(accumulated), delta)
-//       return nil
-//   })
-//   fullText, err := processor.Process(ctx, textChan, errChan)
+//
+//	processor := NewStreamProcessor(func(accumulated, delta string) error {
+//	    fmt.Printf("累积文本长度: %d, 新增: %s\n", len(accumulated), delta)
+//	    return nil
+//	})
+//	fullText, err := processor.Process(ctx, textChan, errChan)
 func (p *StreamProcessor) Process(ctx context.Context, textChan <-chan string, errChan <-chan error) (string, error) {
 	var builder strings.Builder
 
@@ -92,11 +93,12 @@ func (p *StreamProcessor) Process(ctx context.Context, textChan <-chan string, e
 //   - UI界面更新（推荐100ms-300ms）
 //
 // 使用示例:
-//   processor := NewStreamProcessor(func(accumulated, delta string) error {
-//       // 更新Telegram消息
-//       return bot.EditMessage(chatID, messageID, accumulated)
-//   })
-//   fullText, err := processor.ProcessWithThrottle(ctx, textChan, errChan, 500*time.Millisecond)
+//
+//	processor := NewStreamProcessor(func(accumulated, delta string) error {
+//	    // 更新Telegram消息
+//	    return bot.EditMessage(chatID, messageID, accumulated)
+//	})
+//	fullText, err := processor.ProcessWithThrottle(ctx, textChan, errChan, 500*time.Millisecond)
 func (p *StreamProcessor) ProcessWithThrottle(ctx context.Context, textChan <-chan string, errChan <-chan error, minInterval time.Duration) (string, error) {
 	var builder strings.Builder
 	var lastUpdate time.Time
@@ -172,11 +174,12 @@ func (p *StreamProcessor) ProcessWithThrottle(ctx context.Context, textChan <-ch
 //   - 批量写入数据库
 //
 // 使用示例:
-//   processor := NewStreamProcessor(func(accumulated, delta string) error {
-//       // 每累积10个块写一次数据库
-//       return db.SaveProgress(accumulated)
-//   })
-//   fullText, err := processor.ProcessBatch(ctx, textChan, errChan, 10)
+//
+//	processor := NewStreamProcessor(func(accumulated, delta string) error {
+//	    // 每累积10个块写一次数据库
+//	    return db.SaveProgress(accumulated)
+//	})
+//	fullText, err := processor.ProcessBatch(ctx, textChan, errChan, 10)
 func (p *StreamProcessor) ProcessBatch(ctx context.Context, textChan <-chan string, errChan <-chan error, batchSize int) (string, error) {
 	if batchSize <= 0 {
 		batchSize = 5
@@ -246,13 +249,14 @@ func SimpleProcess(ctx context.Context, textChan <-chan string, errChan <-chan e
 // progressChan: 进度Channel，发送累积的文本长度
 //
 // 使用示例:
-//   progressChan := make(chan int, 1)
-//   go func() {
-//       for progress := range progressChan {
-//           fmt.Printf("进度: %d 字符\n", progress)
-//       }
-//   }()
-//   fullText, err := ProcessWithProgress(ctx, textChan, errChan, progressChan)
+//
+//	progressChan := make(chan int, 1)
+//	go func() {
+//	    for progress := range progressChan {
+//	        fmt.Printf("进度: %d 字符\n", progress)
+//	    }
+//	}()
+//	fullText, err := ProcessWithProgress(ctx, textChan, errChan, progressChan)
 func ProcessWithProgress(ctx context.Context, textChan <-chan string, errChan <-chan error, progressChan chan<- int) (string, error) {
 	defer close(progressChan)
 
@@ -289,11 +293,12 @@ func ProcessWithProgress(ctx context.Context, textChan <-chan string, errChan <-
 // 这是一个高阶函数，用于包装已有的UpdateHandler
 //
 // 使用示例:
-//   originalHandler := func(accumulated, delta string) error {
-//       return bot.EditMessage(chatID, messageID, accumulated)
-//   }
-//   throttledHandler := ThrottledUpdateHandler(originalHandler, 500*time.Millisecond)
-//   processor := NewStreamProcessor(throttledHandler)
+//
+//	originalHandler := func(accumulated, delta string) error {
+//	    return bot.EditMessage(chatID, messageID, accumulated)
+//	}
+//	throttledHandler := ThrottledUpdateHandler(originalHandler, 500*time.Millisecond)
+//	processor := NewStreamProcessor(throttledHandler)
 func ThrottledUpdateHandler(handler UpdateHandler, minInterval time.Duration) UpdateHandler {
 	var lastUpdate time.Time
 	var mutex sync.Mutex

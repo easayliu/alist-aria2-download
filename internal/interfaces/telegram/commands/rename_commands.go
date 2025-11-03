@@ -21,11 +21,11 @@ func (bc *BasicCommands) HandleRename(chatID int64, command string) {
 	if len(parts) < 2 {
 		bc.messageUtils.SendMessageHTML(chatID,
 			"<b>用法错误</b>\n\n"+
-			"使用方式：<code>/rename &lt;文件路径&gt; [--llm] [--strategy=xxx]</code>\n\n"+
-			"示例：\n"+
-			"<code>/rename /movies/movie.mkv</code>\n"+
-			"<code>/rename /movies/movie.mkv --llm</code>\n"+
-			"<code>/rename /movies/movie.mkv --llm --strategy=llm_only</code>")
+				"使用方式：<code>/rename &lt;文件路径&gt; [--llm] [--strategy=xxx]</code>\n\n"+
+				"示例：\n"+
+				"<code>/rename /movies/movie.mkv</code>\n"+
+				"<code>/rename /movies/movie.mkv --llm</code>\n"+
+				"<code>/rename /movies/movie.mkv --llm --strategy=llm_only</code>")
 		return
 	}
 
@@ -68,9 +68,9 @@ func (bc *BasicCommands) HandleRename(chatID int64, command string) {
 		if strings.Contains(err.Error(), "TMDB not configured") {
 			bc.messageUtils.SendMessage(chatID,
 				"<b>❌ TMDB 未配置</b>\n\n"+
-				"请在 config.yaml 中配置 TMDB API Key：\n\n"+
-				"<code>tmdb:\n  api_key: \"your_api_key\"\n  language: \"zh-CN\"</code>\n\n"+
-				"获取 API Key: https://www.themoviedb.org/settings/api")
+					"请在 config.yaml 中配置 TMDB API Key：\n\n"+
+					"<code>tmdb:\n  api_key: \"your_api_key\"\n  language: \"zh-CN\"</code>\n\n"+
+					"获取 API Key: https://www.themoviedb.org/settings/api")
 			return
 		}
 
@@ -82,11 +82,11 @@ func (bc *BasicCommands) HandleRename(chatID int64, command string) {
 		logger.Warn("No TMDB suggestions found", "path", path)
 		bc.messageUtils.SendMessage(chatID,
 			"<b>未找到匹配结果</b>\n\n"+
-			"文件：<code>"+bc.messageUtils.EscapeHTML(path)+"</code>\n\n"+
-			"可能原因：\n"+
-			"• 文件名格式无法识别\n"+
-			"• TMDB 数据库中没有该电影/剧集\n"+
-			"• 文件名包含错误信息")
+				"文件：<code>"+bc.messageUtils.EscapeHTML(path)+"</code>\n\n"+
+				"可能原因：\n"+
+				"• 文件名格式无法识别\n"+
+				"• TMDB 数据库中没有该电影/剧集\n"+
+				"• 文件名包含错误信息")
 		return
 	}
 
@@ -96,19 +96,19 @@ func (bc *BasicCommands) HandleRename(chatID int64, command string) {
 
 	buttons := make([][]tgbotapi.InlineKeyboardButton, 0)
 	for i, s := range suggestions {
-		if i >= 5 {
+		if i >= MaxSuggestions {
 			break
 		}
 
 		label := fmt.Sprintf("🎬 %s (%d)", s.Title, s.Year)
-		if s.MediaType == "tv" && s.Season > 0 {
-			label = fmt.Sprintf("📺 %s S%02dE%02d", s.Title, s.Season, s.Episode)
+		if s.MediaType == "tv" && s.GetSeasonNumber() > 0 {
+			label = fmt.Sprintf("📺 %s S%02dE%02d", s.Title, s.GetSeasonNumber(), s.GetEpisodeNumber())
 		}
 
 		confidenceStr := ""
-		if s.Confidence >= 0.9 {
+		if s.Confidence >= HighConfidence {
 			confidenceStr = "⭐⭐⭐"
-		} else if s.Confidence >= 0.7 {
+		} else if s.Confidence >= MediumConfidence {
 			confidenceStr = "⭐⭐"
 		} else {
 			confidenceStr = "⭐"
@@ -170,14 +170,14 @@ func (bc *BasicCommands) HandleLLMRename(chatID int64, path string, strategy str
 		OriginalName:  filepath.Base(path),
 		SuggestedName: suggestions[0].NewName,
 		Confidence:    float32(suggestions[0].Confidence),
-		Source:        "tmdb",
+		Source:        string(suggestions[0].Source),
 		MediaInfo: &contracts.MediaInfo{
-			Type:    suggestions[0].MediaType,
+			Type:    string(suggestions[0].MediaType),
 			Title:   suggestions[0].Title,
-			TitleCN: "",
+			TitleCN: suggestions[0].TitleCN,
 			Year:    suggestions[0].Year,
-			Season:  &suggestions[0].Season,
-			Episode: &suggestions[0].Episode,
+			Season:  suggestions[0].Season,
+			Episode: suggestions[0].Episode,
 		},
 	}
 
@@ -200,9 +200,9 @@ func (bc *BasicCommands) HandleLLMRename(chatID int64, path string, strategy str
 	} else {
 		// 显示置信度星级
 		confidenceStr := ""
-		if result.Confidence >= 0.9 {
+		if result.Confidence >= HighConfidence {
 			confidenceStr = "⭐⭐⭐"
-		} else if result.Confidence >= 0.7 {
+		} else if result.Confidence >= MediumConfidence {
 			confidenceStr = "⭐⭐"
 		} else {
 			confidenceStr = "⭐"
@@ -253,22 +253,4 @@ func (bc *BasicCommands) HandleLLMRename(chatID int64, path string, strategy str
 	}
 
 	bc.messageUtils.SendMessageHTML(chatID, message)
-}
-
-// parseStrategy 解析策略字符串为枚举
-func (bc *BasicCommands) parseStrategy(strategy string) contracts.HybridStrategy {
-	switch strategy {
-	case "llm_first":
-		return contracts.LLMFirst
-	case "llm_only":
-		return contracts.LLMOnly
-	case "tmdb_only":
-		return contracts.TMDBOnly
-	case "compare":
-		return contracts.Compare
-	case "tmdb_first", "":
-		return contracts.TMDBFirst
-	default:
-		return contracts.TMDBFirst
-	}
 }

@@ -1,12 +1,12 @@
 package routes
 
 import (
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/http/handlers"
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram"
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/http/middleware"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	telegramInfra "github.com/easayliu/alist-aria2-download/internal/infrastructure/telegram"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/http/handlers"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/http/middleware"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -111,9 +111,6 @@ func (rc *RoutesConfig) SetupRoutes(router *gin.Engine) {
 		llm.GET("/stream", llmHandler.Stream)
 	}
 }
-
-
-
 
 // SetupRoutesWithContainer 使用ServiceContainer设置路由 - 新架构
 func SetupRoutesWithContainer(cfg *config.Config, container *services.ServiceContainer) (*gin.Engine, *telegram.TelegramHandler) {

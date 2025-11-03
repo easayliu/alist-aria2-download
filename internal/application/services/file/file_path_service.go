@@ -18,20 +18,20 @@ func (s *FilePathService) ApplyPathMapping(sourcePath, defaultDownloadPath strin
 	// 如果智能解析已经生成了有效的下载路径，直接使用
 	if defaultDownloadPath != "" && defaultDownloadPath != "/downloads" {
 		// 检查是否是智能生成的路径（包含剧名/电影名）
-		if strings.HasPrefix(defaultDownloadPath, "/downloads/tvs/") || 
-		   strings.HasPrefix(defaultDownloadPath, "/downloads/movies/") {
+		if strings.HasPrefix(defaultDownloadPath, "/downloads/tvs/") ||
+			strings.HasPrefix(defaultDownloadPath, "/downloads/movies/") {
 			pathAfterDownloads := strings.TrimPrefix(defaultDownloadPath, "/downloads/")
 			// 如果包含有意义的内容（不只是 tvs/ 或 movies/），直接使用
-			if pathAfterDownloads != "tvs" && pathAfterDownloads != "movies" && 
-			   pathAfterDownloads != "tvs/" && pathAfterDownloads != "movies/" {
+			if pathAfterDownloads != "tvs" && pathAfterDownloads != "movies" &&
+				pathAfterDownloads != "tvs/" && pathAfterDownloads != "movies/" {
 				return defaultDownloadPath
 			}
 		}
 	}
-	
+
 	// 回退逻辑：从源路径提取
 	dirPath := filepath.Dir(sourcePath)
-	
+
 	// 查找 tvs 目录的位置
 	if idx := strings.Index(dirPath, "/tvs/"); idx != -1 {
 		// 提取 tvs 后面的路径部分
@@ -45,7 +45,7 @@ func (s *FilePathService) ApplyPathMapping(sourcePath, defaultDownloadPath strin
 		moviesPath := dirPath[idx+1:] // 包含 "movies/"
 		return filepath.Join("/downloads", moviesPath)
 	}
-	
+
 	// 对于其他路径，使用默认下载路径
 	return defaultDownloadPath
 }

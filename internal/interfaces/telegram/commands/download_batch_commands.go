@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/pkg/utils/time"
 )
 

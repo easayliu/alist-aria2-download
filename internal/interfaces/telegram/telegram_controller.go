@@ -4,14 +4,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/callbacks"
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/commands"
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	telegramInfra "github.com/easayliu/alist-aria2-download/internal/infrastructure/telegram"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/callbacks"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/commands"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	"github.com/gin-gonic/gin"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -35,11 +35,11 @@ type TelegramController struct {
 	cancel       context.CancelFunc
 
 	// Refactored modular components for separation of concerns
-	messageUtils        *utils.MessageUtils
-	basicCommands       *commands.BasicCommands
-	downloadCommands    types.DownloadCommandHandler
-	taskCommands        *commands.TaskCommands
-	menuCallbacks       *callbacks.MenuCallbacks
+	messageUtils     *utils.MessageUtils
+	basicCommands    *commands.BasicCommands
+	downloadCommands types.DownloadCommandHandler
+	taskCommands     *commands.TaskCommands
+	menuCallbacks    *callbacks.MenuCallbacks
 
 	// Specialized function handlers
 	messageHandler  *MessageHandler
@@ -50,7 +50,6 @@ type TelegramController struct {
 	statusHandler   *StatusHandler
 	common          *Common
 }
-
 
 // NewTelegramController creates a new Telegram controller instance
 // Implements API First architecture by obtaining contract interfaces through ServiceContainer

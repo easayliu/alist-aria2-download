@@ -15,12 +15,12 @@ import (
 
 // AppTaskService 应用层任务服务 - 负责任务业务流程编排
 type AppTaskService struct {
-	config          *config.Config
-	taskRepo        *repository.TaskRepository
+	config           *config.Config
+	taskRepo         *repository.TaskRepository
 	schedulerService *SchedulerService
-	downloadService contracts.DownloadService
-	fileService     contracts.FileService
-	cron           *cron.Cron
+	downloadService  contracts.DownloadService
+	fileService      contracts.FileService
+	cron             *cron.Cron
 }
 
 // NewAppTaskService 创建应用任务服务
@@ -32,12 +32,12 @@ func NewAppTaskService(
 	fileService contracts.FileService,
 ) contracts.TaskService {
 	return &AppTaskService{
-		config:          cfg,
-		taskRepo:        taskRepo,
+		config:           cfg,
+		taskRepo:         taskRepo,
 		schedulerService: schedulerService,
-		downloadService: downloadService,
-		fileService:     fileService,
-		cron:           cron.New(),
+		downloadService:  downloadService,
+		fileService:      fileService,
+		cron:             cron.New(),
 	}
 }
 
@@ -183,14 +183,14 @@ func (s *AppTaskService) ListTasks(ctx context.Context, req contracts.TaskListRe
 
 	for _, task := range filteredTasks {
 		responses = append(responses, *s.convertToTaskResponse(task))
-		
+
 		// 统计摘要
 		if task.Enabled {
 			summary.EnabledCount++
 		} else {
 			summary.DisabledCount++
 		}
-		
+
 		switch task.Status {
 		case entities.TaskStatusRunning:
 			summary.RunningCount++
@@ -324,7 +324,7 @@ func (s *AppTaskService) CreateQuickTask(ctx context.Context, req contracts.Quic
 			Name:      fmt.Sprintf("每周汇总-%s", path),
 			Path:      path,
 			CronExpr:  "0 9 * * 1", // 每周一早9点
-			HoursAgo:  168, // 7天
+			HoursAgo:  168,         // 7天
 			VideoOnly: true,
 			Enabled:   true,
 			CreatedBy: req.CreatedBy,
@@ -434,23 +434,23 @@ func (s *AppTaskService) calculateNextRunTime(task *entities.ScheduledTask) {
 // convertToTaskResponse 转换任务实体到响应格式
 func (s *AppTaskService) convertToTaskResponse(task *entities.ScheduledTask) *contracts.TaskResponse {
 	return &contracts.TaskResponse{
-		ID:          task.ID,
-		Name:        task.Name,
-		Path:        task.Path,
-		CronExpr:    task.Cron,
-		HoursAgo:    task.HoursAgo,
-		VideoOnly:   task.VideoOnly,
-		AutoPreview: task.AutoPreview,
-		Enabled:     task.Enabled,
-		CreatedBy:   task.CreatedBy,
-		Status:      task.Status,
-		LastRunAt:   task.LastRunAt,
-		NextRunAt:   task.NextRunAt,
-		RunCount:    task.RunCount,
+		ID:           task.ID,
+		Name:         task.Name,
+		Path:         task.Path,
+		CronExpr:     task.Cron,
+		HoursAgo:     task.HoursAgo,
+		VideoOnly:    task.VideoOnly,
+		AutoPreview:  task.AutoPreview,
+		Enabled:      task.Enabled,
+		CreatedBy:    task.CreatedBy,
+		Status:       task.Status,
+		LastRunAt:    task.LastRunAt,
+		NextRunAt:    task.NextRunAt,
+		RunCount:     task.RunCount,
 		SuccessCount: task.SuccessCount,
 		FailureCount: task.FailureCount,
-		CreatedAt:   task.CreatedAt,
-		UpdatedAt:   task.UpdatedAt,
+		CreatedAt:    task.CreatedAt,
+		UpdatedAt:    task.UpdatedAt,
 	}
 }
 
@@ -515,12 +515,12 @@ func (s *AppTaskService) previewTaskExecution(ctx context.Context, task *entitie
 
 	// 构建预览摘要
 	summary := contracts.PreviewSummary{
-		TotalFiles:  len(filePreviews),
-		TotalSize:   fileResp.Summary.TotalSizeFormatted,
-		VideoFiles:  fileResp.Summary.VideoFiles,
-		MovieFiles:  fileResp.Summary.MovieFiles,
-		TVFiles:     fileResp.Summary.TVFiles,
-		OtherFiles:  fileResp.Summary.OtherFiles,
+		TotalFiles: len(filePreviews),
+		TotalSize:  fileResp.Summary.TotalSizeFormatted,
+		VideoFiles: fileResp.Summary.VideoFiles,
+		MovieFiles: fileResp.Summary.MovieFiles,
+		TVFiles:    fileResp.Summary.TVFiles,
+		OtherFiles: fileResp.Summary.OtherFiles,
 	}
 
 	return &contracts.TaskPreviewResponse{
@@ -587,8 +587,8 @@ func (s *AppTaskService) executeTask(ctx context.Context, task *entities.Schedul
 		}
 	}
 
-	logger.Info("Task executed", 
-		"task_id", task.ID, 
+	logger.Info("Task executed",
+		"task_id", task.ID,
 		"files_found", len(fileResp.Files),
 		"downloads_created", len(downloadIDs),
 		"success_count", batchResp.SuccessCount,

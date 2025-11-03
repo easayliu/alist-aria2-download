@@ -55,24 +55,24 @@ func (c *FileClassifier) classifyByPath(path string) valueobjects.MediaType {
 
 	// 电影路径特征
 	if strings.Contains(lowerPath, "/movies/") ||
-	   strings.Contains(lowerPath, "/电影/") ||
-	   strings.Contains(lowerPath, "/films/") {
+		strings.Contains(lowerPath, "/电影/") ||
+		strings.Contains(lowerPath, "/films/") {
 		return valueobjects.MediaTypeMovie
 	}
 
 	// 电视剧路径特征
 	if strings.Contains(lowerPath, "/tvs/") ||
-	   strings.Contains(lowerPath, "/tv shows/") ||
-	   strings.Contains(lowerPath, "/剧集/") ||
-	   strings.Contains(lowerPath, "/电视剧/") ||
-	   strings.Contains(lowerPath, "/series/") {
+		strings.Contains(lowerPath, "/tv shows/") ||
+		strings.Contains(lowerPath, "/剧集/") ||
+		strings.Contains(lowerPath, "/电视剧/") ||
+		strings.Contains(lowerPath, "/series/") {
 		return valueobjects.MediaTypeTV
 	}
 
 	// 综艺路径特征
 	if strings.Contains(lowerPath, "/variety/") ||
-	   strings.Contains(lowerPath, "/综艺/") ||
-	   strings.Contains(lowerPath, "/shows/") {
+		strings.Contains(lowerPath, "/综艺/") ||
+		strings.Contains(lowerPath, "/shows/") {
 		return valueobjects.MediaTypeVariety
 	}
 

@@ -16,10 +16,10 @@ import (
 
 // 向后兼容的类型别名 - 用于渐进式迁移
 type (
-	YesterdayFileInfo = file.YesterdayFileInfo
-	SchedulerService  = task.SchedulerService
+	YesterdayFileInfo   = file.YesterdayFileInfo
+	SchedulerService    = task.SchedulerService
 	NotificationService = notification.AppNotificationService
-	FileService       = file.AppFileService
+	FileService         = file.AppFileService
 )
 
 // 向后兼容的构造函数
@@ -54,19 +54,19 @@ func NewSchedulerService(taskRepo *repository.TaskRepository, fileService contra
 
 // ServiceContainer 应用服务容器 - 实现依赖注入
 type ServiceContainer struct {
-	config   *config.Config
+	config *config.Config
 
 	// 应用服务缓存
 	downloadService     contracts.DownloadService
-	fileService        contracts.FileService
-	taskService        contracts.TaskService
+	fileService         contracts.FileService
+	taskService         contracts.TaskService
 	notificationService contracts.NotificationService
-	llmService          contracts.LLMService       // LLM服务
-	schedulerService    *task.SchedulerService     // 新增: 调度服务
+	llmService          contracts.LLMService   // LLM服务
+	schedulerService    *task.SchedulerService // 新增: 调度服务
 
 	// 基础设施服务（非contracts）
-	taskRepo        *repository.TaskRepository
-	telegramClient  interface{}  // 单例 Telegram Client
+	taskRepo       *repository.TaskRepository
+	telegramClient interface{} // 单例 Telegram Client
 }
 
 // NewServiceContainer 创建服务容器
@@ -162,7 +162,7 @@ func (c *ServiceContainer) GetNotificationService() contracts.NotificationServic
 // GetHealthStatus 获取系统健康状态 - 临时实现
 func (c *ServiceContainer) GetHealthStatus() *contracts.SystemHealth {
 	return &contracts.SystemHealth{
-		Status:    contracts.HealthStatusHealthy,
+		Status:     contracts.HealthStatusHealthy,
 		Components: []contracts.ComponentHealth{},
 	}
 }

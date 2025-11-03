@@ -403,10 +403,10 @@ func (s *AppNotificationService) CheckChannelHealth(ctx context.Context, channel
 // TestNotification 测试通知
 func (s *AppNotificationService) TestNotification(ctx context.Context, channel contracts.NotificationChannel, targetID string) error {
 	testReq := contracts.NotificationRequest{
-		Channel: channel,
-		Level:   contracts.NotificationLevelInfo,
-		Title:   "测试通知",
-		Message: fmt.Sprintf("这是一条测试通知，发送时间：%s", time.Now().Format("2006-01-02 15:04:05")),
+		Channel:  channel,
+		Level:    contracts.NotificationLevelInfo,
+		Title:    "测试通知",
+		Message:  fmt.Sprintf("这是一条测试通知，发送时间：%s", time.Now().Format("2006-01-02 15:04:05")),
 		TargetID: targetID,
 	}
 

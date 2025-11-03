@@ -17,10 +17,10 @@ type StreamClient interface {
 // StreamResponse 流式响应包装
 // 提供便捷的流式数据处理方法
 type StreamResponse struct {
-	TextChan  <-chan string          // 文本流Channel
-	ErrorChan <-chan error           // 错误Channel
-	Cancel    context.CancelFunc     // 取消函数
-	ctx       context.Context        // 关联的Context
+	TextChan  <-chan string      // 文本流Channel
+	ErrorChan <-chan error       // 错误Channel
+	Cancel    context.CancelFunc // 取消函数
+	ctx       context.Context    // 关联的Context
 }
 
 // NewStreamResponse 创建流式响应
@@ -46,8 +46,9 @@ func NewStreamResponseWithContext(ctx context.Context, textChan <-chan string, e
 // 阻塞直到流结束或发生错误
 //
 // 使用示例:
-//   resp := NewStreamResponse(textChan, errChan, cancel)
-//   fullText, err := resp.Collect()
+//
+//	resp := NewStreamResponse(textChan, errChan, cancel)
+//	fullText, err := resp.Collect()
 func (r *StreamResponse) Collect() (string, error) {
 	var builder strings.Builder
 
@@ -77,10 +78,11 @@ func (r *StreamResponse) Collect() (string, error) {
 // fn返回error时会停止迭代并返回该错误
 //
 // 使用示例:
-//   err := resp.ForEach(func(text string) error {
-//       fmt.Print(text)
-//       return nil
-//   })
+//
+//	err := resp.ForEach(func(text string) error {
+//	    fmt.Print(text)
+//	    return nil
+//	})
 func (r *StreamResponse) ForEach(fn func(text string) error) error {
 	for {
 		select {
@@ -116,11 +118,12 @@ func (r *StreamResponse) ForEach(fn func(text string) error) error {
 // 适合需要同时收集完整文本和实时处理的场景
 //
 // 使用示例:
-//   fullText, err := resp.CollectWithCallback(func(accumulated, delta string) {
-//       // accumulated: 到目前为止的完整文本
-//       // delta: 本次新增的文本
-//       fmt.Printf("新增: %s, 总长度: %d\n", delta, len(accumulated))
-//   })
+//
+//	fullText, err := resp.CollectWithCallback(func(accumulated, delta string) {
+//	    // accumulated: 到目前为止的完整文本
+//	    // delta: 本次新增的文本
+//	    fmt.Printf("新增: %s, 总长度: %d\n", delta, len(accumulated))
+//	})
 func (r *StreamResponse) CollectWithCallback(callback func(accumulated, delta string)) (string, error) {
 	var builder strings.Builder
 
@@ -216,7 +219,6 @@ func (b *StreamBuffer) Channels() (<-chan string, <-chan error) {
 func (b *StreamBuffer) Response() *StreamResponse {
 	return NewStreamResponseWithContext(b.ctx, b.textChan, b.errChan, b.cancel)
 }
-
 
 // MergeChannels 合并多个流式响应
 // 将多个文本流合并为一个，按顺序输出

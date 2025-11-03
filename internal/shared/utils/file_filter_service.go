@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 	fileutil "github.com/easayliu/alist-aria2-download/pkg/utils/file"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 )
 
 // FileFilterService 文件过滤服务
@@ -202,7 +202,7 @@ func (s *FileFilterService) hasStrongTVIndicators(path string) bool {
 	if s.hasEpisodePattern(path) {
 		return true
 	}
-	
+
 	// 检查是否是已知的TV节目/综艺节目
 	if s.isKnownTVShow(path) {
 		return true
@@ -359,31 +359,31 @@ func (s *FileFilterService) isKnownTVShow(path string) bool {
 		"脱口秀大会",
 		"吐槽大会",
 	}
-	
+
 	for _, show := range knownTVShows {
 		if strings.Contains(path, show) {
 			return true
 		}
 	}
-	
+
 	// 检查是否包含综艺节目的常见模式
 	varietyPatterns := []string{
-		"先导",       // 先导片
-		"纯享版",     // 纯享版
-		"精华版",     // 精华版
-		"加长版",     // 加长版
-		"花絮",      // 花絮
-		"彩蛋",      // 彩蛋
-		"幕后",      // 幕后
+		"先导",  // 先导片
+		"纯享版", // 纯享版
+		"精华版", // 精华版
+		"加长版", // 加长版
+		"花絮",  // 花絮
+		"彩蛋",  // 彩蛋
+		"幕后",  // 幕后
 	}
-	
+
 	for _, pattern := range varietyPatterns {
 		if strings.Contains(path, pattern) {
 			// 如果包含综艺特征词，很可能是综艺节目
 			return true
 		}
 	}
-	
+
 	// 检查日期格式的节目（如 20240628, 20250919）（使用预编译正则）
 	// 这种格式通常是综艺节目
 	fileName := filepath.Base(path)
@@ -391,7 +391,7 @@ func (s *FileFilterService) isKnownTVShow(path string) bool {
 		// 如果文件名包含8位日期格式（YYYYMMDD），很可能是综艺节目
 		return true
 	}
-	
+
 	return false
 }
 
@@ -418,38 +418,38 @@ func (s *FileFilterService) IsVarietyShow(path string) bool {
 		"脱口秀大会",
 		"吐槽大会",
 	}
-	
+
 	// 检查是否包含已知综艺节目名称
 	for _, show := range knownVarietyShows {
 		if strings.Contains(path, show) {
 			return true
 		}
 	}
-	
+
 	// 检查综艺特征词
 	varietyPatterns := []string{
-		"先导",       // 先导片
-		"纯享版",     // 纯享版
-		"精华版",     // 精华版
-		"加长版",     // 加长版
-		"花絮",      // 花絮
-		"彩蛋",      // 彩蛋
-		"幕后",      // 幕后
-		"复盘",      // 复盘
+		"先导",  // 先导片
+		"纯享版", // 纯享版
+		"精华版", // 精华版
+		"加长版", // 加长版
+		"花絮",  // 花絮
+		"彩蛋",  // 彩蛋
+		"幕后",  // 幕后
+		"复盘",  // 复盘
 	}
-	
+
 	for _, pattern := range varietyPatterns {
 		if strings.Contains(path, pattern) {
 			return true
 		}
 	}
-	
+
 	// 检查日期格式的节目（如 20240628, 20250919）（使用预编译正则）
 	fileName := filepath.Base(path)
 	if strutil.DatePattern.MatchString(fileName) {
 		return true
 	}
-	
+
 	// 检查路径中是否包含综艺相关目录
 	lowerPath := strings.ToLower(path)
 	varietyDirs := []string{"/variety/", "/show/", "/综艺/", "/娱乐/"}
@@ -458,7 +458,7 @@ func (s *FileFilterService) IsVarietyShow(path string) bool {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -489,7 +489,7 @@ func (s *FileFilterService) IsVersionDirectory(dir string) bool {
 	if strings.Contains(dir, "[") && strings.Contains(dir, "]") {
 		return true
 	}
-	
+
 	// 检查常见的版本/质量关键词
 	versionKeywords := []string{
 		"4K", "1080P", "1080p", "720P", "720p",
@@ -497,22 +497,21 @@ func (s *FileFilterService) IsVersionDirectory(dir string) bool {
 		"60帧", "高码率", "DV", "HDR", "H265", "H264",
 		"AAC", "DTS", "REMUX", "2160p",
 	}
-	
+
 	for _, keyword := range versionKeywords {
 		if strings.Contains(dir, keyword) {
 			return true
 		}
 	}
-	
+
 	// 检查复杂的编码格式目录（包含季度信息但主要是技术格式）
 	// 如：S08.2025.2160p.WEB-DL.H265.AAC
-	if strings.Contains(dir, ".") && (
-		strings.Contains(dir, "p.") || // 分辨率格式
-		strings.Contains(dir, "WEB") || 
+	if strings.Contains(dir, ".") && (strings.Contains(dir, "p.") || // 分辨率格式
+		strings.Contains(dir, "WEB") ||
 		strings.Contains(dir, "BluRay") ||
 		strings.Contains(dir, "H26")) {
 		return true
 	}
-	
+
 	return false
 }

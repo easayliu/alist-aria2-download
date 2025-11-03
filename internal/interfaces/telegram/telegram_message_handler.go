@@ -100,17 +100,17 @@ func (h *MessageHandler) handleLLMRenameCommand(chatID int64, command string) {
 	if len(parts) < 2 {
 		h.controller.messageUtils.SendMessageHTML(chatID,
 			"<b>用法错误</b>\n\n"+
-			"使用方式：<code>/llmrename &lt;文件路径&gt; [策略] [提示]</code>\n\n"+
-			"示例：\n"+
-			"<code>/llmrename /data/tvs/权力的游戏.S01E01.mkv</code>\n"+
-			"<code>/llmrename /data/tvs/strange_name.mkv llm_only</code>\n"+
-			"<code>/llmrename /data/movies/matrix.mkv compare</code>\n\n"+
-			"<b>支持的策略：</b>\n"+
-			"• <code>tmdb_first</code> (默认): TMDB优先，失败时使用LLM\n"+
-			"• <code>llm_first</code>: LLM优先\n"+
-			"• <code>llm_only</code>: 仅使用LLM\n"+
-			"• <code>tmdb_only</code>: 仅使用TMDB\n"+
-			"• <code>compare</code>: 同时使用两者，返回多个结果")
+				"使用方式：<code>/llmrename &lt;文件路径&gt; [策略] [提示]</code>\n\n"+
+				"示例：\n"+
+				"<code>/llmrename /data/tvs/权力的游戏.S01E01.mkv</code>\n"+
+				"<code>/llmrename /data/tvs/strange_name.mkv llm_only</code>\n"+
+				"<code>/llmrename /data/movies/matrix.mkv compare</code>\n\n"+
+				"<b>支持的策略：</b>\n"+
+				"• <code>tmdb_first</code> (默认): TMDB优先，失败时使用LLM\n"+
+				"• <code>llm_first</code>: LLM优先\n"+
+				"• <code>llm_only</code>: 仅使用LLM\n"+
+				"• <code>tmdb_only</code>: 仅使用TMDB\n"+
+				"• <code>compare</code>: 同时使用两者，返回多个结果")
 		return
 	}
 

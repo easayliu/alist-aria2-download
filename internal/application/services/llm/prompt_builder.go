@@ -28,6 +28,7 @@ func NewPromptBuilder() *PromptBuilder {
 // 参数:
 //   - name: 模板名称
 //   - tmpl: 模板字符串（使用Go template语法）
+//
 // 返回:
 //   - error: 模板解析错误
 func (b *PromptBuilder) RegisterTemplate(name string, tmpl string) error {
@@ -44,6 +45,7 @@ func (b *PromptBuilder) RegisterTemplate(name string, tmpl string) error {
 // 参数:
 //   - templateName: 模板名称
 //   - data: 模板数据
+//
 // 返回:
 //   - string: 构建的Prompt
 //   - error: 构建错误

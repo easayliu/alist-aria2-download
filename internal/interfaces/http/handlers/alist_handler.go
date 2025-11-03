@@ -5,8 +5,8 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
-	timeutil "github.com/easayliu/alist-aria2-download/pkg/utils/time"
 	httputil "github.com/easayliu/alist-aria2-download/pkg/utils/http"
+	timeutil "github.com/easayliu/alist-aria2-download/pkg/utils/time"
 	"github.com/gin-gonic/gin"
 )
 

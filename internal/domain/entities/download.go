@@ -10,28 +10,28 @@ import (
 
 // Download 下载任务实体
 type Download struct {
-	ID            string                        `json:"id"`
-	URL           string                        `json:"url"`
-	Filename      string                        `json:"filename"`
-	Status        valueobjects.DownloadStatus   `json:"status"` // 使用值对象
-	Progress      float64                       `json:"progress"`
-	Speed         int64                         `json:"speed"`
-	TotalSize     int64                         `json:"total_size"`
-	CompletedSize int64                         `json:"completed_size"`
-	ErrorMessage  string                        `json:"error_message,omitempty"`
-	CreatedAt     time.Time                     `json:"created_at"`
-	UpdatedAt     time.Time                     `json:"updated_at"`
+	ID            string                      `json:"id"`
+	URL           string                      `json:"url"`
+	Filename      string                      `json:"filename"`
+	Status        valueobjects.DownloadStatus `json:"status"` // 使用值对象
+	Progress      float64                     `json:"progress"`
+	Speed         int64                       `json:"speed"`
+	TotalSize     int64                       `json:"total_size"`
+	CompletedSize int64                       `json:"completed_size"`
+	ErrorMessage  string                      `json:"error_message,omitempty"`
+	CreatedAt     time.Time                   `json:"created_at"`
+	UpdatedAt     time.Time                   `json:"updated_at"`
 }
 
 // File Alist文件信息实体 - 领域层核心实体
 type File struct {
-	Name      string                     `json:"name"`
-	Size      valueobjects.FileSize      `json:"size"`       // 使用值对象
-	IsDir     bool                       `json:"is_dir"`
-	Modified  time.Time                  `json:"modified"`
-	Path      string                     `json:"path"`       // 暂时保持string,避免breaking change
-	URL       string                     `json:"url,omitempty"`
-	MediaType valueobjects.MediaType     `json:"media_type,omitempty"` // 新增:媒体类型
+	Name      string                 `json:"name"`
+	Size      valueobjects.FileSize  `json:"size"` // 使用值对象
+	IsDir     bool                   `json:"is_dir"`
+	Modified  time.Time              `json:"modified"`
+	Path      string                 `json:"path"` // 暂时保持string,避免breaking change
+	URL       string                 `json:"url,omitempty"`
+	MediaType valueobjects.MediaType `json:"media_type,omitempty"` // 新增:媒体类型
 }
 
 // IsVideo 判断是否为视频文件(领域方法)

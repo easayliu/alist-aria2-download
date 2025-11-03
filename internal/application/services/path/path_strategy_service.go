@@ -21,11 +21,11 @@ type PathStrategyService struct {
 	directoryMgr     *filesystem.DirectoryManager
 	varExtractor     *utils.VariableExtractor     // 变量提取器
 	templateRenderer *utils.TemplateRenderer      // 模板渲染器
-	conflictDetector *filesystem.ConflictDetector      // 冲突检测器
-	mappingEngine    *PathMappingEngine     // 映射规则引擎（可选）
-	pathAdapter      *platform.PathAdapter           // 跨平台路径适配器
-	useTemplateMode  bool                   // 是否启用模板模式
-	useMappingMode   bool                   // 是否启用映射规则模式
+	conflictDetector *filesystem.ConflictDetector // 冲突检测器
+	mappingEngine    *PathMappingEngine           // 映射规则引擎（可选）
+	pathAdapter      *platform.PathAdapter        // 跨平台路径适配器
+	useTemplateMode  bool                         // 是否启用模板模式
+	useMappingMode   bool                         // 是否启用映射规则模式
 }
 
 // NewPathStrategyService 创建路径策略服务

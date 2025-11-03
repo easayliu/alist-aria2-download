@@ -90,9 +90,9 @@ func IsSeasonDirectory(dirName string) bool {
 
 	// 检查是否匹配季度模式
 	patterns := []bool{
-		SeasonStrictPattern.MatchString(lowerDir),                          // s1, s01, season 1
-		ChineseSeasonPattern.MatchString(dirName),                          // 第1季, 第一季
-		len(lowerDir) <= 4 && SeasonPattern.MatchString(lowerDir),         // s1, s01 (短格式)
+		SeasonStrictPattern.MatchString(lowerDir),                 // s1, s01, season 1
+		ChineseSeasonPattern.MatchString(dirName),                 // 第1季, 第一季
+		len(lowerDir) <= 4 && SeasonPattern.MatchString(lowerDir), // s1, s01 (短格式)
 	}
 
 	for _, matched := range patterns {

@@ -5,11 +5,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/services/task"
 	"github.com/easayliu/alist-aria2-download/internal/domain/entities"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 )
 
 // TaskCommands handles scheduled task commands
@@ -388,7 +388,7 @@ func (tc *TaskCommands) sendAddTaskHelp(chatID int64) {
 	if defaultPath == "" {
 		defaultPath = "/"
 	}
-	
+
 	message := "<b>添加定时下载任务</b>\n\n" +
 		"<b>命令格式:</b>\n" +
 		"<code>/addtask 名称 cron表达式 [路径] 小时数 是否只视频</code>\n\n" +
@@ -435,7 +435,7 @@ func (tc *TaskCommands) sendAddTaskHelp(chatID int64) {
 		"• <code>30 18 * * *</code> → 每天18:30\n" +
 		"• <code>0 9 * * 1</code> → 每周一9:00\n" +
 		"• <code>0 0 1 * *</code> → 每月1号凌晨"
-	
+
 	tc.messageUtils.SendMessageHTML(chatID, message)
 }
 
@@ -445,7 +445,7 @@ func (tc *TaskCommands) sendQuickTaskHelp(chatID int64) {
 	if defaultPath == "" {
 		defaultPath = "/"
 	}
-	
+
 	message := "<b>快捷定时任务</b>\n\n" +
 		"<b>格式:</b>\n" +
 		"<code>/quicktask 类型 [路径]</code>\n" +
@@ -464,6 +464,6 @@ func (tc *TaskCommands) sendQuickTaskHelp(chatID int64) {
 		"  → 每周一下载默认路径最近7天的视频\n\n" +
 		"<code>/quicktask realtime /热门</code>\n" +
 		"  → 每小时下载/热门最近1小时的视频"
-	
+
 	tc.messageUtils.SendMessageHTML(chatID, message)
 }

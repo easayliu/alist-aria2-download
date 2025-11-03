@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/application/services"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 )
 
 // DownloadCommands handles download-related commands - pure protocol conversion layer

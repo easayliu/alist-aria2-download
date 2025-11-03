@@ -10,7 +10,7 @@ type PathCategoryService struct {
 	// 缓存路径分类结果（路径 -> 分类）
 	categoryCache sync.Map
 	// 缓存小写路径结果（路径 -> 小写路径）
-	lowerCache    sync.Map
+	lowerCache sync.Map
 }
 
 // NewPathCategoryService 创建路径分类服务

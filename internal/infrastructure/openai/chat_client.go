@@ -25,10 +25,11 @@ func NewChatClient(client *Client) *ChatClient {
 // 返回完整的响应结果
 //
 // 使用示例:
-//   messages := []ChatMessage{
-//       {Role: "user", Content: "你好"},
-//   }
-//   resp, err := chatClient.Complete(ctx, messages, WithTemperature(0.8))
+//
+//	messages := []ChatMessage{
+//	    {Role: "user", Content: "你好"},
+//	}
+//	resp, err := chatClient.Complete(ctx, messages, WithTemperature(0.8))
 func (c *ChatClient) Complete(ctx context.Context, messages []ChatMessage, opts ...ChatOption) (*ChatResponse, error) {
 	// 构建请求
 	req := &ChatRequest{
@@ -51,13 +52,14 @@ func (c *ChatClient) Complete(ctx context.Context, messages []ChatMessage, opts 
 // 返回文本流Channel，实时输出生成的文本
 //
 // 使用示例:
-//   textChan, errChan := chatClient.CompleteStream(ctx, messages)
-//   for text := range textChan {
-//       fmt.Print(text) // 实时打印生成的文本
-//   }
-//   if err := <-errChan; err != nil {
-//       log.Fatal(err)
-//   }
+//
+//	textChan, errChan := chatClient.CompleteStream(ctx, messages)
+//	for text := range textChan {
+//	    fmt.Print(text) // 实时打印生成的文本
+//	}
+//	if err := <-errChan; err != nil {
+//	    log.Fatal(err)
+//	}
 func (c *ChatClient) CompleteStream(ctx context.Context, messages []ChatMessage, opts ...ChatOption) (<-chan string, <-chan error) {
 	textChan := make(chan string, 10)
 	errChan := make(chan error, 1)
@@ -174,7 +176,8 @@ func WithTopP(topP float32) ChatOption {
 // 返回助手的回复文本
 //
 // 使用示例:
-//   reply, err := chatClient.SimpleComplete(ctx, "你好，介绍一下自己")
+//
+//	reply, err := chatClient.SimpleComplete(ctx, "你好，介绍一下自己")
 func (c *ChatClient) SimpleComplete(ctx context.Context, userMessage string, opts ...ChatOption) (string, error) {
 	messages := []ChatMessage{
 		{Role: "user", Content: userMessage},
@@ -194,7 +197,8 @@ func (c *ChatClient) SimpleComplete(ctx context.Context, userMessage string, opt
 
 // SimpleCompleteStream 简化的流式完成方法
 // 使用示例:
-//   textChan, errChan := chatClient.SimpleCompleteStream(ctx, "讲个故事")
+//
+//	textChan, errChan := chatClient.SimpleCompleteStream(ctx, "讲个故事")
 func (c *ChatClient) SimpleCompleteStream(ctx context.Context, userMessage string, opts ...ChatOption) (<-chan string, <-chan error) {
 	messages := []ChatMessage{
 		{Role: "user", Content: userMessage},

@@ -315,24 +315,6 @@ func (h *LLMHandler) BatchRenameWithLLM(c *gin.Context) {
 
 // ==================== 辅助方法 ====================
 
-// parseStrategy 解析策略字符串为枚举
-func (h *LLMHandler) parseStrategy(strategy string) contracts.HybridStrategy {
-	switch strategy {
-	case "llm_first":
-		return contracts.LLMFirst
-	case "llm_only":
-		return contracts.LLMOnly
-	case "tmdb_only":
-		return contracts.TMDBOnly
-	case "compare":
-		return contracts.Compare
-	case "tmdb_first", "":
-		return contracts.TMDBFirst
-	default:
-		return contracts.TMDBFirst
-	}
-}
-
 // ==================== 流式重命名端点（带进度回调）====================
 
 // StreamRenameRequest 流式重命名请求

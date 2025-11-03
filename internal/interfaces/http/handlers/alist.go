@@ -5,8 +5,8 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
-	timeutil "github.com/easayliu/alist-aria2-download/pkg/utils/time"
 	httputil "github.com/easayliu/alist-aria2-download/pkg/utils/http"
+	timeutil "github.com/easayliu/alist-aria2-download/pkg/utils/time"
 	"github.com/gin-gonic/gin"
 )
 
@@ -189,7 +189,7 @@ func AlistLogin(c *gin.Context) {
 
 	// 获取token状态
 	hasToken, isValid, expiryTime := client.GetTokenStatus()
-	
+
 	httputil.Success(c, gin.H{
 		"message":     "Connection successful",
 		"has_token":   hasToken,

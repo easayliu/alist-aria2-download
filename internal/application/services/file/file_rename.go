@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
+	"github.com/easayliu/alist-aria2-download/internal/domain/models/rename"
 	"github.com/easayliu/alist-aria2-download/internal/domain/services/filename"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 )
@@ -111,23 +112,8 @@ func (s *AppFileService) GetRenameSuggestions(ctx context.Context, path string) 
 		return nil, fmt.Errorf("failed to get rename suggestions: %w", err)
 	}
 
-	result := make([]contracts.RenameSuggestion, 0, len(suggestions))
-	for _, s := range suggestions {
-		result = append(result, contracts.RenameSuggestion{
-			NewName:    s.NewName,
-			NewPath:    s.NewPath,
-			MediaType:  string(s.MediaType),
-			TMDBID:     s.TMDBID,
-			Title:      s.Title,
-			Year:       s.Year,
-			Season:     s.Season,
-			Episode:    s.Episode,
-			Confidence: s.Confidence,
-		})
-	}
-
-	logger.Debug("Got rename suggestions", "path", path, "count", len(result))
-	return result, nil
+	logger.Debug("Got rename suggestions", "path", path, "count", len(suggestions))
+	return suggestions, nil
 }
 
 func (s *AppFileService) GetBatchRenameSuggestions(ctx context.Context, paths []string) (map[string][]contracts.RenameSuggestion, error) {
@@ -144,7 +130,7 @@ func (s *AppFileService) GetBatchRenameSuggestions(ctx context.Context, paths []
 	firstPath := paths[0]
 	info := s.renameSuggester.ParseFileName(firstPath)
 
-	var suggestionsMap map[string][]SuggestedName
+	var suggestionsMap map[string][]rename.Suggestion
 	var err error
 
 	if info.MediaType == "movie" {
@@ -158,27 +144,8 @@ func (s *AppFileService) GetBatchRenameSuggestions(ctx context.Context, paths []
 		return nil, fmt.Errorf("failed to get batch rename suggestions: %w", err)
 	}
 
-	result := make(map[string][]contracts.RenameSuggestion)
-	for path, suggestions := range suggestionsMap {
-		contractSuggestions := make([]contracts.RenameSuggestion, 0, len(suggestions))
-		for _, s := range suggestions {
-			contractSuggestions = append(contractSuggestions, contracts.RenameSuggestion{
-				NewName:    s.NewName,
-				NewPath:    s.NewPath,
-				MediaType:  string(s.MediaType),
-				TMDBID:     s.TMDBID,
-				Title:      s.Title,
-				Year:       s.Year,
-				Season:     s.Season,
-				Episode:    s.Episode,
-				Confidence: s.Confidence,
-			})
-		}
-		result[path] = contractSuggestions
-	}
-
-	logger.Info("Got batch rename suggestions", "successCount", len(result), "totalFiles", len(paths))
-	return result, nil
+	logger.Info("Got batch rename suggestions", "successCount", len(suggestionsMap), "totalFiles", len(paths))
+	return suggestionsMap, nil
 }
 
 // GetBatchRenameSuggestionsWithLLM 批量重命名建议
@@ -251,14 +218,13 @@ func (s *AppFileService) GetBatchRenameSuggestionsWithLLM(ctx context.Context, p
 			continue
 		}
 
-		// 转换为contracts.RenameSuggestion
-		suggestion := s.convertLLMSuggestionToContract(llmResult.Suggestion, originalPath)
-		result[originalPath] = []contracts.RenameSuggestion{suggestion}
+		// 直接使用 rename.Suggestion（contracts.RenameSuggestion 现在是它的别名）
+		result[originalPath] = []contracts.RenameSuggestion{*llmResult.Suggestion}
 
 		logger.Debug("Successfully processed LLM result",
 			"originalPath", originalPath,
-			"newName", suggestion.NewName,
-			"newPath", suggestion.NewPath)
+			"newName", llmResult.Suggestion.NewName,
+			"newPath", llmResult.Suggestion.NewPath)
 	}
 
 	logger.Info("批量LLM推断完成",
@@ -319,74 +285,4 @@ func buildFileNameRequests(paths []string) []filename.FileNameRequest {
 		})
 	}
 	return requests
-}
-
-// convertLLMSuggestionToContract 转换LLM建议为Contract格式
-func (s *AppFileService) convertLLMSuggestionToContract(
-	suggestion *filename.FileNameSuggestion,
-	originalPath string,
-) contracts.RenameSuggestion {
-	// 保留原始目录,仅使用LLM生成的新文件名
-	originalDir := filepath.Dir(originalPath)
-	extension := filepath.Ext(originalPath)
-
-	var newName string
-	if suggestion.NewFileName != "" {
-		// 使用LLM生成的文件名
-		newName = suggestion.NewFileName
-		logger.Debug("Using LLM generated file name",
-			"originalPath", originalPath,
-			"newFileName", newName)
-	} else {
-		// Fallback: 使用ToEmbyFormat方法生成文件名
-		newName = suggestion.ToEmbyFormat(extension)
-		logger.Debug("LLM did not generate file name, using ToEmbyFormat fallback",
-			"originalPath", originalPath,
-			"newFileName", newName)
-	}
-
-	// 新路径 = 原始目录 + 新文件名
-	newPath := filepath.Join(originalDir, newName)
-
-	result := contracts.RenameSuggestion{
-		NewName:    newName,
-		NewPath:    newPath,
-		MediaType:  suggestion.MediaType,
-		Title:      suggestion.Title,
-		Year:       suggestion.Year,
-		Confidence: float64(suggestion.Confidence),
-	}
-
-	if suggestion.Season != nil {
-		result.Season = *suggestion.Season
-	}
-	if suggestion.Episode != nil {
-		result.Episode = *suggestion.Episode
-	}
-
-	return result
-}
-
-// IsSpecialContent 检查文件名是否为特殊内容
-// 特殊内容包括: 加更、花絮、预告、特辑、综艺衍生内容等
-// 这些内容不适合用TMDB匹配,应该由LLM处理
-func (s *AppFileService) IsSpecialContent(fileName string) bool {
-	specialKeywords := []string{
-		"加更", "花絮", "预告", "片花", "彩蛋", "幕后", "特辑",
-		"番外", "访谈", "采访", "回顾", "精彩", "集锦", "合集",
-		"首映", "特别企划", "收官", "先导",
-		// 综艺衍生内容
-		"超前vlog", "超前营业", "陪看记", "母带放送", "惊喜母带",
-		"独家记忆", "全员花絮", "制作特辑",
-		"vlog", "behind", "making",
-		"trailer", "preview", "bonus", "extra", "special",
-	}
-
-	lowerFileName := strings.ToLower(fileName)
-	for _, keyword := range specialKeywords {
-		if strings.Contains(lowerFileName, keyword) {
-			return true
-		}
-	}
-	return false
 }

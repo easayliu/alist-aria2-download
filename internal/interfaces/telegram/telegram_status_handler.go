@@ -5,9 +5,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 

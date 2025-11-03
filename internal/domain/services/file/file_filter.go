@@ -20,14 +20,14 @@ func NewFileFilter() *FileFilter {
 
 // FilterCriteria 过滤条件
 type FilterCriteria struct {
-	VideoOnly       bool                      // 仅视频文件
-	MediaType       valueobjects.MediaType    // 媒体类型
-	MinSize         valueobjects.FileSize     // 最小文件大小
-	MaxSize         valueobjects.FileSize     // 最大文件大小
-	Extensions      []string                  // 允许的扩展名
-	ExcludePatterns []string                  // 排除的文件名模式
-	TimeRange       *valueobjects.TimeRange   // 修改时间范围
-	ExcludeDirs     bool                      // 排除目录
+	VideoOnly       bool                    // 仅视频文件
+	MediaType       valueobjects.MediaType  // 媒体类型
+	MinSize         valueobjects.FileSize   // 最小文件大小
+	MaxSize         valueobjects.FileSize   // 最大文件大小
+	Extensions      []string                // 允许的扩展名
+	ExcludePatterns []string                // 排除的文件名模式
+	TimeRange       *valueobjects.TimeRange // 修改时间范围
+	ExcludeDirs     bool                    // 排除目录
 }
 
 // Filter 根据条件过滤文件

@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
+	"github.com/easayliu/alist-aria2-download/internal/domain/models/rename"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 )
 
@@ -28,9 +29,9 @@ type SharedContext struct {
 
 // BatchFileNameSuggestion 批量建议结果
 type BatchFileNameSuggestion struct {
-	OriginalName string              `json:"original_name"` // 原始文件名
-	Suggestion   *FileNameSuggestion `json:"suggestion"`    // 推断结果
-	Error        string              `json:"error"`         // 错误信息(如果失败)
+	OriginalName string             `json:"original_name"` // 原始文件名
+	Suggestion   *rename.Suggestion `json:"suggestion"`    // 推断结果
+	Error        string             `json:"error"`         // 错误信息(如果失败)
 }
 
 // BatchSuggestFileNames 批量推断文件名
@@ -87,8 +88,8 @@ func (s *LLMSuggester) smartBatchFiles(files []FileNameRequest) [][]FileNameRequ
 
 	// 对每个季度组估算Token
 	type seasonBatch struct {
-		season       int
-		files        []FileNameRequest
+		season          int
+		files           []FileNameRequest
 		estimatedTokens int
 	}
 
@@ -99,8 +100,8 @@ func (s *LLMSuggester) smartBatchFiles(files []FileNameRequest) [][]FileNameRequ
 			tokens += s.estimateFileTokens(file)
 		}
 		seasonBatches = append(seasonBatches, seasonBatch{
-			season:       season,
-			files:        group,
+			season:          season,
+			files:           group,
 			estimatedTokens: tokens,
 		})
 	}
@@ -194,59 +195,6 @@ func (s *LLMSuggester) calculateOptimalConcurrency(batchCount int) int {
 	return s.batchConfig.MaxConcurrentBatches
 }
 
-// batchFiles 智能分批(旧版,保留兼容)
-// 策略: 按季度分组,每组内再按批次大小分割
-func (s *LLMSuggester) batchFiles(
-	files []FileNameRequest,
-	batchSize int,
-	tokenLimit int,
-) [][]FileNameRequest {
-	// 按季度分组(优化:同季度文件共享更多上下文)
-	seasonGroups := make(map[int][]FileNameRequest)
-	for _, f := range files {
-		season := extractSeasonFromPath(f.FilePath)
-		seasonGroups[season] = append(seasonGroups[season], f)
-	}
-
-	var batches [][]FileNameRequest
-
-	// 对每个季度的文件进行分批
-	for _, group := range seasonGroups {
-		currentBatch := []FileNameRequest{}
-		estimatedTokens := s.batchConfig.BaseTokens // 从配置读取基础Token数
-
-		for _, file := range group {
-			// 估算添加这个文件需要的Token数
-			fileTokens := s.estimateFileTokens(file)
-
-			// 如果添加会超限,开始新批次
-			if estimatedTokens+fileTokens > tokenLimit && len(currentBatch) > 0 {
-				batches = append(batches, currentBatch)
-				currentBatch = []FileNameRequest{}
-				estimatedTokens = s.batchConfig.BaseTokens
-			}
-
-			// 添加文件到当前批次
-			currentBatch = append(currentBatch, file)
-			estimatedTokens += fileTokens
-
-			// 达到批次大小限制
-			if len(currentBatch) >= batchSize {
-				batches = append(batches, currentBatch)
-				currentBatch = []FileNameRequest{}
-				estimatedTokens = s.batchConfig.BaseTokens
-			}
-		}
-
-		// 添加最后一个批次
-		if len(currentBatch) > 0 {
-			batches = append(batches, currentBatch)
-		}
-	}
-
-	return batches
-}
-
 // estimateFileTokens 估算单个文件需要的Token数
 func (s *LLMSuggester) estimateFileTokens(file FileNameRequest) int {
 	// 粗略估算: 1个字符 ≈ 1.3 tokens (英文为主)
@@ -257,8 +205,8 @@ func (s *LLMSuggester) estimateFileTokens(file FileNameRequest) int {
 	chineseCount := countChinese(file.OriginalName)
 	tokens := int(float64(charsCount-chineseCount)*1.3 + float64(chineseCount)*2.5)
 
-	// 加上JSON输出的Token数(约150 tokens/文件)
-	return tokens + 150
+	// 加上JSON输出的Token数
+	return tokens + TokensPerFile
 }
 
 // processBatchesConcurrently 并发处理多个批次
@@ -338,12 +286,12 @@ func (s *LLMSuggester) processSingleBatch(
 			MediaType     string  `json:"media_type"`
 			Title         string  `json:"title"`
 			TitleCN       string  `json:"title_cn"`
-			Year          *int    `json:"year"`          // 改为指针类型,允许null/空
+			Year          *int    `json:"year"` // 改为指针类型,允许null/空
 			Season        *int    `json:"season"`
 			Episode       *int    `json:"episode"`
 			EpisodeTitle  string  `json:"episode_title"`
-			NewFileName   string  `json:"new_file_name"`   // LLM生成的新文件名
-			DirectoryPath string  `json:"directory_path"`  // LLM生成的目录路径
+			NewFileName   string  `json:"new_file_name"`  // LLM生成的新文件名
+			DirectoryPath string  `json:"directory_path"` // LLM生成的目录路径
 			Confidence    float32 `json:"confidence"`
 		} `json:"results"`
 	}
@@ -351,21 +299,17 @@ func (s *LLMSuggester) processSingleBatch(
 	var output BatchOutput
 
 	// 调用LLM生成结构化输出
-	// 动态计算max_tokens: 每个文件约250 tokens (考虑中文和episode_title)
-	// 基础overhead 1000 tokens (包括JSON结构、换行等)
-	maxTokens := len(batch)*250 + 1000
+	// 动态计算max_tokens
+	maxTokens := len(batch)*TokensPerFile + BaseTokenOverhead
 
 	// 设置合理的上下限
-	if maxTokens < 2000 {
-		maxTokens = 2000 // 最小2000
+	if maxTokens < MinTokenLimit {
+		maxTokens = MinTokenLimit
 	}
 
 	// 根据模型能力设置上限
-	// doubao-1.5-pro-32k: 输出可达20k tokens
-	// gpt-4: 输出通常8k-16k tokens
-	// 保守设置为20000,为响应头等预留空间
-	if maxTokens > 20000 {
-		maxTokens = 20000
+	if maxTokens > MaxTokenLimit {
+		maxTokens = MaxTokenLimit
 	}
 
 	logger.Debug("LLM batch request parameters",
@@ -429,6 +373,12 @@ func (s *LLMSuggester) processSingleBatch(
 	}
 
 	// 转换为BatchFileNameSuggestion
+	// 建立OriginalName到FileNameRequest的映射
+	fileRequestMap := make(map[string]FileNameRequest)
+	for _, f := range batch {
+		fileRequestMap[f.OriginalName] = f
+	}
+
 	results := make([]BatchFileNameSuggestion, 0, len(output.Results))
 	for _, r := range output.Results {
 		// 处理year字段(可能为nil)
@@ -437,7 +387,19 @@ func (s *LLMSuggester) processSingleBatch(
 			year = *r.Year
 		}
 
-		suggestion := &FileNameSuggestion{
+		// 从映射中获取原始请求
+		originalReq, found := fileRequestMap[r.OriginalName]
+		if !found {
+			logger.Warn("Cannot find original request for LLM result", "originalName", r.OriginalName)
+			results = append(results, BatchFileNameSuggestion{
+				OriginalName: r.OriginalName,
+				Error:        "未找到原始请求",
+			})
+			continue
+		}
+
+		// 创建临时的FileNameSuggestion用于验证
+		tempSuggestion := &FileNameSuggestion{
 			MediaType:     r.MediaType,
 			Title:         r.Title,
 			TitleCN:       r.TitleCN,
@@ -445,14 +407,14 @@ func (s *LLMSuggester) processSingleBatch(
 			Season:        r.Season,
 			Episode:       r.Episode,
 			EpisodeTitle:  r.EpisodeTitle,
-			NewFileName:   r.NewFileName,   // 使用LLM返回的新文件名
-			DirectoryPath: r.DirectoryPath, // 使用LLM返回的目录路径
+			NewFileName:   r.NewFileName,
+			DirectoryPath: r.DirectoryPath,
 			Confidence:    r.Confidence,
 			Source:        "llm_batch",
 		}
 
 		// 验证输出(使用统一的简化校验)
-		if err := s.validateSuggestion(suggestion); err != nil {
+		if err := s.validateSuggestion(tempSuggestion); err != nil {
 			logger.Warn("Batch inference result validation failed",
 				"originalName", r.OriginalName,
 				"error", err)
@@ -462,6 +424,9 @@ func (s *LLMSuggester) processSingleBatch(
 			})
 			continue
 		}
+
+		// 转换为统一的rename.Suggestion
+		suggestion := s.convertToRenameSuggestion(originalReq, tempSuggestion)
 
 		results = append(results, BatchFileNameSuggestion{
 			OriginalName: r.OriginalName,
@@ -599,7 +564,7 @@ func extractSeasonFromPath(path string) int {
 			}
 		}
 	}
-	return 1 // 默认第一季
+	return DefaultSeason
 }
 
 // parseInt 安全解析整数

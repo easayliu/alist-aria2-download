@@ -11,12 +11,12 @@ import (
 // DownloadFile 下载单个文件
 func (s *AppFileService) DownloadFile(ctx context.Context, req contracts.FileDownloadRequest) (*contracts.DownloadResponse, error) {
 	logger.Debug("Downloading single file", "filePath", req.FilePath)
-	
+
 	// 检查下载服务是否可用
 	if s.downloadService == nil {
 		return nil, fmt.Errorf("download service not available")
 	}
-	
+
 	// 获取文件信息
 	fileInfo, err := s.GetFileInfo(ctx, req.FilePath)
 	if err != nil {

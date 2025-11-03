@@ -7,6 +7,7 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
+	"github.com/easayliu/alist-aria2-download/pkg/utils/media"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
@@ -94,7 +95,7 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 		return
 	}
 
-	const maxDisplayItems = 15
+	const maxDisplayItems = MaxDisplayItems
 	displayCount := 0
 	successCount := 0
 	detailsMessage := ""
@@ -104,7 +105,7 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 		if !found || len(suggestions) == 0 {
 			// 检查是否为特殊内容
 			fileName := filepath.Base(filePath)
-			isSpecial := h.controller.fileService.IsSpecialContent(fileName)
+			isSpecial := media.IsSpecialContent(fileName)
 
 			if isSpecial {
 				logger.Info("LLM无法处理特殊内容", "filePath", filePath)
@@ -215,7 +216,7 @@ func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, mes
 		return
 	}
 
-	const maxDisplayItems = 15
+	const maxDisplayItems = MaxDisplayItems
 	displayCount := 0
 
 	for i, filePath := range videoFiles {
@@ -223,7 +224,7 @@ func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, mes
 		if !found || len(suggestions) == 0 {
 			// 检查是否为特殊内容
 			fileName := filepath.Base(filePath)
-			isSpecial := h.controller.fileService.IsSpecialContent(fileName)
+			isSpecial := media.IsSpecialContent(fileName)
 
 			if isSpecial {
 				logger.Info("LLM无法处理特殊内容", "filePath", filePath)

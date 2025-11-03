@@ -29,7 +29,7 @@ func (s *AppFileService) ListFiles(ctx context.Context, req contracts.FileListRe
 	}
 
 	// 2. AList客户端将自动处理token验证和刷新
-	
+
 	alistResp, err := s.alistClient.ListFiles(req.Path, req.Page, req.PageSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %w", err)
@@ -199,9 +199,9 @@ func (s *AppFileService) SearchFiles(ctx context.Context, req contracts.FileSear
 
 // GetFilesByTimeRange 根据时间范围获取文件
 func (s *AppFileService) GetFilesByTimeRange(ctx context.Context, req contracts.TimeRangeFileRequest) (*contracts.TimeRangeFileResponse, error) {
-	logger.Debug("GetFilesByTimeRange called", 
+	logger.Debug("GetFilesByTimeRange called",
 		"path", req.Path,
-		"startTime", req.StartTime.Format("2006-01-02 15:04:05 -07:00"), 
+		"startTime", req.StartTime.Format("2006-01-02 15:04:05 -07:00"),
 		"endTime", req.EndTime.Format("2006-01-02 15:04:05 -07:00"),
 		"startUnix", req.StartTime.Unix(),
 		"endUnix", req.EndTime.Unix(),
@@ -309,12 +309,12 @@ func (s *AppFileService) collectFilesInTimeRange(ctx context.Context, path strin
 
 	for _, item := range alistResp.Data.Content {
 		fileResp := s.convertToFileResponse(item, path)
-		
+
 		// 检查时间范围
 		inTimeRange := timeutil.IsInRange(fileResp.Modified, startTime, endTime)
-		
-		logger.Debug("Checking item", 
-			"name", item.Name, 
+
+		logger.Debug("Checking item",
+			"name", item.Name,
 			"isDir", item.IsDir,
 			"modified", fileResp.Modified.Format("2006-01-02 15:04:05 -07:00"),
 			"modifiedUnix", fileResp.Modified.Unix(),

@@ -2,12 +2,12 @@ package openai
 
 // ChatRequest Chat请求
 type ChatRequest struct {
-	Model          string          `json:"model"`                    // 模型名称
-	Messages       []ChatMessage   `json:"messages"`                 // 消息列表
-	Temperature    float32         `json:"temperature,omitempty"`    // 温度参数 (0-2)
-	MaxTokens      int             `json:"max_tokens,omitempty"`     // 最大Token数
-	Stream         bool            `json:"stream,omitempty"`         // 是否流式响应
-	TopP           float32         `json:"top_p,omitempty"`          // 核采样参数
+	Model          string          `json:"model"`                     // 模型名称
+	Messages       []ChatMessage   `json:"messages"`                  // 消息列表
+	Temperature    float32         `json:"temperature,omitempty"`     // 温度参数 (0-2)
+	MaxTokens      int             `json:"max_tokens,omitempty"`      // 最大Token数
+	Stream         bool            `json:"stream,omitempty"`          // 是否流式响应
+	TopP           float32         `json:"top_p,omitempty"`           // 核采样参数
 	ResponseFormat *ResponseFormat `json:"response_format,omitempty"` // 响应格式（JSON mode）
 }
 

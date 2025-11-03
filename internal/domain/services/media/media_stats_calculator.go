@@ -16,13 +16,13 @@ func NewMediaStatsCalculator() *MediaStatsCalculator {
 
 // MediaStats 媒体统计结果
 type MediaStats struct {
-	TotalFiles  int                      `json:"total_files"`
-	TotalSize   valueobjects.FileSize    `json:"total_size"`
-	VideoFiles  int                      `json:"video_files"`
-	MovieFiles  int                      `json:"movie_files"`
-	TVFiles     int                      `json:"tv_files"`
-	VarietyFiles int                     `json:"variety_files"`
-	OtherFiles  int                      `json:"other_files"`
+	TotalFiles   int                   `json:"total_files"`
+	TotalSize    valueobjects.FileSize `json:"total_size"`
+	VideoFiles   int                   `json:"video_files"`
+	MovieFiles   int                   `json:"movie_files"`
+	TVFiles      int                   `json:"tv_files"`
+	VarietyFiles int                   `json:"variety_files"`
+	OtherFiles   int                   `json:"other_files"`
 }
 
 // Calculate 计算文件统计信息
@@ -88,12 +88,12 @@ func (c *MediaStatsCalculator) GetCategoryDistribution(files []*entities.File) m
 // GetSizeDistribution 获取大小分布(按MB范围)
 func (c *MediaStatsCalculator) GetSizeDistribution(files []*entities.File) map[string]int {
 	distribution := map[string]int{
-		"< 10MB":      0,
-		"10-100MB":    0,
-		"100MB-1GB":   0,
-		"1-5GB":       0,
-		"5-10GB":      0,
-		"> 10GB":      0,
+		"< 10MB":    0,
+		"10-100MB":  0,
+		"100MB-1GB": 0,
+		"1-5GB":     0,
+		"5-10GB":    0,
+		"> 10GB":    0,
 	}
 
 	for _, file := range files {

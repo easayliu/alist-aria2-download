@@ -99,16 +99,16 @@ type RenameRequest struct {
 }
 
 type RenameResponse struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
 	Data    interface{} `json:"data"`
 }
 
 type MoveRequest struct {
-	SrcDir string   `json:"src_dir"`
-	DstDir string   `json:"dst_dir"`
-	Names  []string `json:"names"`
-	Overwrite bool  `json:"overwrite"`
+	SrcDir    string   `json:"src_dir"`
+	DstDir    string   `json:"dst_dir"`
+	Names     []string `json:"names"`
+	Overwrite bool     `json:"overwrite"`
 }
 
 type MoveResponse struct {

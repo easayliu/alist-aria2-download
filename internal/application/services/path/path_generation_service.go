@@ -13,10 +13,10 @@ import (
 
 // PathGenerationService 路径生成服务 - 专注于下载路径的生成逻辑
 type PathGenerationService struct {
-	config           *config.Config
-	pathStrategy     *PathStrategyService
-	pathCategory     *domainpathservices.PathCategoryService
-	mediaClassifier  *mediaservices.MediaClassificationService
+	config          *config.Config
+	pathStrategy    *PathStrategyService
+	pathCategory    *domainpathservices.PathCategoryService
+	mediaClassifier *mediaservices.MediaClassificationService
 }
 
 // NewPathGenerationService 创建路径生成服务
@@ -108,4 +108,3 @@ func (s *PathGenerationService) extractPathStructure(filePath, pathCategory, bas
 	targetDir := pathutil.JoinPath(baseDir, parentDir)
 	return targetDir
 }
-

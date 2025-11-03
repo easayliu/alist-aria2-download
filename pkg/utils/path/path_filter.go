@@ -15,10 +15,10 @@ var CommonSkipDirs = map[string]bool{
 	"/":  true,
 
 	// 特殊标记
-	"data":     true,
-	"来自：分享":   true,
-	"来自分享":    true,
-	"分享":      true,
+	"data":  true,
+	"来自：分享": true,
+	"来自分享":  true,
+	"分享":    true,
 
 	// 媒体分类目录（英文）
 	"tvs":       true,
@@ -39,27 +39,27 @@ var CommonSkipDirs = map[string]bool{
 	"media":     true,
 
 	// 媒体分类目录（中文）
-	"电视剧":  true,
-	"电影":   true,
-	"动画":   true,
-	"动漫":   true,
-	"长篇剧":  true,
-	"综艺":   true,
-	"娱乐":   true,
-	"视频":   true,
+	"电视剧": true,
+	"电影":  true,
+	"动画":  true,
+	"动漫":  true,
+	"长篇剧": true,
+	"综艺":  true,
+	"娱乐":  true,
+	"视频":  true,
 
 	// 地区分类目录
-	"国产":  true,
-	"华语":  true,
-	"港台":  true,
-	"欧美":  true,
-	"日韩":  true,
-	"日本":  true,
-	"韩国":  true,
-	"美国":  true,
-	"英国":  true,
-	"外语":  true,
-	"其他":  true,
+	"国产":    true,
+	"华语":    true,
+	"港台":    true,
+	"欧美":    true,
+	"日韩":    true,
+	"日本":    true,
+	"韩国":    true,
+	"美国":    true,
+	"英国":    true,
+	"外语":    true,
+	"其他":    true,
 	"other": true,
 
 	// 质量分类目录
@@ -69,9 +69,9 @@ var CommonSkipDirs = map[string]bool{
 	"1080P":  true,
 	"720p":   true,
 	"720P":   true,
-	"高清":    true,
-	"超清":    true,
-	"蓝光":    true,
+	"高清":     true,
+	"超清":     true,
+	"蓝光":     true,
 	"bluray": true,
 }
 

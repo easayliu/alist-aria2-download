@@ -20,12 +20,12 @@ func NewFileStatsService(mediaSvc *FileMediaService) *FileStatsService {
 
 // FileStats 文件统计信息
 type FileStats struct {
-	TotalFiles   int                    `json:"total_files"`
-	TotalSize    int64                  `json:"total_size"`
-	TypeStats    map[string]int         `json:"type_stats"`
-	SizeStats    map[string]int64       `json:"size_stats"`
-	TimeRange    TimeRange              `json:"time_range"`
-	FilesByType  map[string][]FileInfo  `json:"files_by_type"`
+	TotalFiles  int                   `json:"total_files"`
+	TotalSize   int64                 `json:"total_size"`
+	TypeStats   map[string]int        `json:"type_stats"`
+	SizeStats   map[string]int64      `json:"size_stats"`
+	TimeRange   TimeRange             `json:"time_range"`
+	FilesByType map[string][]FileInfo `json:"files_by_type"`
 }
 
 // TimeRange 时间范围
@@ -47,7 +47,7 @@ func (s *FileStatsService) CalculateFileStats(files []FileInfo) FileStats {
 	}
 
 	stats.TotalFiles = len(files)
-	
+
 	// 初始化时间范围
 	stats.TimeRange.Start = files[0].Modified
 	stats.TimeRange.End = files[0].Modified
@@ -58,10 +58,10 @@ func (s *FileStatsService) CalculateFileStats(files []FileInfo) FileStats {
 
 		// 获取媒体类型
 		mediaType := s.mediaSvc.GetMediaType(file.Path)
-		
+
 		// 统计类型数量
 		stats.TypeStats[mediaType]++
-		
+
 		// 统计类型大小
 		stats.SizeStats[mediaType] += file.Size
 
@@ -96,7 +96,7 @@ func (s *FileStatsService) CalculateYesterdayFileStats(files []YesterdayFileInfo
 	}
 
 	stats.TotalFiles = len(files)
-	
+
 	// 初始化时间范围
 	stats.TimeRange.Start = files[0].Modified
 	stats.TimeRange.End = files[0].Modified
@@ -107,10 +107,10 @@ func (s *FileStatsService) CalculateYesterdayFileStats(files []YesterdayFileInfo
 
 		// 获取媒体类型
 		mediaType := s.mediaSvc.GetMediaType(file.Path)
-		
+
 		// 统计类型数量
 		stats.TypeStats[mediaType]++
-		
+
 		// 统计类型大小
 		stats.SizeStats[mediaType] += file.Size
 
@@ -147,7 +147,7 @@ func (s *FileStatsService) CalculateYesterdayFileStats(files []YesterdayFileInfo
 // GetTypeDistribution 获取类型分布信息
 func (s *FileStatsService) GetTypeDistribution(stats FileStats) map[string]float64 {
 	distribution := make(map[string]float64)
-	
+
 	if stats.TotalFiles == 0 {
 		return distribution
 	}
@@ -162,7 +162,7 @@ func (s *FileStatsService) GetTypeDistribution(stats FileStats) map[string]float
 // GetSizeDistribution 获取大小分布信息
 func (s *FileStatsService) GetSizeDistribution(stats FileStats) map[string]float64 {
 	distribution := make(map[string]float64)
-	
+
 	if stats.TotalSize == 0 {
 		return distribution
 	}

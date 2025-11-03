@@ -32,24 +32,24 @@ const (
 type ErrorCode string
 
 const (
-	ErrorCodeInvalidRequest   ErrorCode = "INVALID_REQUEST"
-	ErrorCodeNotFound         ErrorCode = "NOT_FOUND"
-	ErrorCodeUnauthorized     ErrorCode = "UNAUTHORIZED"
-	ErrorCodeForbidden        ErrorCode = "FORBIDDEN"
-	ErrorCodeConflict         ErrorCode = "CONFLICT"
-	ErrorCodeInternalError    ErrorCode = "INTERNAL_ERROR"
+	ErrorCodeInvalidRequest     ErrorCode = "INVALID_REQUEST"
+	ErrorCodeNotFound           ErrorCode = "NOT_FOUND"
+	ErrorCodeUnauthorized       ErrorCode = "UNAUTHORIZED"
+	ErrorCodeForbidden          ErrorCode = "FORBIDDEN"
+	ErrorCodeConflict           ErrorCode = "CONFLICT"
+	ErrorCodeInternalError      ErrorCode = "INTERNAL_ERROR"
 	ErrorCodeServiceUnavailable ErrorCode = "SERVICE_UNAVAILABLE"
-	ErrorCodeTimeout          ErrorCode = "TIMEOUT"
-	ErrorCodeRateLimit        ErrorCode = "RATE_LIMIT"
-	ErrorCodeQuotaExceeded    ErrorCode = "QUOTA_EXCEEDED"
+	ErrorCodeTimeout            ErrorCode = "TIMEOUT"
+	ErrorCodeRateLimit          ErrorCode = "RATE_LIMIT"
+	ErrorCodeQuotaExceeded      ErrorCode = "QUOTA_EXCEEDED"
 )
 
 // ServiceError 业务错误
 type ServiceError struct {
-	Code    ErrorCode `json:"code"`
-	Message string    `json:"message"`
+	Code    ErrorCode              `json:"code"`
+	Message string                 `json:"message"`
 	Details map[string]interface{} `json:"details,omitempty"`
-	Cause   error     `json:"-"`
+	Cause   error                  `json:"-"`
 }
 
 func (e *ServiceError) Error() string {
@@ -103,11 +103,11 @@ type ComponentHealth struct {
 
 // SystemHealth 系统健康状态
 type SystemHealth struct {
-	Status     HealthStatus       `json:"status"`
-	Components []ComponentHealth  `json:"components"`
-	Timestamp  time.Time          `json:"timestamp"`
-	Uptime     time.Duration      `json:"uptime"`
-	Version    string             `json:"version"`
+	Status     HealthStatus      `json:"status"`
+	Components []ComponentHealth `json:"components"`
+	Timestamp  time.Time         `json:"timestamp"`
+	Uptime     time.Duration     `json:"uptime"`
+	Version    string            `json:"version"`
 }
 
 // Metrics 系统指标
@@ -117,24 +117,24 @@ type Metrics struct {
 	ErrorCount     int64     `json:"error_count"`
 	ResponseTimeMs int64     `json:"response_time_ms"`
 	Timestamp      time.Time `json:"timestamp"`
-	
+
 	// 下载指标
 	ActiveDownloads    int   `json:"active_downloads,omitempty"`
 	CompletedDownloads int64 `json:"completed_downloads,omitempty"`
 	FailedDownloads    int64 `json:"failed_downloads,omitempty"`
 	TotalDownloadSize  int64 `json:"total_download_size,omitempty"`
 	AvgDownloadSpeed   int64 `json:"avg_download_speed,omitempty"`
-	
+
 	// 任务指标
 	ActiveTasks    int   `json:"active_tasks,omitempty"`
 	CompletedTasks int64 `json:"completed_tasks,omitempty"`
 	FailedTasks    int64 `json:"failed_tasks,omitempty"`
-	
+
 	// 系统指标
 	CPUUsage    float64 `json:"cpu_usage,omitempty"`
 	MemoryUsage int64   `json:"memory_usage,omitempty"`
 	DiskUsage   int64   `json:"disk_usage,omitempty"`
-	
+
 	// 自定义指标
 	Custom map[string]interface{} `json:"custom,omitempty"`
 }
@@ -161,7 +161,7 @@ func NewPaginationResponse(page, pageSize, total int) PaginationResponse {
 	if totalPages == 0 {
 		totalPages = 1
 	}
-	
+
 	return PaginationResponse{
 		Page:       page,
 		PageSize:   pageSize,
