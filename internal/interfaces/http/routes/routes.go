@@ -29,6 +29,7 @@ func (rc *RoutesConfig) SetupRoutes(router *gin.Engine) {
 	fileHandler := handlers.NewFileHandler(rc.container)
 	taskHandler := handlers.NewTaskHandler(rc.container)
 	alistHandler := handlers.NewAlistHandler(rc.container)
+	llmHandler := handlers.NewLLMHandler(rc.container)
 
 	router.GET("/health", handlers.HealthCheck)
 
@@ -67,6 +68,10 @@ func (rc *RoutesConfig) SetupRoutes(router *gin.Engine) {
 		files.POST("/classify", fileHandler.ClassifyFiles)
 		files.GET("/category/:category", fileHandler.GetFilesByCategory)
 		files.POST("/single-download", fileHandler.DownloadSingleFile)
+		// LLM增强的文件重命名路由
+		files.POST("/rename-with-llm", llmHandler.RenameWithLLM)
+		files.POST("/batch-rename-with-llm", llmHandler.BatchRenameWithLLM)
+		files.POST("/rename-stream", llmHandler.StreamRename)
 	}
 
 	tasks := router.Group("/tasks")
@@ -97,6 +102,13 @@ func (rc *RoutesConfig) SetupRoutes(router *gin.Engine) {
 		notifications.POST("/task-failed", notificationHandler.NotifyTaskFailed)
 		notifications.POST("/system-event", notificationHandler.NotifySystemEvent)
 		notifications.GET("/config", notificationHandler.GetNotificationConfig)
+	}
+
+	// LLM路由组
+	llm := router.Group("/llm")
+	{
+		llm.POST("/generate", llmHandler.Generate)
+		llm.GET("/stream", llmHandler.Stream)
 	}
 }
 

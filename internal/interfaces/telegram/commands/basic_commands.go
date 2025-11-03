@@ -74,8 +74,13 @@ func (bc *BasicCommands) buildHelpContent(includeBackButton bool) (string, tgbot
 		"使用下方键盘按钮进行常用操作\n\n" +
 		"<b>文件操作命令:</b>\n" +
 		"/list [path] - 列出指定路径的文件\n" +
-		"/rename &lt;path&gt; - 智能重命名文件（TMDB）\n" +
+		"/rename &lt;path&gt; [--llm] [--strategy=xxx] - 智能重命名文件\n" +
+		"/llmrename &lt;path&gt; [策略] - 使用LLM推断文件名\n" +
 		"/cancel &lt;id&gt; - 取消下载任务\n\n" +
+		"<b>LLM重命名说明:</b>\n" +
+		"• /rename 默认使用TMDB，可添加 --llm 启用LLM\n" +
+		"• /llmrename 专用LLM重命名命令\n" +
+		"• 支持策略: tmdb_first, llm_first, llm_only, tmdb_only, compare\n\n" +
 		"<b>下载命令（支持多种格式）:</b>\n" +
 		"• <code>/download</code> - 预览最近24小时的视频文件（使用 <code>/download confirm</code> 开始下载）\n" +
 		"• <code>/download 48</code> - 预览最近48小时的视频文件（使用 <code>/download confirm 48</code> 下载）\n" +
@@ -143,9 +148,9 @@ func (bc *BasicCommands) HandleStatus(chatID int64) {
 		return
 	}
 
-	aria2Info := status["aria2"].(map[string]interface{})
-	telegramInfo := status["telegram"].(map[string]interface{})
-	serverInfo := status["server"].(map[string]interface{})
+	aria2Info := status["aria2"].(map[string]any)
+	telegramInfo := status["telegram"].(map[string]any)
+	serverInfo := status["server"].(map[string]any)
 
 	// Use unified formatter
 	formatter := bc.messageUtils.GetFormatter().(*utils.MessageFormatter)
@@ -294,18 +299,18 @@ func (bc *BasicCommands) HandleAlistLogin(chatID int64) {
 // HandleHealthCheck handles health check
 func (bc *BasicCommands) HandleHealthCheck(chatID int64) {
 	message := "<b>系统健康检查</b>\n\n"
-	message += fmt.Sprintf("服务状态: 正常\n")
+	message += "服务状态: 正常\n"
 	message += fmt.Sprintf("端口: %s\n", bc.config.Server.Port)
 	message += fmt.Sprintf("模式: %s\n", bc.config.Server.Mode)
-	message += fmt.Sprintf("\nAlist配置:\n")
+	message += "\nAlist配置:\n"
 	message += fmt.Sprintf("地址: %s\n", bc.config.Alist.BaseURL)
 	message += fmt.Sprintf("默认路径: %s\n", bc.config.Alist.DefaultPath)
-	message += fmt.Sprintf("\nAria2配置:\n")
+	message += "\nAria2配置:\n"
 	message += fmt.Sprintf("RPC地址: %s\n", bc.config.Aria2.RpcURL)
 	message += fmt.Sprintf("下载目录: %s\n", bc.config.Aria2.DownloadDir)
 
 	// Add system runtime information
-	message += fmt.Sprintf("\n系统信息:\n")
+	message += "\n系统信息:\n"
 	message += fmt.Sprintf("运行时间: %s\n", runtime.GOOS)
 	message += fmt.Sprintf("架构: %s\n", runtime.GOARCH)
 	message += fmt.Sprintf("Go版本: %s\n", runtime.Version())

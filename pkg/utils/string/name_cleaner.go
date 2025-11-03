@@ -134,17 +134,8 @@ func CleanShowName(name string) string {
 	}
 
 	// 6. 智能处理点号和特殊字符
-	// 对于包含中文的情况，保留点号（如：玩具总动员.1-4+番外）
-	// 对于纯英文的情况，可以移除点号
-	if containsChinese(cleaned) {
-		// 保留点号，只移除多余的连续点号
-		cleaned = regexp.MustCompile(`\.{2,}`).ReplaceAllString(cleaned, ".")
-		// 移除开头和结尾的点号
-		cleaned = strings.Trim(cleaned, ".")
-	} else {
-		// 纯英文内容，移除所有点号
-		cleaned = strings.ReplaceAll(cleaned, ".", "")
-	}
+	// 移除所有点号（无论是否包含中文）
+	cleaned = strings.ReplaceAll(cleaned, ".", "")
 
 	cleaned = strings.ReplaceAll(cleaned, ":", "")   // 英文冒号
 	cleaned = strings.ReplaceAll(cleaned, "：", "")  // 中文冒号

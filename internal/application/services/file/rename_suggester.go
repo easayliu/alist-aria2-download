@@ -179,6 +179,30 @@ func (rs *RenameSuggester) ParseFileName(fullPath string) *MediaInfo {
 func (rs *RenameSuggester) SearchAndSuggest(ctx context.Context, fullPath string) ([]SuggestedName, error) {
 	info := rs.ParseFileName(fullPath)
 
+	// 对于TV剧集,优先从路径中提取剧集名和季度
+	if info.MediaType == tmdb.MediaTypeTV {
+		showName, pathSeason := rs.extractTVInfoFromPath(fullPath)
+
+		// 如果从路径中成功提取了剧集名,使用它替代从文件名提取的标题
+		if showName != "" {
+			logger.Info("使用从路径提取的剧集名",
+				"originalTitle", info.Title,
+				"pathShowName", showName,
+				"pathSeason", pathSeason,
+				"fileNameSeason", info.Season)
+			info.Title = showName
+		}
+
+		// 如果从路径中提取了季度,优先使用路径季度
+		if pathSeason > 0 {
+			info.Season = pathSeason
+		}
+
+		// 重置年份(避免从文件名中错误提取的年份,如2160p被识别为年份)
+		// TV剧集的年份应该从TMDB查询结果中获取
+		info.Year = 0
+	}
+
 	logger.Info("TMDB search started",
 		"path", fullPath,
 		"title", info.Title,
@@ -425,8 +449,12 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 		season int
 	}
 
+	// 用于记录季度目录的索引
+	seasonDirIndex := -1
+
 	logger.Debug("Extracting TV info from path", "fullPath", fullPath, "parts", parts)
 
+	// 第一遍:找到季度目录的位置
 	for i := len(parts) - 1; i >= 0; i-- {
 		part := parts[i]
 
@@ -434,10 +462,56 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 			continue
 		}
 
+		// 检查是否是纯季度目录(如 S05, Season 5)
+		if strutil.IsSeasonDirectory(part) {
+			seasonDirIndex = i
+			// 尝试提取季度数字
+			seasonPattern := strutil.SeasonPattern
+			if match := seasonPattern.FindStringSubmatch(strings.ToLower(part)); len(match) > 1 {
+				if num, err := strconv.Atoi(match[1]); err == nil {
+					season = num
+					logger.Debug("Found season directory", "part", part, "season", season, "index", i)
+					break
+				}
+			}
+		}
+	}
+
+	// 第二遍:处理所有目录部分
+	for i := len(parts) - 1; i >= 0; i-- {
+		part := parts[i]
+
+		if part == "" || part == "data" || part == "来自：分享" || part == "tvs" || part == "剧集" || part == "电视剧" {
+			continue
+		}
+
+		// 跳过文件名本身
 		if strings.Contains(part, ".") && i == len(parts)-1 {
 			continue
 		}
 
+		// 如果找到了季度目录,优先从季度目录的上一级提取剧集名
+		if seasonDirIndex > 0 && i == seasonDirIndex-1 {
+			// 这个目录应该是剧集名目录
+			if !rs.isQualityOrFormatDir(part) {
+				// 直接使用这个目录名作为剧集名(清理后)
+				cleaned := strutil.CleanShowName(part)
+				if cleaned != "" && len(cleaned) > 1 {
+					showName = cleaned
+					logger.Info("Found show name from parent of season directory",
+						"seasonDir", parts[seasonDirIndex],
+						"showDir", part,
+						"cleanedShowName", showName)
+					// 找到了剧集名,可以直接返回
+					if season == 0 {
+						season = 1
+					}
+					return
+				}
+			}
+		}
+
+		// 处理中文季度格式(如 "重影第一季")
 		if strings.Contains(part, "第") && (strings.Contains(part, "季") || strings.Contains(part, "部")) {
 			chineseNumMap := map[string]int{
 				"一": 1, "二": 2, "三": 3, "四": 4, "五": 5,
@@ -463,6 +537,7 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 			}
 		}
 
+		// 处理合集格式(如 "重影全3季")
 		if strings.Contains(part, "全") && strings.Contains(part, "季") {
 			collectionRegex := regexp.MustCompile(`^(.+?)\s*全\d+`)
 			if match := collectionRegex.FindStringSubmatch(part); len(match) > 1 {
@@ -473,6 +548,7 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 			}
 		}
 
+		// 如果还没找到季度,继续从目录名中提取
 		if season == 0 {
 			seasonPattern := strutil.SeasonPattern
 			if match := seasonPattern.FindStringSubmatch(strings.ToLower(part)); len(match) > 1 {
@@ -483,10 +559,12 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 			}
 		}
 
+		// 跳过质量/格式目录
 		if rs.isQualityOrFormatDir(part) {
 			continue
 		}
 
+		// 检查是否是季度目录(第二次检查,针对非纯季度目录)
 		seasonPattern := strutil.SeasonStrictPattern
 		if match := seasonPattern.FindStringSubmatch(strings.ToLower(part)); len(match) > 1 {
 			if num, err := strconv.Atoi(match[1]); err == nil && season == 0 {
@@ -496,6 +574,7 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 			continue
 		}
 
+		// 收集可能的剧集名候选
 		if !strutil.IsSeasonDirectory(part) && !strings.Contains(part, "全") && !rs.isQualityOrFormatDir(part) {
 			cleaned := strutil.CleanShowName(part)
 			if cleaned != "" && len(cleaned) > 1 {
@@ -514,11 +593,13 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 		}
 	}
 
-	if len(candidates) > 0 {
+	// 如果还没有找到剧集名,从候选列表中选择
+	if showName == "" && len(candidates) > 0 {
 		showName = candidates[len(candidates)-1]
 		logger.Debug("Selected show name from candidates", "showName", showName, "totalCandidates", len(candidates))
 	}
 
+	// 如果有季度候选且还没确定季度,使用第一个季度候选
 	if len(seasonCandidates) > 0 && season == 0 {
 		bottomCandidate := seasonCandidates[0]
 		season = bottomCandidate.season
@@ -528,6 +609,7 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 			"seasonDirName", bottomCandidate.name)
 	}
 
+	// 默认季度为1
 	if season == 0 {
 		season = 1
 		logger.Debug("Defaulting to season 1", "showName", showName)
@@ -740,32 +822,15 @@ func (rs *RenameSuggester) getPartIndex(part string, totalEpisodes int) int {
 }
 
 func (rs *RenameSuggester) buildEmbyPath(originalPath string, seriesName string, year, season int, fileName string) string {
+	// 保留原目录，只修改文件名
 	dir := filepath.Dir(originalPath)
-
-	var seriesDir string
-	if year > 0 {
-		seriesDir = fmt.Sprintf("%s (%d)", seriesName, year)
-	} else {
-		seriesDir = seriesName
-	}
-
-	seasonDir := fmt.Sprintf("Season %02d", season)
-
-	parentDir := filepath.Dir(filepath.Dir(dir))
-	return filepath.Join(parentDir, seriesDir, seasonDir, fileName)
+	return filepath.Join(dir, fileName)
 }
 
 func (rs *RenameSuggester) buildMoviePath(fullPath, movieTitle string, year int, fileName string) string {
-	parentDir := filepath.Dir(filepath.Dir(fullPath))
-
-	var movieDir string
-	if year > 0 {
-		movieDir = fmt.Sprintf("%s (%d)", movieTitle, year)
-	} else {
-		movieDir = movieTitle
-	}
-
-	return filepath.Join(parentDir, movieDir, fileName)
+	// 保留原目录，只修改文件名
+	dir := filepath.Dir(fullPath)
+	return filepath.Join(dir, fileName)
 }
 
 func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []string) (map[string][]SuggestedName, error) {

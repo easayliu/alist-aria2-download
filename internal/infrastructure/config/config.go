@@ -1,6 +1,8 @@
 package config
 
 import (
+	"fmt"
+
 	"github.com/spf13/viper"
 )
 
@@ -13,6 +15,7 @@ type Config struct {
 	Download  DownloadConfig  `mapstructure:"download"`
 	Scheduler SchedulerConfig `mapstructure:"scheduler"`
 	TMDB      TMDBConfig      `mapstructure:"tmdb"`
+	LLM       LLMConfig       `mapstructure:"llm"`
 }
 
 type ServerConfig struct {
@@ -103,6 +106,90 @@ type TMDBConfig struct {
 	QualityDirPatterns    []string `mapstructure:"quality_dir_patterns"`
 }
 
+// LLMConfig LLM配置
+type LLMConfig struct {
+	Enabled   bool              `mapstructure:"enabled"`    // 是否启用LLM功能
+	Provider  string            `mapstructure:"provider"`   // 提供商: openai, anthropic, ollama, custom
+	OpenAI    OpenAIConfig      `mapstructure:"openai"`     // OpenAI配置
+	Anthropic AnthropicConfig   `mapstructure:"anthropic"`  // Anthropic配置(预留)
+	Ollama    OllamaConfig      `mapstructure:"ollama"`     // Ollama配置(预留)
+	Features  LLMFeatures       `mapstructure:"features"`   // 功能开关
+	Batch     LLMBatchConfig    `mapstructure:"batch"`      // 批处理配置
+}
+
+// OpenAIConfig OpenAI配置
+type OpenAIConfig struct {
+	APIKey      string  `mapstructure:"api_key"`      // API密钥
+	BaseURL     string  `mapstructure:"base_url"`     // API基础URL,支持第三方API
+	Model       string  `mapstructure:"model"`        // 模型名称
+	Temperature float32 `mapstructure:"temperature"`  // 温度参数
+	MaxTokens   int     `mapstructure:"max_tokens"`   // 最大Token数
+	Timeout     int     `mapstructure:"timeout"`      // 超时时间(秒)
+	QPS         int     `mapstructure:"qps"`          // 每秒请求数限制
+}
+
+// AnthropicConfig Anthropic配置(预留)
+type AnthropicConfig struct {
+	APIKey string `mapstructure:"api_key"` // API密钥
+	Model  string `mapstructure:"model"`   // 模型名称
+}
+
+// OllamaConfig Ollama配置(预留)
+type OllamaConfig struct {
+	BaseURL string `mapstructure:"base_url"` // 服务地址
+	Model   string `mapstructure:"model"`    // 模型名称
+}
+
+// LLMFeatures LLM功能开关
+type LLMFeatures struct {
+	FileNaming      bool `mapstructure:"file_naming"`      // 文件命名
+	ContentAnalysis bool `mapstructure:"content_analysis"` // 内容分析
+	AutoTagging     bool `mapstructure:"auto_tagging"`     // 自动标签
+}
+
+// LLMBatchConfig LLM批处理配置
+type LLMBatchConfig struct {
+	BatchSize            int  `mapstructure:"batch_size"`             // 每批文件数量，默认8
+	TokenLimit           int  `mapstructure:"token_limit"`            // 单批Token限制，默认4000
+	MaxConcurrentBatches int  `mapstructure:"max_concurrent_batches"` // 最大并发批次数，默认3
+	BaseTokens           int  `mapstructure:"base_tokens"`            // 基础Prompt Token估算，默认300
+	EnableSeasonGrouping bool `mapstructure:"enable_season_grouping"` // 是否启用按季度分组，默认true
+}
+
+// Validate 验证LLM配置
+func (cfg *LLMConfig) Validate() error {
+	if !cfg.Enabled {
+		return nil // 未启用不需要验证
+	}
+
+	switch cfg.Provider {
+	case "openai":
+		if cfg.OpenAI.APIKey == "" {
+			return fmt.Errorf("OpenAI API Key未配置")
+		}
+		if cfg.OpenAI.BaseURL == "" {
+			return fmt.Errorf("OpenAI BaseURL未配置")
+		}
+		if cfg.OpenAI.Model == "" {
+			return fmt.Errorf("OpenAI Model未配置")
+		}
+	case "anthropic":
+		if cfg.Anthropic.APIKey == "" {
+			return fmt.Errorf("Anthropic API Key未配置")
+		}
+		return fmt.Errorf("Anthropic provider尚未实现")
+	case "ollama":
+		if cfg.Ollama.BaseURL == "" {
+			return fmt.Errorf("Ollama BaseURL未配置")
+		}
+		return fmt.Errorf("Ollama provider尚未实现")
+	default:
+		return fmt.Errorf("不支持的Provider: %s", cfg.Provider)
+	}
+
+	return nil
+}
+
 func LoadConfig() (*Config, error) {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
@@ -177,6 +264,22 @@ func LoadConfig() (*Config, error) {
 		`(?i)IMAX`,
 		`(?i)Atmos`,
 	})
+
+	// LLM配置默认值
+	viper.SetDefault("llm.enabled", false)
+	viper.SetDefault("llm.provider", "openai")
+	viper.SetDefault("llm.openai.base_url", "https://api.openai.com/v1")
+	viper.SetDefault("llm.openai.model", "gpt-3.5-turbo")
+	viper.SetDefault("llm.openai.temperature", 0.3)
+	viper.SetDefault("llm.openai.max_tokens", 1000)
+	viper.SetDefault("llm.openai.timeout", 60)
+	viper.SetDefault("llm.openai.qps", 10)
+	viper.SetDefault("llm.anthropic.model", "claude-3-sonnet-20240229")
+	viper.SetDefault("llm.ollama.base_url", "http://localhost:11434")
+	viper.SetDefault("llm.ollama.model", "llama2")
+	viper.SetDefault("llm.features.file_naming", true)
+	viper.SetDefault("llm.features.content_analysis", false)
+	viper.SetDefault("llm.features.auto_tagging", false)
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

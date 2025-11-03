@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
@@ -67,7 +68,7 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 	}, 0, len(videoFiles))
 
 	message := "<b>📝 批量重命名预览</b>\n\n"
-	message += fmt.Sprintf("找到 %d 个视频文件，正在从 TMDB 获取建议...", len(videoFiles))
+	message += fmt.Sprintf("找到 %d 个视频文件，正在获取重命名建议...", len(videoFiles))
 
 	if messageID > 0 {
 		h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", nil)
@@ -75,7 +76,13 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 
 	message = "<b>📝 批量重命名预览</b>\n\n"
 
-	suggestionsMap, err := h.controller.fileService.GetBatchRenameSuggestions(ctx, videoFiles)
+	// 使用LLM批量重命名(LLM启用时纯LLM,未启用时用TMDB)
+	suggestionsMap, usedLLM, err := h.controller.fileService.GetBatchRenameSuggestionsWithLLM(ctx, videoFiles)
+	if usedLLM {
+		message += "🤖 使用LLM智能重命名\n\n"
+	} else {
+		message += "🎬 使用TMDB重命名\n\n"
+	}
 	if err != nil {
 		message += fmt.Sprintf("❌ 批量获取建议失败: %s\n", h.controller.messageUtils.EscapeHTML(err.Error()))
 		if messageID > 0 {
@@ -95,11 +102,25 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 	for i, filePath := range videoFiles {
 		suggestions, found := suggestionsMap[filePath]
 		if !found || len(suggestions) == 0 {
-			logger.Warn("No TMDB suggestions found", "filePath", filePath)
+			// 检查是否为特殊内容
+			fileName := filepath.Base(filePath)
+			isSpecial := h.controller.fileService.IsSpecialContent(fileName)
+
+			if isSpecial {
+				logger.Info("LLM无法处理特殊内容", "filePath", filePath)
+			} else {
+				logger.Warn("无法获取重命名建议", "filePath", filePath)
+			}
+
 			if displayCount < maxDisplayItems {
-				detailsMessage += fmt.Sprintf("%d. ❌ <code>%s</code>\n   未找到匹配的电影/剧集\n\n",
+				reason := "未找到匹配的电影/剧集"
+				if isSpecial {
+					reason = "特殊内容暂不支持重命名"
+				}
+				detailsMessage += fmt.Sprintf("%d. ⚠️ <code>%s</code>\n   %s\n\n",
 					i+1,
-					h.controller.messageUtils.EscapeHTML(filePath))
+					h.controller.messageUtils.EscapeHTML(filepath.Base(filePath)),
+					reason)
 				displayCount++
 			}
 			renamePairs = append(renamePairs, struct {
@@ -181,7 +202,13 @@ func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, mes
 	failCount := 0
 	results := "<b>📝 批量重命名结果</b>\n\n"
 
-	suggestionsMap, err := h.controller.fileService.GetBatchRenameSuggestions(ctx, videoFiles)
+	// 使用LLM批量重命名(LLM启用时纯LLM,未启用时用TMDB)
+	suggestionsMap, usedLLM, err := h.controller.fileService.GetBatchRenameSuggestionsWithLLM(ctx, videoFiles)
+	if usedLLM {
+		results += "🤖 使用LLM智能重命名\n\n"
+	} else {
+		results += "🎬 使用TMDB重命名\n\n"
+	}
 	if err != nil {
 		h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID,
 			fmt.Sprintf("❌ 批量获取建议失败: %s", err.Error()), "HTML", nil)
@@ -194,11 +221,25 @@ func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, mes
 	for i, filePath := range videoFiles {
 		suggestions, found := suggestionsMap[filePath]
 		if !found || len(suggestions) == 0 {
-			logger.Warn("No TMDB suggestions for batch rename", "filePath", filePath)
+			// 检查是否为特殊内容
+			fileName := filepath.Base(filePath)
+			isSpecial := h.controller.fileService.IsSpecialContent(fileName)
+
+			if isSpecial {
+				logger.Info("LLM无法处理特殊内容", "filePath", filePath)
+			} else {
+				logger.Warn("无法获取重命名建议", "filePath", filePath)
+			}
+
 			if displayCount < maxDisplayItems {
-				results += fmt.Sprintf("%d. ❌ <code>%s</code>\n   未找到匹配的电影/剧集\n\n",
+				reason := "未找到匹配的电影/剧集"
+				if isSpecial {
+					reason = "特殊内容暂不支持重命名"
+				}
+				results += fmt.Sprintf("%d. ⚠️ <code>%s</code>\n   %s\n\n",
 					i+1,
-					h.controller.messageUtils.EscapeHTML(filePath))
+					h.controller.messageUtils.EscapeHTML(filepath.Base(filePath)),
+					reason)
 				displayCount++
 			}
 			failCount++

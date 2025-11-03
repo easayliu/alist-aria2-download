@@ -14,14 +14,14 @@ import (
 
 // Client Alist客户端
 type Client struct {
-	BaseURL      string
-	Username     string
-	Password     string
-	Token        string
-	TokenExpiry  time.Time // Token过期时间
-	httpClient   *http.Client
-	rateLimiter  *ratelimit.RateLimiter
-	tokenMutex   sync.RWMutex // 保护token的读写
+	BaseURL     string
+	Username    string
+	Password    string
+	Token       string
+	TokenExpiry time.Time // Token过期时间
+	httpClient  *http.Client
+	rateLimiter *ratelimit.RateLimiter
+	tokenMutex  sync.RWMutex // 保护token的读写
 }
 
 // LoginRequest 登录请求结构
@@ -116,9 +116,9 @@ func (c *Client) LoginWithContext(ctx context.Context) error {
 
 	c.tokenMutex.Lock()
 	defer c.tokenMutex.Unlock()
-	
+
 	c.Token = loginResp.Data.Token
-	
+
 	// 设置token过期时间，默认1小时后过期
 	if loginResp.Data.ExpireAt != "" {
 		if expiry, err := time.Parse(time.RFC3339, loginResp.Data.ExpireAt); err == nil {
@@ -131,7 +131,7 @@ func (c *Client) LoginWithContext(ctx context.Context) error {
 		// 没有过期时间信息，设置默认1小时过期
 		c.TokenExpiry = time.Now().Add(1 * time.Hour)
 	}
-	
+
 	return nil
 }
 
@@ -139,7 +139,7 @@ func (c *Client) LoginWithContext(ctx context.Context) error {
 func (c *Client) isTokenValid() bool {
 	c.tokenMutex.RLock()
 	defer c.tokenMutex.RUnlock()
-	
+
 	return c.Token != "" && time.Now().Before(c.TokenExpiry)
 }
 
@@ -148,7 +148,7 @@ func (c *Client) ensureValidToken(ctx context.Context) error {
 	if c.isTokenValid() {
 		return nil
 	}
-	
+
 	// token无效，需要重新登录
 	return c.LoginWithContext(ctx)
 }
@@ -157,7 +157,7 @@ func (c *Client) ensureValidToken(ctx context.Context) error {
 func (c *Client) ClearToken() {
 	c.tokenMutex.Lock()
 	defer c.tokenMutex.Unlock()
-	
+
 	c.Token = ""
 	c.TokenExpiry = time.Time{}
 }
@@ -166,11 +166,11 @@ func (c *Client) ClearToken() {
 func (c *Client) GetTokenStatus() (hasToken bool, isValid bool, expiryTime time.Time) {
 	c.tokenMutex.RLock()
 	defer c.tokenMutex.RUnlock()
-	
+
 	hasToken = c.Token != ""
 	isValid = hasToken && time.Now().Before(c.TokenExpiry)
 	expiryTime = c.TokenExpiry
-	
+
 	return
 }
 
@@ -208,7 +208,7 @@ func (c *Client) makeRequestWithContext(ctx context.Context, method, endpoint st
 	}
 
 	err := httputil.DoJSONRequest(method, c.BaseURL+endpoint, reqBody, respBody, opts)
-	
+
 	// 如果是认证错误，尝试重新登录后再试一次
 	if err != nil && isAuthError(err) {
 		// 强制重新登录
@@ -216,24 +216,24 @@ func (c *Client) makeRequestWithContext(ctx context.Context, method, endpoint st
 		c.Token = ""
 		c.TokenExpiry = time.Time{}
 		c.tokenMutex.Unlock()
-		
+
 		// 重新获取token
 		if loginErr := c.ensureValidToken(ctx); loginErr != nil {
 			return fmt.Errorf("failed to refresh token after auth error: %w", loginErr)
 		}
-		
+
 		// 获取新token重试请求
 		c.tokenMutex.RLock()
 		newToken := c.Token
 		c.tokenMutex.RUnlock()
-		
+
 		if newToken != "" {
 			opts = opts.WithHeader("Authorization", newToken)
 		}
-		
+
 		err = httputil.DoJSONRequest(method, c.BaseURL+endpoint, reqBody, respBody, opts)
 	}
-	
+
 	return err
 }
 
@@ -244,11 +244,11 @@ func isAuthError(err error) bool {
 	}
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "401") ||
-		   strings.Contains(errStr, "unauthorized") ||
-		   strings.Contains(errStr, "invalid token") ||
-		   strings.Contains(errStr, "token expired") ||
-		   strings.Contains(errStr, "token is invalidated") ||
-		   strings.Contains(errStr, "invalidated")
+		strings.Contains(errStr, "unauthorized") ||
+		strings.Contains(errStr, "invalid token") ||
+		strings.Contains(errStr, "token expired") ||
+		strings.Contains(errStr, "token is invalidated") ||
+		strings.Contains(errStr, "invalidated")
 }
 
 // ListFiles 获取文件列表
@@ -344,9 +344,8 @@ func (c *Client) Rename(path, newName string) error {
 
 func (c *Client) RenameWithContext(ctx context.Context, path, newName string) error {
 	reqData := RenameRequest{
-		Path:      path,
-		Name:      newName,
-		Overwrite: true,
+		Path: path,
+		Name: newName,
 	}
 
 	var renameResp RenameResponse
@@ -375,9 +374,9 @@ func (c *Client) RenameWithContext(ctx context.Context, path, newName string) er
 
 func (c *Client) Move(ctx context.Context, srcDir, dstDir string, names []string) error {
 	reqData := MoveRequest{
-		SrcDir: srcDir,
-		DstDir: dstDir,
-		Names:  names,
+		SrcDir:    srcDir,
+		DstDir:    dstDir,
+		Names:     names,
 		Overwrite: true,
 	}
 

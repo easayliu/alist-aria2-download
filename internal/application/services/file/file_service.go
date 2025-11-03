@@ -8,6 +8,7 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	pathservices "github.com/easayliu/alist-aria2-download/internal/application/services/path"
+	"github.com/easayliu/alist-aria2-download/internal/domain/services/filename"
 	mediaservices "github.com/easayliu/alist-aria2-download/internal/domain/services/media"
 	domainpathservices "github.com/easayliu/alist-aria2-download/internal/domain/services/path"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/alist"
@@ -24,6 +25,7 @@ type AppFileService struct {
 	config             *config.Config
 	alistClient        *alist.Client
 	downloadService    contracts.DownloadService
+	llmService         contracts.LLMService  // LLM服务
 
 	pathStrategy       *pathservices.PathStrategyService
 	pathCategory       *domainpathservices.PathCategoryService
@@ -32,10 +34,13 @@ type AppFileService struct {
 
 	tmdbClient         *tmdb.Client
 	renameSuggester    *RenameSuggester
+
+	// LLM相关
+	llmSuggester        *filename.LLMSuggester // LLM文件名推断器
 }
 
 // NewAppFileService 创建应用文件服务
-func NewAppFileService(cfg *config.Config, downloadService contracts.DownloadService) contracts.FileService {
+func NewAppFileService(cfg *config.Config, llmService contracts.LLMService, downloadService contracts.DownloadService) contracts.FileService {
 	pathCategory := domainpathservices.NewPathCategoryService()
 	mediaClassifier := mediaservices.NewMediaClassificationService(cfg, pathCategory)
 
@@ -43,6 +48,7 @@ func NewAppFileService(cfg *config.Config, downloadService contracts.DownloadSer
 		config:          cfg,
 		alistClient:     alist.NewClient(cfg.Alist.BaseURL, cfg.Alist.Username, cfg.Alist.Password),
 		downloadService: downloadService,
+		llmService:      llmService,
 		pathCategory:    pathCategory,
 		mediaClassifier: mediaClassifier,
 	}
@@ -53,6 +59,7 @@ func NewAppFileService(cfg *config.Config, downloadService contracts.DownloadSer
 	service.pathGenerator = pathservices.NewPathGenerationService(cfg, service.pathStrategy, pathCategory, mediaClassifier)
 	logger.Debug("PathGenerationService initialized (NewAppFileService)")
 
+	// 初始化TMDB客户端和重命名建议器
 	if cfg.TMDB.APIKey != "" {
 		service.tmdbClient = tmdb.NewClient(cfg.TMDB.APIKey)
 		if cfg.TMDB.Language != "" {
@@ -63,6 +70,27 @@ func NewAppFileService(cfg *config.Config, downloadService contracts.DownloadSer
 		}
 		service.renameSuggester = NewRenameSuggester(service.tmdbClient, cfg.TMDB.QualityDirPatterns)
 		logger.Debug("TMDB Client and RenameSuggester initialized")
+	}
+
+	// 初始化LLM文件名推断器（如果LLM启用且文件命名功能开启）
+	// 需要同时具备TMDB和LLM才能使用混合推断
+	if llmService != nil && llmService.IsEnabled() && cfg.LLM.Features.FileNaming && service.renameSuggester != nil {
+		// 创建LLM推断器（传入批处理配置）
+		llmSuggester := filename.NewLLMSuggester(llmService, &cfg.LLM.Batch)
+		service.llmSuggester = llmSuggester
+
+		logger.Info("LLM filename suggester initialized successfully (TMDB+LLM hybrid mode)",
+			"batchSize", cfg.LLM.Batch.BatchSize,
+			"tokenLimit", cfg.LLM.Batch.TokenLimit)
+	} else {
+		if llmService != nil && llmService.IsEnabled() && cfg.LLM.Features.FileNaming && service.renameSuggester == nil {
+			logger.Warn("LLM enabled but TMDB not configured, cannot initialize LLM suggester (hybrid mode required)")
+		} else {
+			logger.Debug("LLM filename suggester not enabled",
+				"llm_enabled", llmService != nil && llmService.IsEnabled(),
+				"feature_enabled", cfg.LLM.Features.FileNaming,
+				"tmdb_available", service.renameSuggester != nil)
+		}
 	}
 
 	return service

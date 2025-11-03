@@ -156,6 +156,47 @@ type RenameSuggestion struct {
 	Confidence   float64 `json:"confidence"`
 }
 
+// FileRenameRequest 文件重命名请求（新增）
+type FileRenameRequest struct {
+	OriginalPath string `json:"original_path"` // 原始文件路径
+	UserHint     string `json:"user_hint"`     // 用户额外提示（可选）
+}
+
+// FileRenameResponse 文件重命名响应（新增）
+type FileRenameResponse struct {
+	OriginalName  string     `json:"original_name"`
+	SuggestedName string     `json:"suggested_name"`
+	Confidence    float32    `json:"confidence"`
+	Source        string     `json:"source"` // "tmdb", "llm", "hybrid"
+	MediaInfo     *MediaInfo `json:"media_info"`
+}
+
+// MediaInfo 媒体信息（新增）
+type MediaInfo struct {
+	Type     string `json:"type"`      // tv, movie
+	Title    string `json:"title"`     // 英文标题
+	TitleCN  string `json:"title_cn"`  // 中文标题
+	Year     int    `json:"year"`
+	Season   *int   `json:"season"`    // 季度（仅剧集）
+	Episode  *int   `json:"episode"`   // 集数（仅剧集）
+}
+
+// HybridStrategy 混合策略类型（新增）
+type HybridStrategy int
+
+const (
+	// TMDBFirst TMDB优先，失败时使用LLM
+	TMDBFirst HybridStrategy = iota
+	// LLMFirst LLM优先，失败时使用TMDB
+	LLMFirst
+	// TMDBOnly 仅使用TMDB
+	TMDBOnly
+	// LLMOnly 仅使用LLM
+	LLMOnly
+	// Compare 同时使用并比较结果
+	Compare
+)
+
 // FileService 文件服务业务契约
 type FileService interface {
 	// 基础文件操作
@@ -192,6 +233,13 @@ type FileService interface {
 	RenameAndMoveFile(ctx context.Context, oldPath, newPath string) error
 	GetRenameSuggestions(ctx context.Context, path string) ([]RenameSuggestion, error)
 	GetBatchRenameSuggestions(ctx context.Context, paths []string) (map[string][]RenameSuggestion, error)
+
+	// 批量重命名(统一使用TMDB批量模式,单文件也通过批量接口处理)
+	// 返回: suggestionsMap[文件路径] = 建议列表, usedLLM(已废弃,始终为false), error
+	GetBatchRenameSuggestionsWithLLM(ctx context.Context, paths []string) (map[string][]RenameSuggestion, bool, error)
+
+	// IsSpecialContent 检查文件名是否为特殊内容
+	IsSpecialContent(fileName string) bool
 
 	// 文件删除
 	DeleteFile(ctx context.Context, path string) error

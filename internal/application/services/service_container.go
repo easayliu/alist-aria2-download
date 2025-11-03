@@ -6,10 +6,12 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/application/services/download"
 	"github.com/easayliu/alist-aria2-download/internal/application/services/file"
+	"github.com/easayliu/alist-aria2-download/internal/application/services/llm"
 	"github.com/easayliu/alist-aria2-download/internal/application/services/notification"
 	"github.com/easayliu/alist-aria2-download/internal/application/services/task"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/repository"
+	"github.com/easayliu/alist-aria2-download/pkg/logger"
 )
 
 // 向后兼容的类型别名 - 用于渐进式迁移
@@ -24,7 +26,9 @@ type (
 func NewFileService(client interface{}) *file.AppFileService {
 	// 这是一个临时的兼容函数,新代码应该使用ServiceContainer
 	cfg, _ := config.LoadConfig()
-	svc := file.NewAppFileService(cfg, nil)
+	// 创建一个禁用的LLM服务用于兼容
+	disabledLLM := llm.NewDisabledLLMService()
+	svc := file.NewAppFileService(cfg, disabledLLM, nil)
 	if appSvc, ok := svc.(*file.AppFileService); ok {
 		return appSvc
 	}
@@ -57,7 +61,8 @@ type ServiceContainer struct {
 	fileService        contracts.FileService
 	taskService        contracts.TaskService
 	notificationService contracts.NotificationService
-	schedulerService    *task.SchedulerService  // 新增: 调度服务
+	llmService          contracts.LLMService       // LLM服务
+	schedulerService    *task.SchedulerService     // 新增: 调度服务
 
 	// 基础设施服务（非contracts）
 	taskRepo        *repository.TaskRepository
@@ -81,7 +86,25 @@ func NewServiceContainer(cfg *config.Config) (*ServiceContainer, error) {
 	// 2. 初始化应用服务 - 注意依赖顺序
 	// 先初始化不依赖其他服务的服务
 	container.notificationService = notification.NewAppNotificationServiceWithClient(cfg, nil)
-	container.fileService = file.NewAppFileService(cfg, nil)
+
+	// 初始化LLM服务（如果配置启用）
+	if cfg.LLM.Enabled {
+		llmService, err := llm.NewAppLLMService(&cfg.LLM)
+		if err != nil {
+			// LLM服务初始化失败不影响主流程，记录警告并使用禁用服务
+			logger.Warn("LLM service initialization failed, using disabled mode", "error", err)
+			container.llmService = llm.NewDisabledLLMService()
+		} else {
+			container.llmService = llmService
+			logger.Info("LLM service initialized successfully", "provider", llmService.GetProviderName())
+		}
+	} else {
+		logger.Info("LLM feature not enabled")
+		container.llmService = llm.NewDisabledLLMService()
+	}
+
+	// 创建FileService，注入LLM服务
+	container.fileService = file.NewAppFileService(cfg, container.llmService, nil)
 	container.downloadService = download.NewAppDownloadService(cfg, container.fileService)
 
 	// 更新fileService的downloadService依赖
@@ -160,4 +183,9 @@ func (c *ServiceContainer) GetTelegramClient() interface{} {
 
 func (c *ServiceContainer) SetTelegramClient(client interface{}) {
 	c.telegramClient = client
+}
+
+// GetLLMService 获取LLM服务
+func (c *ServiceContainer) GetLLMService() contracts.LLMService {
+	return c.llmService
 }

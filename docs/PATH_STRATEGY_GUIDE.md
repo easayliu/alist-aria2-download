@@ -169,9 +169,9 @@ download:
 ```
 
 **效果：**
-- 电视剧：`/downloads/tvs/明星大侦探/S08/`
-- 电影：`/downloads/movies/阿凡达/`
-- 综艺：`/downloads/variety/喜人奇妙夜/`
+- 电视剧：`/downloads/tvs/电视剧名/S08/`
+- 电影：`/downloads/movies/电影名/`
+- 综艺：`/downloads/variety/综艺节目名/`
 
 #### 按年份分类
 
@@ -184,8 +184,8 @@ download:
 ```
 
 **效果：**
-- `/downloads/2025/tvs/明星大侦探/S08/`
-- `/downloads/2025/movies/阿凡达/`
+- `/downloads/2025/tvs/电视剧名/S08/`
+- `/downloads/2025/movies/电影名/`
 
 #### 按月份归档
 
@@ -560,10 +560,10 @@ normalPath := pathStrategy.NormalizePath(path)
 |------|------|------|------|
 | `{base}` | 字符串 | 配置 | `/downloads` |
 | `{category}` | 字符串 | 智能识别 | `tv`, `movie`, `variety`, `other` |
-| `{show}` | 字符串 | 路径提取 | `明星大侦探`, `喜人奇妙夜` |
+| `{show}` | 字符串 | 路径提取 | `电视剧名`, `综艺节目名` |
 | `{season}` | 字符串 | 路径提取 | `S01`, `S08`, `S12` |
 | `{episode}` | 字符串 | 文件名提取 | `E01`, `E12` |
-| `{title}` | 字符串 | 路径提取 | `阿凡达`, `星际穿越` |
+| `{title}` | 字符串 | 路径提取 | `电影名A`, `电影名B` |
 | `{movie_year}` | 字符串 | 路径提取 | `2009`, `2014` |
 | `{year}` | 字符串 | 当前时间 | `2025` |
 | `{month}` | 字符串 | 当前时间 | `01`, `10` |

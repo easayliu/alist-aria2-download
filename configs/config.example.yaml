@@ -95,7 +95,7 @@ scheduler:
       hours_ago: 24                  # 下载多少小时内的文件（24=昨天）
       video_only: true               # 是否只下载视频
       auto_preview: false            # 是否预览模式（不实际下载）
-    
+
     - name: "下载最近3天文件"         # 任务名称
       enabled: false                 # 是否启用此任务
       cron: "0 */6 * * *"           # cron表达式：每6小时执行一次
@@ -103,3 +103,34 @@ scheduler:
       hours_ago: 72                  # 下载72小时内的文件（3天）
       video_only: false              # 下载所有文件
       auto_preview: true             # 预览模式
+
+# LLM配置（用于智能文件命名等功能）
+llm:
+  enabled: false                     # 是否启用LLM功能
+  provider: "openai"                 # 提供商：openai, anthropic, ollama, custom
+
+  # OpenAI配置
+  openai:
+    api_key: ""                      # OpenAI API Key（支持环境变量 OPENAI_API_KEY）
+    base_url: "https://api.openai.com/v1"  # API基础URL，第三方API可修改（如OneAPI: http://localhost:3000/v1）
+    model: "gpt-3.5-turbo"           # 模型名称
+    temperature: 0.3                 # 温度参数（0-2，越低越确定性）
+    max_tokens: 1000                 # 最大Token数
+    timeout: 60                      # 超时时间（秒）
+    qps: 10                          # 每秒请求数限制，防止超过API配额
+
+  # Anthropic配置（预留）
+  anthropic:
+    api_key: ""                      # Anthropic API Key
+    model: "claude-3-sonnet-20240229"  # 模型名称
+
+  # Ollama配置（预留，用于本地运行）
+  ollama:
+    base_url: "http://localhost:11434"  # Ollama服务地址
+    model: "llama2"                  # 模型名称
+
+  # 功能开关
+  features:
+    file_naming: true                # 启用智能文件命名
+    content_analysis: false          # 启用内容分析（预留）
+    auto_tagging: false              # 启用自动标签（预留）
