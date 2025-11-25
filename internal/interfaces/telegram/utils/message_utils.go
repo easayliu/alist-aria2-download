@@ -110,6 +110,7 @@ func (mu *MessageUtils) SendMessageWithReplyKeyboard(chatID int64, text string) 
 }
 
 // EditMessageWithKeyboard edits message and sets keyboard
+// 使用单次API调用同时更新文本和键盘，避免闪动
 func (mu *MessageUtils) EditMessageWithKeyboard(chatID int64, messageID int, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) bool {
 	if mu.telegramClient == nil || mu.telegramClient.GetBot() == nil {
 		return false
@@ -163,20 +164,18 @@ func (mu *MessageUtils) EditMessageWithKeyboard(chatID int64, messageID int, tex
 		text = strings.ToValidUTF8(text, "?")
 	}
 
+	// 单次API调用同时更新文本和键盘，避免闪动
 	editMsg := tgbotapi.NewEditMessageText(chatID, messageID, text)
 	editMsg.ParseMode = parseMode
+	if keyboard != nil {
+		editMsg.ReplyMarkup = keyboard
+	}
+
 	if _, err := mu.telegramClient.GetBot().Send(editMsg); err != nil {
-		logger.Error("Failed to edit telegram message text", "error", err)
+		logger.Error("Failed to edit telegram message", "error", err)
 		return false
 	}
 
-	if keyboard != nil {
-		editKeyboard := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, *keyboard)
-		if _, err := mu.telegramClient.GetBot().Send(editKeyboard); err != nil {
-			logger.Error("Failed to edit telegram message keyboard", "error", err)
-			return false
-		}
-	}
 	return true
 }
 
