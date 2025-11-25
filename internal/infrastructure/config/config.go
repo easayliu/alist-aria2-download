@@ -19,6 +19,7 @@ type Config struct {
 }
 
 type ServerConfig struct {
+	Host string `mapstructure:"host"`
 	Port string `mapstructure:"port"`
 	Mode string `mapstructure:"mode"`
 }
@@ -197,6 +198,7 @@ func LoadConfig() (*Config, error) {
 	viper.AddConfigPath(".")
 
 	// 设置默认值
+	viper.SetDefault("server.host", "127.0.0.1")
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("server.mode", "debug")
 	viper.SetDefault("log.level", "info")

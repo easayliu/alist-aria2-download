@@ -74,8 +74,9 @@ func main() {
 
 	// 启动服务器
 	go func() {
-		logger.Info("Starting server on port", "port", cfg.Server.Port)
-		if err := router.Run(":" + cfg.Server.Port); err != nil {
+		addr := cfg.Server.Host + ":" + cfg.Server.Port
+		logger.Info("Starting server", "address", addr)
+		if err := router.Run(addr); err != nil {
 			log.Fatal("Failed to start server:", err)
 		}
 	}()

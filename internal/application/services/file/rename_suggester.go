@@ -314,6 +314,18 @@ func (rs *RenameSuggester) searchTVByQuery(ctx context.Context, fullPath string,
 
 	suggestions := make([]rename.Suggestion, 0, len(resp.Results))
 	for i, result := range resp.Results {
+		// 过滤：OriginalName 必须与搜索的剧名精确匹配（忽略大小写）
+		queryLower := strings.ToLower(strings.TrimSpace(query))
+		originalNameLower := strings.ToLower(strings.TrimSpace(result.OriginalName))
+
+		if originalNameLower != queryLower {
+			logger.Debug("Skipping result due to original_name mismatch",
+				"query", query,
+				"name", result.Name,
+				"originalName", result.OriginalName)
+			continue
+		}
+
 		year := 0
 		if result.FirstAirDate != "" {
 			if parsedYear, err := strconv.Atoi(result.FirstAirDate[:4]); err == nil {
@@ -1064,6 +1076,19 @@ func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query strin
 	result := make(map[string][]rename.Suggestion)
 
 	for _, tvResult := range resp.Results {
+		// 过滤：OriginalName 必须与搜索的剧名精确匹配（忽略大小写）
+		queryLower := strings.ToLower(strings.TrimSpace(query))
+		originalNameLower := strings.ToLower(strings.TrimSpace(tvResult.OriginalName))
+
+		if originalNameLower != queryLower {
+			logger.Debug("Skipping result due to original_name mismatch",
+				"query", query,
+				"name", tvResult.Name,
+				"originalName", tvResult.OriginalName,
+				"tvID", tvResult.ID)
+			continue
+		}
+
 		year := 0
 		if tvResult.FirstAirDate != "" && len(tvResult.FirstAirDate) >= 4 {
 			if parsedYear, err := strconv.Atoi(tvResult.FirstAirDate[:4]); err == nil {
@@ -1080,7 +1105,7 @@ func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query strin
 				continue
 			}
 
-			logger.Info("Got season details", "query", query, "season", season, "episodeCount", len(seasonDetails.Episodes))
+			logger.Info("Got season details", "query", query, "tvID", tvResult.ID, "season", season, "episodeCount", len(seasonDetails.Episodes))
 
 			episodeMap := make(map[int]*tmdb.Episode)
 			for i := range seasonDetails.Episodes {

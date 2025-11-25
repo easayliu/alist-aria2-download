@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/domain/models/rename"
@@ -77,6 +78,85 @@ func (s *AppFileService) RenameAndMoveFile(ctx context.Context, oldPath, newPath
 
 	logger.Debug("File renamed and moved successfully", "oldPath", oldPath, "newPath", newPath)
 	return nil
+}
+
+// BatchRenameAndMoveFiles 并发批量重命名文件
+// 使用信号量模式控制并发数，复用 Alist QPS 配置
+func (s *AppFileService) BatchRenameAndMoveFiles(ctx context.Context, tasks []contracts.RenameTask) []contracts.RenameResult {
+	if len(tasks) == 0 {
+		return []contracts.RenameResult{}
+	}
+
+	// 使用 Alist QPS 配置作为最大并发数，默认 10
+	maxConcurrent := 10
+	if s.config != nil && s.config.Alist.QPS > 0 {
+		// 使用 QPS 的一半作为并发数，避免超限
+		maxConcurrent = s.config.Alist.QPS / 2
+		if maxConcurrent < 1 {
+			maxConcurrent = 1
+		}
+		if maxConcurrent > 20 {
+			maxConcurrent = 20
+		}
+	}
+
+	logger.Info("Starting batch rename",
+		"taskCount", len(tasks),
+		"maxConcurrent", maxConcurrent)
+
+	var (
+		results = make([]contracts.RenameResult, len(tasks))
+		wg      sync.WaitGroup
+		sem     = make(chan struct{}, maxConcurrent)
+	)
+
+	for i, task := range tasks {
+		wg.Add(1)
+		sem <- struct{}{} // 获取信号量
+
+		go func(idx int, t contracts.RenameTask) {
+			defer func() {
+				<-sem // 释放信号量
+				wg.Done()
+			}()
+
+			err := s.RenameAndMoveFile(ctx, t.OldPath, t.NewPath)
+			results[idx] = contracts.RenameResult{
+				OldPath: t.OldPath,
+				NewPath: t.NewPath,
+				Success: err == nil,
+				Error:   err,
+			}
+
+			if err != nil {
+				logger.Warn("Rename failed",
+					"oldPath", t.OldPath,
+					"newPath", t.NewPath,
+					"error", err)
+			} else {
+				logger.Debug("Rename success",
+					"oldPath", t.OldPath,
+					"newPath", t.NewPath)
+			}
+		}(i, task)
+	}
+
+	wg.Wait()
+
+	// 统计结果
+	successCount := 0
+	for _, r := range results {
+		if r.Success {
+			successCount++
+		}
+	}
+
+	logger.Info("Batch rename completed",
+		"total", len(tasks),
+		"success", successCount,
+		"failed", len(tasks)-successCount)
+
+	return results
 }
 
 func (s *AppFileService) removeEmptyDirectory(ctx context.Context, dir string) error {

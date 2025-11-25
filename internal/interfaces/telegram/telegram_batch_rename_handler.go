@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	"github.com/easayliu/alist-aria2-download/pkg/utils/media"
@@ -199,8 +200,6 @@ func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, mes
 		return
 	}
 
-	successCount := 0
-	failCount := 0
 	results := "<b>📝 批量重命名结果</b>\n\n"
 
 	// 使用LLM批量重命名(LLM启用时纯LLM,未启用时用TMDB)
@@ -216,52 +215,78 @@ func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, mes
 		return
 	}
 
-	const maxDisplayItems = MaxDisplayItems
-	displayCount := 0
+	// 构建重命名任务列表
+	var tasks []contracts.RenameTask
+	taskIndexMap := make(map[int]int) // 记录任务索引到videoFiles索引的映射
+	skippedFiles := make([]int, 0)    // 记录跳过的文件索引
 
 	for i, filePath := range videoFiles {
 		suggestions, found := suggestionsMap[filePath]
 		if !found || len(suggestions) == 0 {
-			// 检查是否为特殊内容
+			skippedFiles = append(skippedFiles, i)
+			continue
+		}
+		taskIndexMap[len(tasks)] = i
+		tasks = append(tasks, contracts.RenameTask{
+			OldPath: filePath,
+			NewPath: suggestions[0].NewPath,
+		})
+	}
+
+	// 并发执行重命名
+	renameResults := h.controller.fileService.BatchRenameAndMoveFiles(ctx, tasks)
+
+	// 处理结果
+	const maxDisplayItems = MaxDisplayItems
+	displayCount := 0
+	successCount := 0
+	failCount := len(skippedFiles) // 跳过的文件计入失败
+
+	// 显示跳过的文件
+	for _, idx := range skippedFiles {
+		if displayCount < maxDisplayItems {
+			filePath := videoFiles[idx]
 			fileName := filepath.Base(filePath)
 			isSpecial := media.IsSpecialContent(fileName)
 
+			reason := "未找到匹配的电影/剧集"
 			if isSpecial {
-				logger.Info("LLM无法处理特殊内容", "filePath", filePath)
-			} else {
-				logger.Warn("无法获取重命名建议", "filePath", filePath)
+				reason = "特殊内容暂不支持重命名"
 			}
-
-			if displayCount < maxDisplayItems {
-				reason := "未找到匹配的电影/剧集"
-				if isSpecial {
-					reason = "特殊内容暂不支持重命名"
-				}
-				results += fmt.Sprintf("%d. ⚠️ <code>%s</code>\n   %s\n\n",
-					i+1,
-					h.controller.messageUtils.EscapeHTML(filepath.Base(filePath)),
-					reason)
-				displayCount++
-			}
-			failCount++
-			continue
-		}
-
-		selected := suggestions[0]
-		if err := h.controller.fileService.RenameAndMoveFile(ctx, filePath, selected.NewPath); err != nil {
-			if displayCount < maxDisplayItems {
-				results += fmt.Sprintf("%d. ❌ <code>%s</code>\n   失败: %s\n\n", i+1, h.controller.messageUtils.EscapeHTML(filePath), err.Error())
-				displayCount++
-			}
-			failCount++
-			continue
-		}
-
-		if displayCount < maxDisplayItems {
-			results += fmt.Sprintf("%d. ✅ <code>%s</code>\n   → <code>%s</code>\n\n", i+1, h.controller.messageUtils.EscapeHTML(filePath), h.controller.messageUtils.EscapeHTML(selected.NewPath))
+			results += fmt.Sprintf("%d. ⚠️ <code>%s</code>\n   %s\n\n",
+				idx+1,
+				h.controller.messageUtils.EscapeHTML(filepath.Base(filePath)),
+				reason)
 			displayCount++
 		}
-		successCount++
+	}
+
+	// 显示重命名结果
+	for taskIdx, result := range renameResults {
+		originalIdx := taskIndexMap[taskIdx]
+		if result.Success {
+			successCount++
+			if displayCount < maxDisplayItems {
+				results += fmt.Sprintf("%d. ✅ <code>%s</code>\n   → <code>%s</code>\n\n",
+					originalIdx+1,
+					h.controller.messageUtils.EscapeHTML(result.OldPath),
+					h.controller.messageUtils.EscapeHTML(result.NewPath))
+				displayCount++
+			}
+		} else {
+			failCount++
+			if displayCount < maxDisplayItems {
+				errMsg := "未知错误"
+				if result.Error != nil {
+					errMsg = result.Error.Error()
+				}
+				results += fmt.Sprintf("%d. ❌ <code>%s</code>\n   失败: %s\n\n",
+					originalIdx+1,
+					h.controller.messageUtils.EscapeHTML(result.OldPath),
+					errMsg)
+				displayCount++
+			}
+		}
 	}
 
 	if len(videoFiles) > maxDisplayItems {

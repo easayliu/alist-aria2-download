@@ -191,6 +191,20 @@ const (
 	Compare
 )
 
+// RenameTask 重命名任务
+type RenameTask struct {
+	OldPath string
+	NewPath string
+}
+
+// RenameResult 重命名结果
+type RenameResult struct {
+	OldPath string
+	NewPath string
+	Success bool
+	Error   error
+}
+
 // FileService 文件服务业务契约
 type FileService interface {
 	// 基础文件操作
@@ -225,6 +239,7 @@ type FileService interface {
 	// 文件重命名
 	RenameFile(ctx context.Context, path, newName string) error
 	RenameAndMoveFile(ctx context.Context, oldPath, newPath string) error
+	BatchRenameAndMoveFiles(ctx context.Context, tasks []RenameTask) []RenameResult
 	GetRenameSuggestions(ctx context.Context, path string) ([]RenameSuggestion, error)
 	GetBatchRenameSuggestions(ctx context.Context, paths []string) (map[string][]RenameSuggestion, error)
 
