@@ -76,6 +76,13 @@ build-linux-all: build-linux-amd64 build-linux-arm64
 	@echo "Linux builds completed for amd64 and arm64"
 
 # Compress amd64 binary with UPX
+compress-upx: build-linux
+	@command -v upx >/dev/null 2>&1 || { echo "UPX not installed. Install it with: brew install upx (macOS) or apt-get install upx (Linux)"; exit 1; }
+	upx --best --lzma $(BUILD_DIR)/$(BINARY_NAME)-linux
+	@echo "amd64 binary compressed with UPX"
+	@ls -lh $(BUILD_DIR)/$(BINARY_NAME)-linux
+
+# Compress amd64 binary with UPX
 compress-upx-amd64: build-linux-amd64
 	@command -v upx >/dev/null 2>&1 || { echo "UPX not installed. Install it with: brew install upx (macOS) or apt-get install upx (Linux)"; exit 1; }
 	upx --best --lzma $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64
