@@ -38,6 +38,7 @@ func (s *AppFileService) RenameAndMoveFile(ctx context.Context, oldPath, newPath
 
 // renameAndMoveFileInternal 内部重命名和移动文件方法
 // skipCleanup: 是否跳过目录清理（批量操作时使用）
+// 策略: 先Move到目标目录，再在目标目录Rename，减少并发冲突
 func (s *AppFileService) renameAndMoveFileInternal(ctx context.Context, oldPath, newPath string, cleanup bool) error {
 	if s.alistClient == nil {
 		return fmt.Errorf("alist client not initialized")
@@ -55,6 +56,7 @@ func (s *AppFileService) renameAndMoveFileInternal(ctx context.Context, oldPath,
 	fileName := filepath.Base(oldPath)
 	newFileName := filepath.Base(newPath)
 
+	// 情况1: 同目录，只需重命名
 	if oldDir == newDir {
 		if err := s.alistClient.RenameWithContext(ctx, oldPath, newFileName); err != nil {
 			logger.Error("Failed to rename file", "oldPath", oldPath, "newFileName", newFileName, "error", err)
@@ -64,21 +66,24 @@ func (s *AppFileService) renameAndMoveFileInternal(ctx context.Context, oldPath,
 		return nil
 	}
 
+	// 情况2: 跨目录操作，先Move再Rename（减少并发冲突）
 	if err := s.alistClient.Mkdir(ctx, newDir); err != nil {
 		logger.Warn("Failed to create directory (may already exist)", "dir", newDir, "error", err)
 	}
 
-	if fileName != newFileName {
-		if err := s.alistClient.RenameWithContext(ctx, oldPath, newFileName); err != nil {
-			logger.Error("Failed to rename file", "oldPath", oldPath, "newFileName", newFileName, "error", err)
-			return fmt.Errorf("failed to rename file: %w", err)
-		}
-		oldPath = filepath.Join(oldDir, newFileName)
+	// 先移动文件（使用原文件名）
+	if err := s.alistClient.Move(ctx, oldDir, newDir, []string{fileName}); err != nil {
+		logger.Error("Failed to move file", "srcDir", oldDir, "dstDir", newDir, "fileName", fileName, "error", err)
+		return fmt.Errorf("failed to move file: %w", err)
 	}
 
-	if err := s.alistClient.Move(ctx, oldDir, newDir, []string{newFileName}); err != nil {
-		logger.Error("Failed to move file", "srcDir", oldDir, "dstDir", newDir, "fileName", newFileName, "error", err)
-		return fmt.Errorf("failed to move file: %w", err)
+	// 如果需要重命名，在目标目录进行
+	if fileName != newFileName {
+		movedPath := filepath.Join(newDir, fileName)
+		if err := s.alistClient.RenameWithContext(ctx, movedPath, newFileName); err != nil {
+			logger.Error("Failed to rename file after move", "movedPath", movedPath, "newFileName", newFileName, "error", err)
+			return fmt.Errorf("failed to rename file after move: %w", err)
+		}
 	}
 
 	// 只有非批量操作时才立即清理目录
