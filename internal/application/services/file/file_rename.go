@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/domain/models/rename"
 	"github.com/easayliu/alist-aria2-download/internal/domain/services/filename"
+	fileutil "github.com/easayliu/alist-aria2-download/pkg/utils/file"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 )
 
@@ -30,6 +33,12 @@ func (s *AppFileService) RenameFile(ctx context.Context, path, newName string) e
 }
 
 func (s *AppFileService) RenameAndMoveFile(ctx context.Context, oldPath, newPath string) error {
+	return s.renameAndMoveFileInternal(ctx, oldPath, newPath, true)
+}
+
+// renameAndMoveFileInternal 内部重命名和移动文件方法
+// skipCleanup: 是否跳过目录清理（批量操作时使用）
+func (s *AppFileService) renameAndMoveFileInternal(ctx context.Context, oldPath, newPath string, cleanup bool) error {
 	if s.alistClient == nil {
 		return fmt.Errorf("alist client not initialized")
 	}
@@ -72,8 +81,11 @@ func (s *AppFileService) RenameAndMoveFile(ctx context.Context, oldPath, newPath
 		return fmt.Errorf("failed to move file: %w", err)
 	}
 
-	if err := s.removeEmptyDirectory(ctx, oldDir); err != nil {
-		logger.Warn("Failed to remove old directory", "dir", oldDir, "error", err)
+	// 只有非批量操作时才立即清理目录
+	if cleanup {
+		if err := s.removeEmptyDirectory(ctx, oldDir); err != nil {
+			logger.Warn("Failed to remove old directory", "dir", oldDir, "error", err)
+		}
 	}
 
 	logger.Debug("File renamed and moved successfully", "oldPath", oldPath, "newPath", newPath)
@@ -105,9 +117,11 @@ func (s *AppFileService) BatchRenameAndMoveFiles(ctx context.Context, tasks []co
 		"maxConcurrent", maxConcurrent)
 
 	var (
-		results = make([]contracts.RenameResult, len(tasks))
-		wg      sync.WaitGroup
-		sem     = make(chan struct{}, maxConcurrent)
+		results   = make([]contracts.RenameResult, len(tasks))
+		wg        sync.WaitGroup
+		sem       = make(chan struct{}, maxConcurrent)
+		oldDirsMu sync.Mutex
+		oldDirs   = make(map[string]struct{}) // 收集所有涉及的源目录
 	)
 
 	for i, task := range tasks {
@@ -120,7 +134,17 @@ func (s *AppFileService) BatchRenameAndMoveFiles(ctx context.Context, tasks []co
 				wg.Done()
 			}()
 
-			err := s.RenameAndMoveFile(ctx, t.OldPath, t.NewPath)
+			// 记录源目录
+			oldDir := filepath.Dir(t.OldPath)
+			newDir := filepath.Dir(t.NewPath)
+			if oldDir != newDir {
+				oldDirsMu.Lock()
+				oldDirs[oldDir] = struct{}{}
+				oldDirsMu.Unlock()
+			}
+
+			// 批量操作时跳过单个文件的目录清理，统一在最后清理
+			err := s.renameAndMoveFileInternal(ctx, t.OldPath, t.NewPath, false)
 			results[idx] = contracts.RenameResult{
 				OldPath: t.OldPath,
 				NewPath: t.NewPath,
@@ -156,27 +180,147 @@ func (s *AppFileService) BatchRenameAndMoveFiles(ctx context.Context, tasks []co
 		"success", successCount,
 		"failed", len(tasks)-successCount)
 
+	// 批量重命名完成后，统一清理源目录
+	if len(oldDirs) > 0 {
+		// 等待 Alist 缓存更新（避免缓存导致的误判）
+		logger.Info("Waiting for Alist cache to update before cleanup")
+		time.Sleep(2 * time.Second)
+
+		logger.Info("Cleaning up source directories", "dirCount", len(oldDirs))
+		for dir := range oldDirs {
+			if err := s.removeEmptyDirectory(ctx, dir); err != nil {
+				logger.Warn("Failed to remove directory", "dir", dir, "error", err)
+			}
+		}
+	}
+
 	return results
 }
 
+// removeEmptyDirectory 移除没有视频文件的目录
+// 递归检查目录及其子目录，如果都没有视频文件，则删除整个目录
 func (s *AppFileService) removeEmptyDirectory(ctx context.Context, dir string) error {
-	listResp, err := s.alistClient.ListFilesWithContext(ctx, dir, 1, 1)
+	hasVideo, err := s.hasVideoFilesRecursive(ctx, dir)
 	if err != nil {
-		return fmt.Errorf("failed to list directory: %w", err)
+		return fmt.Errorf("failed to check directory: %w", err)
 	}
 
-	if len(listResp.Data.Content) == 0 {
+	if !hasVideo {
 		dirName := filepath.Base(dir)
 		parentDir := filepath.Dir(dir)
 
 		if err := s.alistClient.Remove(ctx, parentDir, []string{dirName}); err != nil {
-			return fmt.Errorf("failed to remove empty directory: %w", err)
+			return fmt.Errorf("failed to remove directory: %w", err)
 		}
 
-		logger.Info("Removed empty directory", "dir", dir)
+		logger.Info("Removed directory without video files", "dir", dir)
+	} else {
+		logger.Debug("Directory has video files, skipping removal", "dir", dir)
 	}
 
 	return nil
+}
+
+// hasVideoFilesRecursive 递归检查目录及其子目录是否包含视频文件
+// 返回 true 表示存在视频文件，false 表示不存在
+func (s *AppFileService) hasVideoFilesRecursive(ctx context.Context, dir string) (bool, error) {
+	// 列出目录中的所有文件
+	listResp, err := s.alistClient.ListFilesWithContext(ctx, dir, 1, 100)
+	if err != nil {
+		return false, fmt.Errorf("failed to list directory: %w", err)
+	}
+
+	var videoFiles []string
+	var subDirs []string
+
+	for _, file := range listResp.Data.Content {
+		if file.IsDir {
+			subDirs = append(subDirs, file.Name)
+		} else if s.isVideoFile(file.Name) {
+			videoFiles = append(videoFiles, file.Name)
+		}
+	}
+
+	logger.Debug("Checking directory for videos",
+		"dir", dir,
+		"videoFiles", len(videoFiles),
+		"subDirs", len(subDirs))
+
+	// 如果当前目录有视频文件，验证这些文件是否真实存在（解决时序问题）
+	if len(videoFiles) > 0 {
+		actualVideoCount := 0
+		for _, videoFile := range videoFiles {
+			videoPath := filepath.Join(dir, videoFile)
+
+			// 检查文件是否真实存在
+			exists, err := s.fileExists(ctx, videoPath)
+
+			// 如果是 Emby 格式文件且验证失败，可能是 Alist 缓存问题
+			if s.isEmbyFormatFile(videoFile) && (err != nil || !exists) {
+				logger.Warn("Found Emby format file but verification failed, likely Alist cache issue",
+					"path", videoPath,
+					"fileName", videoFile,
+					"exists", exists,
+					"error", err)
+				// 不计入实际文件数，认为是缓存
+				continue
+			}
+
+			if err == nil && exists {
+				actualVideoCount++
+				logger.Debug("Video file exists", "path", videoPath)
+			} else {
+				logger.Debug("Video file does not exist (already moved)", "path", videoPath, "error", err)
+			}
+		}
+
+		if actualVideoCount > 0 {
+			logger.Debug("Directory has real video files",
+				"dir", dir,
+				"count", actualVideoCount)
+			return true, nil
+		}
+	}
+
+	// 递归检查子目录
+	for _, subDir := range subDirs {
+		subDirPath := filepath.Join(dir, subDir)
+		hasVideo, err := s.hasVideoFilesRecursive(ctx, subDirPath)
+		if err != nil {
+			logger.Warn("Failed to check subdirectory",
+				"subDir", subDirPath,
+				"error", err)
+			continue
+		}
+		if hasVideo {
+			logger.Debug("Subdirectory has video files",
+				"subDir", subDirPath)
+			return true, nil
+		}
+	}
+
+	logger.Debug("No video files found in directory tree", "dir", dir)
+	return false, nil
+}
+
+// isEmbyFormatFile 检查文件名是否为 Emby/Plex 格式
+// 格式：剧名 - S01E01 - 标题.ext 或 剧名 - S01E01.ext
+func (s *AppFileService) isEmbyFormatFile(filename string) bool {
+	// 匹配模式：任意字符 - S数字数字E数字数字 (- 任意字符).扩展名
+	matched, _ := regexp.MatchString(`\s-\sS\d{2}E\d{2}(\s-\s.+)?\.\w+$`, filename)
+	return matched
+}
+
+// fileExists 检查文件是否存在
+func (s *AppFileService) fileExists(ctx context.Context, path string) (bool, error) {
+	_, err := s.alistClient.GetFileInfoWithContext(ctx, path)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "404") {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *AppFileService) GetRenameSuggestions(ctx context.Context, path string) ([]contracts.RenameSuggestion, error) {
@@ -365,4 +509,9 @@ func buildFileNameRequests(paths []string) []filename.FileNameRequest {
 		})
 	}
 	return requests
+}
+
+// isVideoFile 检查文件是否为视频文件
+func (s *AppFileService) isVideoFile(filename string) bool {
+	return fileutil.IsVideoFile(filename)
 }

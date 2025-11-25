@@ -11,6 +11,7 @@ import (
 
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/ratelimit"
 	httputil "github.com/easayliu/alist-aria2-download/pkg/httpclient"
+	"github.com/easayliu/alist-aria2-download/pkg/logger"
 )
 
 const (
@@ -81,11 +82,22 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, param
 
 	urlStr := fmt.Sprintf("%s%s?%s", c.BaseURL, endpoint, params.Encode())
 
+	// 添加调试日志
+	logger.Debug("TMDB API Request",
+		"method", method,
+		"endpoint", endpoint,
+		"language", lang,
+		"url", urlStr)
+
 	opts := httputil.DefaultOptions().
 		WithContext(ctx).
 		WithClient(c.httpClient)
 
-	return httputil.DoJSONRequest(method, urlStr, nil, result, opts)
+	err := httputil.DoJSONRequest(method, urlStr, nil, result, opts)
+	if err != nil {
+		logger.Error("TMDB API Request failed", "url", urlStr, "error", err)
+	}
+	return err
 }
 
 func (c *Client) SearchMovie(ctx context.Context, query string, year int) (*SearchMovieResponse, error) {

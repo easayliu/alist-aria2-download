@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -63,8 +64,9 @@ func NewDownloadHandler(controller *TelegramController) *DownloadHandler {
 // parseTimeArguments parses time parameters
 // Supported formats:
 // 1. Number - hours (e.g., 48)
-// 2. Date range - two dates (e.g., 2025-09-01 2025-09-26)
-// 3. Time range - two timestamps (e.g., 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z)
+// 2. Minutes - number with 'm' suffix (e.g., 30m)
+// 3. Date range - two dates (e.g., 2025-09-01 2025-09-26)
+// 4. Time range - two timestamps (e.g., 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z)
 func (h *DownloadHandler) parseTimeArguments(args []string) (*TimeParseResult, error) {
 	if len(args) == 0 {
 		// 默认24小时
@@ -77,8 +79,29 @@ func (h *DownloadHandler) parseTimeArguments(args []string) (*TimeParseResult, e
 	}
 
 	if len(args) == 1 {
+		arg := args[0]
+
+		// 检查是否为分钟格式（以m结尾）
+		if strings.HasSuffix(strings.ToLower(arg), "m") {
+			minuteStr := strings.TrimSuffix(strings.ToLower(arg), "m")
+			if minutes, err := strconv.Atoi(minuteStr); err == nil {
+				if minutes <= 0 {
+					return nil, fmt.Errorf("分钟数必须大于0")
+				}
+				if minutes > 525600 { // Minutes in a year
+					return nil, fmt.Errorf("分钟数不能超过525600（一年）")
+				}
+				timeRange := timeutil.CreateTimeRangeFromMinutes(minutes)
+				return &TimeParseResult{
+					StartTime:   timeRange.Start,
+					EndTime:     timeRange.End,
+					Description: fmt.Sprintf("最近%d分钟", minutes),
+				}, nil
+			}
+		}
+
 		// 尝试解析为小时数
-		if hours, err := parseHours(args[0]); err == nil {
+		if hours, err := parseHours(arg); err == nil {
 			if hours <= 0 {
 				return nil, fmt.Errorf("小时数必须大于0")
 			}
@@ -93,7 +116,7 @@ func (h *DownloadHandler) parseTimeArguments(args []string) (*TimeParseResult, e
 			}, nil
 		}
 
-		return nil, fmt.Errorf("无效的时间格式，应为小时数（如：48）")
+		return nil, fmt.Errorf("无效的时间格式，应为小时数（如：48）或分钟数（如：30m）")
 	}
 
 	if len(args) == 2 {
@@ -120,7 +143,7 @@ func (h *DownloadHandler) parseTimeArguments(args []string) (*TimeParseResult, e
 		}, nil
 	}
 
-	return nil, fmt.Errorf("参数过多，支持的格式：\n• /download\n• /download 48\n• /download 2025-09-01 2025-09-26\n• /download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
+	return nil, fmt.Errorf("参数过多，支持的格式：\n• /download\n• /download 30m\n• /download 48\n• /download 2025-09-01 2025-09-26\n• /download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z")
 }
 
 // handleManualDownload handles manual download function with time range parameters

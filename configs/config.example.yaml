@@ -27,7 +27,6 @@ telegram:
   webhook:
     enabled: false                   # 使用Webhook模式而不是轮询模式
     url: "https://your-domain.com/telegram/webhook"  # Webhook URL
-    port: "8082"                     # Webhook端口（如果与主服务端口不同）
 
 # 下载配置
 download:

@@ -50,6 +50,16 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		return
 	}
 
+	if strings.HasPrefix(data, "preview_minutes|") {
+		minutes := strings.TrimPrefix(data, "preview_minutes|")
+		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "正在生成预览")
+		if callback.Message != nil {
+			h.controller.messageUtils.ClearInlineKeyboard(chatID, callback.Message.MessageID)
+		}
+		h.controller.downloadHandler.HandleQuickPreview(chatID, []string{minutes + "m"})
+		return
+	}
+
 	if data == "preview_custom" {
 		h.controller.telegramClient.AnswerCallbackQuery(callback.ID, "请输入自定义时间")
 		if callback.Message != nil {
@@ -57,7 +67,8 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 		}
 		message := "<b>自定义预览</b>\n\n" +
 			"请发送以下格式之一：\n" +
-			"• <code>/download &lt;小时数&gt;</code> （例如：/download 6）\n" +
+			"• <code>/download &lt;数字&gt;m</code> （例如：/download 30m 表示30分钟）\n" +
+			"• <code>/download &lt;数字&gt;</code> （例如：/download 6 表示6小时）\n" +
 			"• <code>/download YYYY-MM-DD YYYY-MM-DD</code>\n" +
 			"• <code>/download 2025-01-01T00:00:00Z 2025-01-01T12:00:00Z</code>"
 		h.controller.messageUtils.SendMessageHTML(chatID, message)

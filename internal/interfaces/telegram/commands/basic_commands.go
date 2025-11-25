@@ -83,16 +83,18 @@ func (bc *BasicCommands) buildHelpContent(includeBackButton bool) (string, tgbot
 		"• 支持策略: tmdb_first, llm_first, llm_only, tmdb_only, compare\n\n" +
 		"<b>下载命令（支持多种格式）:</b>\n" +
 		"• <code>/download</code> - 预览最近24小时的视频文件（使用 <code>/download confirm</code> 开始下载）\n" +
+		"• <code>/download 5m</code> - 预览最近5分钟的视频文件（使用 <code>/download confirm 5m</code> 下载）\n" +
 		"• <code>/download 48</code> - 预览最近48小时的视频文件（使用 <code>/download confirm 48</code> 下载）\n" +
 		"• <code>/download 2025-09-01 2025-09-26</code> - 预览指定日期范围的文件\n" +
 		"• <code>/download confirm 2025-09-01 2025-09-26</code> - 下载指定日期范围的文件\n" +
 		"• <code>/download 2025-09-01T00:00:00Z 2025-09-26T23:59:59Z</code> - 预览精确时间范围（加 <code>confirm</code> 下载）\n" +
 		"• <code>/download https://example.com/file.zip</code> - 直接下载指定URL文件\n\n" +
 		"<b>时间格式说明:</b>\n" +
-		"• 小时数：1-8760（最大一年）\n" +
+		"• 分钟数：1m-525600m（最大一年），例如：5m, 30m, 120m\n" +
+		"• 小时数：1-8760（最大一年），例如：1, 24, 168\n" +
 		"• 日期格式：YYYY-MM-DD\n" +
 		"• 时间格式：ISO 8601 (YYYY-MM-DDTHH:mm:ssZ)\n" +
-		"• 底部按钮「预览文件」可快速选择 1/3/6 小时\n\n" +
+		"• 底部按钮「预览文件」可快速选择 5/10/30 分钟或 1/3/6 小时\n\n" +
 		"<b>定时任务命令:</b>\n" +
 		"/tasks - 查看我的定时任务\n" +
 		"/quicktask &lt;类型&gt; [路径] - 快捷创建任务\n" +
@@ -247,16 +249,20 @@ func (bc *BasicCommands) HandleList(chatID int64, command string) {
 func (bc *BasicCommands) HandlePreviewMenu(chatID int64) {
 	message := "<b>选择预览时间范围</b>\n\n" +
 		"请选择要预览的时间范围：\n" +
-		"• 预览 1 小时内的文件\n" +
-		"• 预览 3 小时内的文件\n" +
-		"• 预览 6 小时内的文件\n\n" +
-		"也可以直接输入命令：<code>/download &lt;小时数&gt;</code> 或 <code>/download YYYY-MM-DD YYYY-MM-DD</code> 来自定义时间范围。"
+		"• 预览 5/10/30 分钟内的文件\n" +
+		"• 预览 1/3/6 小时内的文件\n\n" +
+		"也可以直接输入命令：<code>/download &lt;数字&gt;</code>（小时）或 <code>/download &lt;数字&gt;m</code>（分钟）来自定义时间范围。"
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("预览 1 小时", "preview_hours|1"),
-			tgbotapi.NewInlineKeyboardButtonData("预览 3 小时", "preview_hours|3"),
-			tgbotapi.NewInlineKeyboardButtonData("预览 6 小时", "preview_hours|6"),
+			tgbotapi.NewInlineKeyboardButtonData("5分钟", "preview_minutes|5"),
+			tgbotapi.NewInlineKeyboardButtonData("10分钟", "preview_minutes|10"),
+			tgbotapi.NewInlineKeyboardButtonData("30分钟", "preview_minutes|30"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("1小时", "preview_hours|1"),
+			tgbotapi.NewInlineKeyboardButtonData("3小时", "preview_hours|3"),
+			tgbotapi.NewInlineKeyboardButtonData("6小时", "preview_hours|6"),
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("自定义时间", "preview_custom"),

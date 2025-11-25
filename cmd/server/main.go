@@ -60,12 +60,28 @@ func main() {
 	}
 
 	// 初始化路由
-	router, telegramHandler := routes.SetupRoutesWithContainer(cfg, container)
+	router, telegramHandler, telegramClient := routes.SetupRoutesWithContainer(cfg, container)
 
-	// 启动Telegram轮询模式
-	if cfg.Telegram.Enabled && !cfg.Telegram.Webhook.Enabled && telegramHandler != nil {
-		telegramHandler.StartPolling()
-		logger.Info("Telegram polling started successfully")
+	// 配置 Telegram Webhook
+	if cfg.Telegram.Enabled && telegramClient != nil {
+		if cfg.Telegram.Webhook.Enabled {
+			// Webhook 模式：自动设置 webhook
+			if err := telegramClient.SetWebhook(cfg.Telegram.Webhook.URL); err != nil {
+				logger.Error("Failed to set telegram webhook", "error", err)
+			} else {
+				logger.Info("Telegram webhook mode enabled", "url", cfg.Telegram.Webhook.URL)
+			}
+		} else {
+			// Polling 模式：确保删除 webhook
+			if err := telegramClient.DeleteWebhook(); err != nil {
+				logger.Warn("Failed to delete telegram webhook", "error", err)
+			}
+			// 启动 Polling
+			if telegramHandler != nil {
+				telegramHandler.StartPolling()
+				logger.Info("Telegram polling mode enabled")
+			}
+		}
 	}
 
 	// 设置信号处理

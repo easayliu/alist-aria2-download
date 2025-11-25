@@ -269,3 +269,52 @@ func (c *Client) RegisterBotCommands() error {
 
 	return nil
 }
+
+// SetWebhook 设置 Telegram Webhook
+func (c *Client) SetWebhook(webhookURL string) error {
+	if c.bot == nil {
+		return fmt.Errorf("telegram bot not initialized")
+	}
+
+	if webhookURL == "" {
+		return fmt.Errorf("webhook URL cannot be empty")
+	}
+
+	webhookConfig, _ := tgbotapi.NewWebhook(webhookURL)
+	_, err := c.bot.Request(webhookConfig)
+	if err != nil {
+		return fmt.Errorf("failed to set webhook: %w", err)
+	}
+
+	logger.Info("Webhook set successfully", "url", webhookURL)
+	return nil
+}
+
+// DeleteWebhook 删除 Telegram Webhook（切换到 polling 模式时使用）
+func (c *Client) DeleteWebhook() error {
+	if c.bot == nil {
+		return fmt.Errorf("telegram bot not initialized")
+	}
+
+	_, err := c.bot.Request(tgbotapi.DeleteWebhookConfig{})
+	if err != nil {
+		return fmt.Errorf("failed to delete webhook: %w", err)
+	}
+
+	logger.Info("Webhook deleted successfully (polling mode enabled)")
+	return nil
+}
+
+// GetWebhookInfo 获取 Webhook 信息（用于调试）
+func (c *Client) GetWebhookInfo() (*tgbotapi.WebhookInfo, error) {
+	if c.bot == nil {
+		return nil, fmt.Errorf("telegram bot not initialized")
+	}
+
+	info, err := c.bot.GetWebhookInfo()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get webhook info: %w", err)
+	}
+
+	return &info, nil
+}

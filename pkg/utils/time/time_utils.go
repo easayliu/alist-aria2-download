@@ -177,6 +177,13 @@ func CreateTimeRangeFromHours(hoursAgo int) TimeRange {
 	return TimeRange{Start: start, End: now}
 }
 
+// CreateTimeRangeFromMinutes 根据分钟数创建时间范围
+func CreateTimeRangeFromMinutes(minutesAgo int) TimeRange {
+	now := time.Now()
+	start := now.Add(-time.Duration(minutesAgo) * time.Minute)
+	return TimeRange{Start: start, End: now}
+}
+
 // CreateYesterdayRange 创建昨天的时间范围
 func CreateYesterdayRange() TimeRange {
 	now := time.Now()

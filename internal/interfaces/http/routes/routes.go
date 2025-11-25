@@ -113,7 +113,7 @@ func (rc *RoutesConfig) SetupRoutes(router *gin.Engine) {
 }
 
 // SetupRoutesWithContainer 使用ServiceContainer设置路由 - 新架构
-func SetupRoutesWithContainer(cfg *config.Config, container *services.ServiceContainer) (*gin.Engine, *telegram.TelegramHandler) {
+func SetupRoutesWithContainer(cfg *config.Config, container *services.ServiceContainer) (*gin.Engine, *telegram.TelegramHandler, *telegramInfra.Client) {
 	router := gin.Default()
 
 	// 全局中间件
@@ -126,9 +126,10 @@ func SetupRoutesWithContainer(cfg *config.Config, container *services.ServiceCon
 
 	// 初始化Telegram Handler
 	var telegramHandler *telegram.TelegramHandler
+	var telegramClient *telegramInfra.Client
 	if cfg.Telegram.Enabled {
 		// 创建单例 Telegram Client
-		telegramClient := telegramInfra.NewClient(&cfg.Telegram)
+		telegramClient = telegramInfra.NewClient(&cfg.Telegram)
 		container.SetTelegramClient(telegramClient)
 
 		// 从容器获取服务
@@ -163,5 +164,5 @@ func SetupRoutesWithContainer(cfg *config.Config, container *services.ServiceCon
 	routesConfig := NewRoutesConfig(container)
 	routesConfig.SetupRoutes(router)
 
-	return router, telegramHandler
+	return router, telegramHandler, telegramClient
 }
