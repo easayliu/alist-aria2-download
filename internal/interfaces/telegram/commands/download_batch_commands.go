@@ -30,16 +30,6 @@ func (dc *DownloadCommands) handleManualDownload(ctx context.Context, chatID int
 		return
 	}
 
-	modeLabel := "下载"
-	if preview {
-		modeLabel = "预览"
-	}
-
-	formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
-	processingMsg := formatter.FormatTitle("⏳", fmt.Sprintf("正在处理手动%s任务", modeLabel)) + "\n\n" +
-		formatter.FormatField("时间范围", timeResult.Description)
-	dc.messageUtils.SendMessageHTML(chatID, processingMsg)
-
 	// Get configured default path
 	config := dc.container.GetConfig()
 	path := config.Alist.DefaultPath
@@ -64,16 +54,19 @@ func (dc *DownloadCommands) handleManualDownload(ctx context.Context, chatID int
 		return
 	}
 
+	// 如果没有找到文件，直接发送一条消息并返回
 	if len(response.Files) == 0 {
 		formatter := dc.messageUtils.GetFormatter().(*utils.MessageFormatter)
 		var title string
 		if preview {
-			title = "手动下载预览"
+			title = "ℹ️ 手动下载预览"
 		} else {
 			title = "手动下载完成"
 		}
-		message := formatter.FormatNoFilesFound(title, timeResult.Description)
-		dc.messageUtils.SendMessageHTML(chatID, message)
+		message := formatter.FormatTitle(title, "") + "\n\n" +
+			formatter.FormatField("时间范围", timeResult.Description) + "\n" +
+			formatter.FormatField("结果", "未找到符合条件的文件")
+		dc.messageUtils.SendMessageHTMLWithAutoDelete(chatID, message, 30)
 		return
 	}
 
@@ -230,7 +223,7 @@ func (dc *DownloadCommands) sendManualDownloadPreview(chatID int64, response *co
 
 	message += fmt.Sprintf("\n\n⚠️ 预览有效期 10 分钟。发送 <code>%s</code> 开始下载。", confirmCommand)
 
-	dc.messageUtils.SendMessageHTML(chatID, message)
+	dc.messageUtils.SendMessageHTMLWithAutoDelete(chatID, message, 30)
 }
 
 // executeManualDownload executes manual download

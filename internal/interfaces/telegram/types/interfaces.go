@@ -30,6 +30,10 @@ type MessageSender interface {
 	SendMessageHTML(chatID int64, text string)
 	SendMessageMarkdown(chatID int64, text string)
 
+	// Message sending with auto deletion
+	SendMessageWithAutoDelete(chatID int64, text string, deleteAfterSeconds int)
+	SendMessageHTMLWithAutoDelete(chatID int64, text string, deleteAfterSeconds int)
+
 	// Message sending with keyboard
 	SendMessageWithKeyboard(chatID int64, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) int
 	SendMessageWithReplyKeyboard(chatID int64, text string)

@@ -44,6 +44,18 @@ func (mu *MessageUtils) SendMessage(chatID int64, text string) {
 	}
 }
 
+// SendMessageWithAutoDelete sends basic message with auto deletion
+func (mu *MessageUtils) SendMessageWithAutoDelete(chatID int64, text string, deleteAfterSeconds int) {
+	if mu.telegramClient != nil {
+		messages := mu.SplitMessage(text, 4000) // 留一些余量
+		for _, msg := range messages {
+			if err := mu.telegramClient.SendMessageWithAutoDelete(chatID, msg, "", deleteAfterSeconds); err != nil {
+				logger.Error("Failed to send telegram message with auto delete", "error", err)
+			}
+		}
+	}
+}
+
 // SendMessageHTML sends HTML formatted message
 func (mu *MessageUtils) SendMessageHTML(chatID int64, text string) {
 	if mu.telegramClient != nil {
@@ -189,6 +201,20 @@ func (mu *MessageUtils) ClearInlineKeyboard(chatID int64, messageID int) {
 	edit := tgbotapi.NewEditMessageReplyMarkup(chatID, messageID, empty)
 	if _, err := mu.telegramClient.GetBot().Send(edit); err != nil {
 		logger.Warn("Failed to clear inline keyboard", "error", err)
+	}
+}
+
+// DeleteMessage deletes a message immediately
+func (mu *MessageUtils) DeleteMessage(chatID int64, messageID int) {
+	if mu.telegramClient == nil || mu.telegramClient.GetBot() == nil {
+		return
+	}
+
+	deleteConfig := tgbotapi.NewDeleteMessage(chatID, messageID)
+	if _, err := mu.telegramClient.GetBot().Request(deleteConfig); err != nil {
+		logger.Warn("Failed to delete message", "chatID", chatID, "messageID", messageID, "error", err)
+	} else {
+		logger.Debug("Message deleted successfully", "chatID", chatID, "messageID", messageID)
 	}
 }
 

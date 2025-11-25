@@ -157,16 +157,6 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 		return
 	}
 
-	modeLabel := "下载"
-	if preview {
-		modeLabel = "预览"
-	}
-
-	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-	processingMsg := formatter.FormatTitle("⏳", fmt.Sprintf("正在处理手动%s任务", modeLabel)) + "\n\n" +
-		formatter.FormatField("时间范围", timeResult.Description)
-	h.controller.messageUtils.SendMessageHTML(chatID, processingMsg)
-
 	path := ""
 	if h.controller.config.Alist.DefaultPath != "" {
 		path = h.controller.config.Alist.DefaultPath
@@ -193,16 +183,19 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 
 	files := timeRangeResp.Files
 
+	// 如果没有找到文件，直接发送一条消息并返回
 	if len(files) == 0 {
 		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 		var title string
 		if preview {
-			title = "手动下载预览"
+			title = "ℹ️ 手动下载预览"
 		} else {
 			title = "手动下载完成"
 		}
-		message := formatter.FormatNoFilesFound(title, timeResult.Description)
-		h.controller.messageUtils.SendMessageHTML(chatID, message)
+		message := formatter.FormatTitle(title, "") + "\n\n" +
+			formatter.FormatField("时间范围", timeResult.Description) + "\n" +
+			formatter.FormatField("结果", "未找到符合条件的文件")
+		h.controller.messageUtils.SendMessageHTMLWithAutoDelete(chatID, message, 30)
 		return
 	}
 
@@ -289,7 +282,11 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 			),
 		)
 
-		h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+		messageID := h.controller.messageUtils.SendMessageWithKeyboard(chatID, message, "HTML", &keyboard)
+		// 30秒后自动删除预览消息
+		if messageID > 0 {
+			h.controller.messageUtils.DeleteMessageAfterDelay(chatID, messageID, 30)
+		}
 		return
 	}
 
@@ -522,7 +519,7 @@ func (h *DownloadHandler) HandleManualCancel(chatID int64, token string, message
 	}
 
 	h.controller.messageUtils.ClearInlineKeyboard(chatID, messageID)
-	h.controller.messageUtils.SendMessage(chatID, "已取消此次下载预览")
+	h.controller.messageUtils.SendMessageWithAutoDelete(chatID, "已取消此次下载预览", 30)
 }
 
 // ================================
