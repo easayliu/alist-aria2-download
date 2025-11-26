@@ -233,8 +233,8 @@ func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, mes
 		})
 	}
 
-	// 并发执行重命名
-	renameResults := h.controller.fileService.BatchRenameAndMoveFiles(ctx, tasks)
+	// 使用优化的批量重命名方法（智能选择移动策略）
+	renameResults := h.controller.fileService.BatchRenameAndMoveFilesOptimized(ctx, tasks)
 
 	// 处理结果
 	const maxDisplayItems = MaxDisplayItems

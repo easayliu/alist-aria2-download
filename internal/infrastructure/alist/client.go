@@ -404,6 +404,37 @@ func (c *Client) Move(ctx context.Context, srcDir, dstDir string, names []string
 	return nil
 }
 
+// RecursiveMove 聚合移动整个目录
+func (c *Client) RecursiveMove(ctx context.Context, srcDir, dstDir string) error {
+	reqData := RecursiveMoveRequest{
+		SrcDir: srcDir,
+		DstDir: dstDir,
+	}
+
+	var moveResp RecursiveMoveResponse
+	if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/recursive_move", reqData, &moveResp); err != nil {
+		return fmt.Errorf("failed to send recursive move request: %w", err)
+	}
+
+	if moveResp.Code == 401 {
+		c.ClearToken()
+
+		if err := c.ensureValidToken(ctx); err != nil {
+			return fmt.Errorf("failed to refresh token after 401: %w", err)
+		}
+
+		if err := c.makeRequestWithContext(ctx, "POST", "/api/fs/recursive_move", reqData, &moveResp); err != nil {
+			return fmt.Errorf("failed to send recursive move request after token refresh: %w", err)
+		}
+	}
+
+	if moveResp.Code != 200 && moveResp.Code != 0 {
+		return fmt.Errorf("recursive move failed: code=%d, message=%s", moveResp.Code, moveResp.Message)
+	}
+
+	return nil
+}
+
 func (c *Client) Mkdir(ctx context.Context, path string) error {
 	reqData := MkdirRequest{
 		Path: path,

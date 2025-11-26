@@ -137,3 +137,14 @@ type RemoveResponse struct {
 	Message string      `json:"message"`
 	Data    interface{} `json:"data"`
 }
+
+type RecursiveMoveRequest struct {
+	SrcDir string `json:"src_dir"`
+	DstDir string `json:"dst_dir"`
+}
+
+type RecursiveMoveResponse struct {
+	Code    int         `json:"code"`
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}

@@ -240,6 +240,7 @@ type FileService interface {
 	RenameFile(ctx context.Context, path, newName string) error
 	RenameAndMoveFile(ctx context.Context, oldPath, newPath string) error
 	BatchRenameAndMoveFiles(ctx context.Context, tasks []RenameTask) []RenameResult
+	BatchRenameAndMoveFilesOptimized(ctx context.Context, tasks []RenameTask) []RenameResult
 	GetRenameSuggestions(ctx context.Context, path string) ([]RenameSuggestion, error)
 	GetBatchRenameSuggestions(ctx context.Context, paths []string) (map[string][]RenameSuggestion, error)
 

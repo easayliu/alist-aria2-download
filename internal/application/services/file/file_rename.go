@@ -520,3 +520,312 @@ func buildFileNameRequests(paths []string) []filename.FileNameRequest {
 func (s *AppFileService) isVideoFile(filename string) bool {
 	return fileutil.IsVideoFile(filename)
 }
+
+// directoryGroup 目录分组信息
+type directoryGroup struct {
+	srcDir     string
+	dstDir     string
+	moveFiles  []string
+	items      []directoryGroupItem
+	totalFiles int
+	coverage   float64
+}
+
+// directoryGroupItem 分组中的单个文件信息
+type directoryGroupItem struct {
+	fileName    string
+	newFileName string
+	oldPath     string
+	newPath     string
+	taskIndex   int
+}
+
+// analyzeAndGroupTasks 分析任务并按目录分组
+func (s *AppFileService) analyzeAndGroupTasks(ctx context.Context, tasks []contracts.RenameTask) map[string]*directoryGroup {
+	groupMap := make(map[string]*directoryGroup)
+
+	// 第一步：按源目录和目标目录分组
+	for i, task := range tasks {
+		srcDir := filepath.Dir(task.OldPath)
+		dstDir := filepath.Dir(task.NewPath)
+		oldFile := filepath.Base(task.OldPath)
+		newFile := filepath.Base(task.NewPath)
+
+		groupKey := fmt.Sprintf("%s->%s", srcDir, dstDir)
+
+		if groupMap[groupKey] == nil {
+			groupMap[groupKey] = &directoryGroup{
+				srcDir:    srcDir,
+				dstDir:    dstDir,
+				moveFiles: []string{},
+				items:     []directoryGroupItem{},
+			}
+		}
+
+		group := groupMap[groupKey]
+		group.moveFiles = append(group.moveFiles, oldFile)
+		group.items = append(group.items, directoryGroupItem{
+			fileName:    oldFile,
+			newFileName: newFile,
+			oldPath:     task.OldPath,
+			newPath:     task.NewPath,
+			taskIndex:   i,
+		})
+	}
+
+	// 第二步：计算每个组的覆盖率（用于决定使用哪种移动策略）
+	for _, group := range groupMap {
+		// 跳过同目录的组（不需要移动）
+		if group.srcDir == group.dstDir {
+			group.coverage = 0
+			group.totalFiles = len(group.moveFiles)
+			continue
+		}
+
+		// 获取源目录的总视频文件数
+		if listResp, err := s.alistClient.ListFilesWithContext(ctx, group.srcDir, 1, 1000); err == nil {
+			videoCount := 0
+			for _, file := range listResp.Data.Content {
+				if !file.IsDir && s.isVideoFile(file.Name) {
+					videoCount++
+				}
+			}
+			group.totalFiles = videoCount
+			if videoCount > 0 {
+				group.coverage = float64(len(group.moveFiles)) / float64(videoCount)
+			}
+
+			logger.Info("目录分组分析完成",
+				"srcDir", group.srcDir,
+				"dstDir", group.dstDir,
+				"moveFiles", len(group.moveFiles),
+				"totalFiles", group.totalFiles,
+				"coverage", fmt.Sprintf("%.1f%%", group.coverage*100))
+		} else {
+			logger.Warn("无法获取源目录文件列表，假设覆盖率为100%",
+				"srcDir", group.srcDir,
+				"error", err)
+			group.totalFiles = len(group.moveFiles)
+			group.coverage = 1.0
+		}
+	}
+
+	return groupMap
+}
+
+// BatchRenameAndMoveFilesOptimized 优化的批量重命名（智能选择移动策略）
+func (s *AppFileService) BatchRenameAndMoveFilesOptimized(
+	ctx context.Context,
+	tasks []contracts.RenameTask,
+) []contracts.RenameResult {
+
+	if len(tasks) == 0 {
+		return []contracts.RenameResult{}
+	}
+
+	logger.Info("开始优化的批量重命名", "taskCount", len(tasks))
+
+	results := make([]contracts.RenameResult, len(tasks))
+	groups := s.analyzeAndGroupTasks(ctx, tasks)
+
+	// 批量创建所有目标目录
+	targetDirs := make(map[string]bool)
+	for _, group := range groups {
+		if group.srcDir != group.dstDir {
+			targetDirs[group.dstDir] = true
+		}
+	}
+
+	var wg sync.WaitGroup
+	for dir := range targetDirs {
+		wg.Add(1)
+		go func(d string) {
+			defer wg.Done()
+			if err := s.alistClient.Mkdir(ctx, d); err != nil {
+				logger.Warn("创建目录失败", "dir", d, "error", err)
+			}
+		}(dir)
+	}
+	wg.Wait()
+
+	// 处理每个分组
+	var resultsMu sync.Mutex
+
+	for _, group := range groups {
+		wg.Add(1)
+		go func(g *directoryGroup) {
+			defer wg.Done()
+
+			// 策略选择：高覆盖率（≥80%）且文件数≥3 → 使用 recursive_move
+			useRecursiveMove := g.srcDir != g.dstDir &&
+				g.coverage >= 0.8 &&
+				len(g.moveFiles) >= 3
+
+			if useRecursiveMove {
+				// 策略A: 使用 recursive_move（整个目录移动）
+				logger.Info("使用 RecursiveMove 策略",
+					"srcDir", g.srcDir,
+					"dstDir", g.dstDir,
+					"coverage", fmt.Sprintf("%.1f%%", g.coverage*100),
+					"fileCount", len(g.moveFiles))
+
+				if err := s.alistClient.RecursiveMove(ctx, g.srcDir, g.dstDir); err != nil {
+					logger.Error("RecursiveMove 失败", "error", err)
+					// 标记所有任务失败
+					for _, item := range g.items {
+						resultsMu.Lock()
+						results[item.taskIndex] = contracts.RenameResult{
+							OldPath: item.oldPath,
+							NewPath: item.newPath,
+							Success: false,
+							Error:   err,
+						}
+						resultsMu.Unlock()
+					}
+					return
+				}
+
+				logger.Info("RecursiveMove 成功，开始处理重命名",
+					"fileCount", len(g.items))
+
+				// 移动成功，处理需要重命名的文件
+				for _, item := range g.items {
+					var err error
+					if item.fileName != item.newFileName {
+						movedPath := filepath.Join(g.dstDir, item.fileName)
+						err = s.alistClient.RenameWithContext(ctx, movedPath, item.newFileName)
+						if err != nil {
+							logger.Warn("重命名失败",
+								"movedPath", movedPath,
+								"newFileName", item.newFileName,
+								"error", err)
+						}
+					}
+
+					resultsMu.Lock()
+					results[item.taskIndex] = contracts.RenameResult{
+						OldPath: item.oldPath,
+						NewPath: item.newPath,
+						Success: err == nil,
+						Error:   err,
+					}
+					resultsMu.Unlock()
+				}
+
+			} else {
+				// 策略B: 使用批量 Move 或同目录 Rename
+				if g.srcDir == g.dstDir {
+					// 同目录，只需重命名
+					logger.Info("使用同目录重命名策略",
+						"dir", g.srcDir,
+						"fileCount", len(g.items))
+
+					for _, item := range g.items {
+						err := s.alistClient.RenameWithContext(ctx, item.oldPath, item.newFileName)
+						if err != nil {
+							logger.Warn("重命名失败",
+								"oldPath", item.oldPath,
+								"newFileName", item.newFileName,
+								"error", err)
+						}
+
+						resultsMu.Lock()
+						results[item.taskIndex] = contracts.RenameResult{
+							OldPath: item.oldPath,
+							NewPath: item.newPath,
+							Success: err == nil,
+							Error:   err,
+						}
+						resultsMu.Unlock()
+					}
+				} else {
+					// 跨目录，使用批量 Move
+					logger.Info("使用批量 Move 策略",
+						"srcDir", g.srcDir,
+						"dstDir", g.dstDir,
+						"fileCount", len(g.moveFiles),
+						"coverage", fmt.Sprintf("%.1f%%", g.coverage*100))
+
+					if err := s.alistClient.Move(ctx, g.srcDir, g.dstDir, g.moveFiles); err != nil {
+						logger.Error("批量 Move 失败", "error", err)
+						for _, item := range g.items {
+							resultsMu.Lock()
+							results[item.taskIndex] = contracts.RenameResult{
+								OldPath: item.oldPath,
+								NewPath: item.newPath,
+								Success: false,
+								Error:   err,
+							}
+							resultsMu.Unlock()
+						}
+						return
+					}
+
+					logger.Info("批量 Move 成功，开始处理重命名",
+						"fileCount", len(g.items))
+
+					// Move成功，处理需要重命名的文件
+					for _, item := range g.items {
+						var err error
+						if item.fileName != item.newFileName {
+							movedPath := filepath.Join(g.dstDir, item.fileName)
+							err = s.alistClient.RenameWithContext(ctx, movedPath, item.newFileName)
+							if err != nil {
+								logger.Warn("重命名失败",
+									"movedPath", movedPath,
+									"newFileName", item.newFileName,
+									"error", err)
+							}
+						}
+
+						resultsMu.Lock()
+						results[item.taskIndex] = contracts.RenameResult{
+							OldPath: item.oldPath,
+							NewPath: item.newPath,
+							Success: err == nil,
+							Error:   err,
+						}
+						resultsMu.Unlock()
+					}
+				}
+			}
+
+		}(group)
+	}
+
+	wg.Wait()
+
+	// 统计结果并清理空目录
+	successCount := 0
+	oldDirs := make(map[string]bool)
+	for i, result := range results {
+		if result.Success {
+			successCount++
+			oldDir := filepath.Dir(tasks[i].OldPath)
+			newDir := filepath.Dir(tasks[i].NewPath)
+			if oldDir != newDir {
+				oldDirs[oldDir] = true
+			}
+		}
+	}
+
+	logger.Info("批量重命名完成",
+		"total", len(tasks),
+		"success", successCount,
+		"failed", len(tasks)-successCount)
+
+	// 清理空目录
+	if len(oldDirs) > 0 {
+		logger.Info("等待缓存更新后清理源目录")
+		time.Sleep(2 * time.Second)
+
+		logger.Info("开始清理源目录", "dirCount", len(oldDirs))
+		for dir := range oldDirs {
+			if err := s.removeEmptyDirectory(ctx, dir); err != nil {
+				logger.Warn("删除目录失败", "dir", dir, "error", err)
+			}
+		}
+	}
+
+	return results
+}
