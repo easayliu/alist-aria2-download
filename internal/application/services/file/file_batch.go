@@ -24,24 +24,15 @@ func (s *AppFileService) DownloadFiles(ctx context.Context, req contracts.BatchF
 			continue
 		}
 
-		downloadReq := contracts.DownloadRequest{
-			URL:          fileInfo.InternalURL,
-			Filename:     fileInfo.Name,
-			Directory:    fileReq.TargetDir,
-			Options:      fileReq.Options,
-			AutoClassify: fileReq.AutoClassify,
-		}
+		// 使用统一的方法构建下载请求
+		downloadReq := s.buildDownloadRequest(*fileInfo, fileReq.TargetDir, fileReq.AutoClassify, fileReq.Options)
 
 		// 应用全局设置
-		if req.TargetDir != "" && downloadReq.Directory == "" {
+		if req.TargetDir != "" && downloadReq.Directory == fileReq.TargetDir {
 			downloadReq.Directory = req.TargetDir
 		}
 		if req.AutoClassify {
 			downloadReq.AutoClassify = true
-		}
-
-		if downloadReq.Directory == "" {
-			downloadReq.Directory = s.GenerateDownloadPath(*fileInfo)
 		}
 
 		downloadRequests = append(downloadRequests, downloadReq)
@@ -80,21 +71,15 @@ func (s *AppFileService) DownloadDirectory(ctx context.Context, req contracts.Di
 	// 转换为下载请求
 	var downloadRequests []contracts.DownloadRequest
 	for _, file := range listResp.Files {
-		// 动态获取真实的下载URL
+		// 动态获取真实的下载URL（ListFiles返回的文件InternalURL为空，采用延迟加载）
 		logger.Debug("Getting download URL for file in directory", "file", file.Name, "path", file.Path, "size", file.Size)
 		internalURL, _ := s.getRealDownloadURLs(file.Path)
 
-		downloadReq := contracts.DownloadRequest{
-			URL:          internalURL,
-			Filename:     file.Name,
-			Directory:    req.TargetDir,
-			AutoClassify: req.AutoClassify,
-			FileSize:     file.Size, // 设置文件大小用于统计
-		}
+		// 填充InternalURL以便使用统一的构建方法
+		file.InternalURL = internalURL
 
-		if downloadReq.Directory == "" {
-			downloadReq.Directory = s.GenerateDownloadPath(file)
-		}
+		// 使用统一的方法构建下载请求
+		downloadReq := s.buildDownloadRequest(file, req.TargetDir, req.AutoClassify, nil)
 
 		downloadRequests = append(downloadRequests, downloadReq)
 		logger.Debug("Download request created", "file", file.Name, "fileSize", downloadReq.FileSize)

@@ -292,3 +292,27 @@ func (s *AppFileService) getParentPath(path string) string {
 	}
 	return pathutil.GetParentPath(path)
 }
+
+// buildDownloadRequest 构建下载请求 - 统一的下载请求构建逻辑
+func (s *AppFileService) buildDownloadRequest(
+	fileResp contracts.FileResponse,
+	targetDir string,
+	autoClassify bool,
+	options map[string]interface{},
+) contracts.DownloadRequest {
+	downloadReq := contracts.DownloadRequest{
+		URL:          fileResp.InternalURL,
+		Filename:     fileResp.Name,
+		Directory:    targetDir,
+		Options:      options,
+		AutoClassify: autoClassify,
+		FileSize:     fileResp.Size,
+	}
+
+	// 如果没有指定目标目录，使用自动生成的下载路径
+	if downloadReq.Directory == "" {
+		downloadReq.Directory = s.GenerateDownloadPath(fileResp)
+	}
+
+	return downloadReq
+}

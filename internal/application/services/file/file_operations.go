@@ -29,18 +29,8 @@ func (s *AppFileService) DownloadFile(ctx context.Context, req contracts.FileDow
 		"fileSize", fileInfo.Size,
 		"downloadURL", fileInfo.InternalURL)
 
-	// 构建下载请求
-	downloadReq := contracts.DownloadRequest{
-		URL:          fileInfo.InternalURL,
-		Filename:     fileInfo.Name,
-		Directory:    req.TargetDir,
-		Options:      req.Options,
-		AutoClassify: req.AutoClassify,
-	}
-
-	if downloadReq.Directory == "" {
-		downloadReq.Directory = s.GenerateDownloadPath(*fileInfo)
-	}
+	// 使用统一的方法构建下载请求
+	downloadReq := s.buildDownloadRequest(*fileInfo, req.TargetDir, req.AutoClassify, req.Options)
 
 	logger.Debug("Creating download task",
 		"url", downloadReq.URL,

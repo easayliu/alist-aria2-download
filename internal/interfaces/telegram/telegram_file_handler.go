@@ -341,60 +341,34 @@ func (h *FileHandler) HandleFileDownload(chatID int64, filePath string) {
 
 // handleDownloadFileByPath downloads a single file by path
 func (h *FileHandler) handleDownloadFileByPath(chatID int64, filePath string) {
-	// Get file info using file service (uniformly use getFilesFromPath to ensure path consistency)
-	parentDir := filepath.Dir(filePath)
-	fileName := filepath.Base(filePath)
+	ctx := context.Background()
 
-	// Get file information using file service's smart classification
-	fileInfo, err := h.getFilesFromPath(parentDir, false)
-	if err != nil {
-		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("获取文件信息", err))
-		return
-	}
-
-	// Find corresponding file information
-	var targetFileInfo *contracts.FileResponse
-	for _, info := range fileInfo {
-		if info.Name == fileName {
-			targetFileInfo = &info
-			break
-		}
-	}
-
-	if targetFileInfo == nil {
-		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-		h.controller.messageUtils.SendMessage(chatID, formatter.FormatSimpleError("文件未找到"))
-		return
-	}
-
-	// Create download task - using contracts interface
-	downloadReq := contracts.DownloadRequest{
-		URL:          targetFileInfo.InternalURL,
-		Filename:     targetFileInfo.Name,
-		Directory:    targetFileInfo.DownloadPath,
+	// 构建文件下载请求
+	req := contracts.FileDownloadRequest{
+		FilePath:     filePath,
 		AutoClassify: true,
 	}
 
-	ctx := context.Background()
-	download, err := h.controller.downloadService.CreateDownload(ctx, downloadReq)
+	// 调用应用服务下载文件
+	response, err := h.controller.fileService.DownloadFile(ctx, req)
 	if err != nil {
 		formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
-		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("创建下载任务", err))
+		h.controller.messageUtils.SendMessage(chatID, formatter.FormatError("创建文件下载任务", err))
 		return
 	}
 
-	// Use unified formatter to send success message
+	// 使用统一的格式发送成功消息
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	message := formatter.FormatFileDownloadSuccess(utils.FileDownloadSuccessData{
-		Filename:     targetFileInfo.Name,
+		Filename:     response.Filename,
 		FilePath:     filePath,
-		DownloadPath: targetFileInfo.DownloadPath,
-		TaskID:       download.ID,
-		Size:         h.controller.messageUtils.FormatFileSize(targetFileInfo.Size),
+		DownloadPath: response.Directory,
+		TaskID:       response.ID,
+		Size:         h.controller.messageUtils.FormatFileSize(response.TotalSize),
 		EscapeHTML:   h.controller.messageUtils.EscapeHTML,
 	})
 
+	parentDir := filepath.Dir(filePath)
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("📥 下载管理", "download_list"),
