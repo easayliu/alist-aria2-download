@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -113,17 +114,50 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 			logger.Info("Batch rename: processing regular files", "searchQuery", searchQuery, "fileCount", len(versionPaths))
 		}
 
-		seasonMap := rs.groupPathsBySeason(versionPaths, pathInfoMap)
-		rs.logSeasonDistribution(searchQuery, seasonMap)
+		// 按父目录分组(解决混合单季和多季目录的问题)
+		dirGroups := rs.groupPathsByParentDir(versionPaths)
+		logger.Info("按父目录分组", "groupCount", len(dirGroups))
 
-		versionResults, err := rs.batchSearchTVByQuery(ctx, searchQuery, seasonMap, pathInfoMap)
-		if err != nil {
-			logger.Warn("Batch rename: search failed", "query", searchQuery, "version", version, "error", err)
-			continue
-		}
+		for parentDir, dirPaths := range dirGroups {
+			logger.Info("处理目录分组", "parentDir", parentDir, "fileCount", len(dirPaths))
 
-		for path, suggestions := range versionResults {
-			result[path] = append(result[path], suggestions...)
+			// 检测季度范围(针对当前目录组)
+			var seasonRangeDetected bool
+			var startSeason, endSeason int
+			if len(dirPaths) > 0 {
+				_, startSeason, endSeason = rs.ExtractSeasonRange(dirPaths[0])
+				if startSeason > 0 && endSeason > 0 {
+					seasonRangeDetected = true
+					logger.Info("检测到季度范围目录",
+						"parentDir", parentDir,
+						"startSeason", startSeason,
+						"endSeason", endSeason,
+						"fileCount", len(dirPaths))
+				}
+			}
+
+			var seasonMap map[int][]string
+			if !seasonRangeDetected {
+				// 常规分组:按路径中的季度信息分组
+				seasonMap = rs.groupPathsBySeason(dirPaths, pathInfoMap)
+				rs.logSeasonDistribution(searchQuery, seasonMap)
+			} else {
+				// 季度范围模式:所有文件放在一个虚拟分组中
+				seasonMap = map[int][]string{
+					0: dirPaths, // 使用0作为标记,表示需要智能分配
+				}
+				logger.Info("季度范围模式,文件待智能分配", "fileCount", len(dirPaths))
+			}
+
+			versionResults, err := rs.batchSearchTVByQuery(ctx, searchQuery, seasonMap, pathInfoMap, seasonRangeDetected, startSeason, endSeason)
+			if err != nil {
+				logger.Warn("Batch rename: search failed", "query", searchQuery, "parentDir", parentDir, "error", err)
+				continue
+			}
+
+			for path, suggestions := range versionResults {
+				result[path] = append(result[path], suggestions...)
+			}
 		}
 	}
 
@@ -135,13 +169,25 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 }
 
 // batchSearchTVByQuery 批量搜索TV剧集
-func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query string, seasonMap map[int][]string, pathInfoMap map[string]*MediaInfo) (map[string][]rename.Suggestion, error) {
+func (rs *RenameSuggester) batchSearchTVByQuery(
+	ctx context.Context,
+	query string,
+	seasonMap map[int][]string,
+	pathInfoMap map[string]*MediaInfo,
+	seasonRangeDetected bool,
+	startSeason, endSeason int,
+) (map[string][]rename.Suggestion, error) {
 	totalFiles := 0
 	for _, paths := range seasonMap {
 		totalFiles += len(paths)
 	}
 
-	logger.Info("Batch searching TMDB TV series", "query", query, "seasonCount", len(seasonMap), "fileCount", totalFiles)
+	logger.Info("Batch searching TMDB TV series",
+		"query", query,
+		"seasonCount", len(seasonMap),
+		"fileCount", totalFiles,
+		"seasonRangeDetected", seasonRangeDetected,
+		"seasonRange", fmt.Sprintf("%d-%d", startSeason, endSeason))
 
 	resp, err := rs.tmdbClient.SearchTV(ctx, query, 0)
 	if err != nil {
@@ -176,30 +222,14 @@ func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query strin
 		logger.Info("Matched TV show", "query", query, "tvID", tvResult.ID, "name", tvResult.Name, "originalName", tvResult.OriginalName, "nameMatch", nameMatch, "originalNameMatch", originalNameMatch)
 
 		year := rs.extractYear(tvResult.FirstAirDate)
-		successCount := 0
+		var successCount int
 
-		for season, seasonPaths := range seasonMap {
-			seasonDetails, err := rs.tmdbClient.GetSeasonDetails(ctx, tvResult.ID, season)
-			if err != nil {
-				logger.Warn("Failed to get season details", "tvID", tvResult.ID, "query", query, "season", season, "error", err)
-				continue
-			}
-
-			episodeMap := rs.buildEpisodeMap(seasonDetails.Episodes)
-			logger.Info("Got season details", "query", query, "season", season, "episodeCount", len(episodeMap))
-
-			for _, path := range seasonPaths {
-				info := pathInfoMap[path]
-				matchedEpisode, _ := rs.matchEpisodeByAirDate(info, seasonDetails.Episodes, "Batch rename: ")
-
-				if episode, exists := episodeMap[matchedEpisode]; exists {
-					sug := rs.buildBatchTVSuggestion(path, query, info, tvResult.ID, year, season, matchedEpisode, episode.Name)
-					result[path] = append(result[path], sug)
-					successCount++
-				} else {
-					logger.Warn("Episode not found in episodeMap", "path", path, "matchedEpisode", matchedEpisode, "season", season)
-				}
-			}
+		// 如果检测到季度范围,使用智能分配模式
+		if seasonRangeDetected && startSeason > 0 && endSeason > 0 {
+			successCount = rs.handleSeasonRange(ctx, tvResult.ID, query, year, startSeason, endSeason, seasonMap, pathInfoMap, &result)
+		} else {
+			// 原有逻辑:按现有seasonMap处理
+			successCount = rs.handleRegularSeasons(ctx, tvResult.ID, query, year, seasonMap, pathInfoMap, &result)
 		}
 
 		if successCount > 0 {
@@ -209,6 +239,175 @@ func (rs *RenameSuggester) batchSearchTVByQuery(ctx context.Context, query strin
 
 	logger.Info("Batch search completed", "query", query, "matchedFiles", len(result), "totalInputFiles", totalFiles)
 	return result, nil
+}
+
+// handleRegularSeasons 处理常规季度分组
+func (rs *RenameSuggester) handleRegularSeasons(
+	ctx context.Context,
+	tvID int,
+	query string,
+	year int,
+	seasonMap map[int][]string,
+	pathInfoMap map[string]*MediaInfo,
+	result *map[string][]rename.Suggestion,
+) int {
+	successCount := 0
+
+	for season, seasonPaths := range seasonMap {
+		seasonDetails, err := rs.tmdbClient.GetSeasonDetails(ctx, tvID, season)
+		if err != nil {
+			logger.Warn("Failed to get season details", "tvID", tvID, "query", query, "season", season, "error", err)
+			continue
+		}
+
+		episodeMap := rs.buildEpisodeMap(seasonDetails.Episodes)
+		logger.Info("Got season details", "query", query, "season", season, "episodeCount", len(episodeMap))
+
+		for _, path := range seasonPaths {
+			info := pathInfoMap[path]
+			matchedEpisode, _ := rs.matchEpisodeByAirDate(info, seasonDetails.Episodes, "Batch rename: ")
+
+			if episode, exists := episodeMap[matchedEpisode]; exists {
+				sug := rs.buildBatchTVSuggestion(path, query, info, tvID, year, season, matchedEpisode, episode.Name)
+				(*result)[path] = append((*result)[path], sug)
+				successCount++
+			} else {
+				logger.Warn("Episode not found in episodeMap", "path", path, "matchedEpisode", matchedEpisode, "season", season)
+			}
+		}
+	}
+
+	return successCount
+}
+
+// handleSeasonRange 处理季度范围情况(如"第1-3季"目录包含多季内容)
+func (rs *RenameSuggester) handleSeasonRange(
+	ctx context.Context,
+	tvID int,
+	query string,
+	year int,
+	startSeason, endSeason int,
+	seasonMap map[int][]string,
+	pathInfoMap map[string]*MediaInfo,
+	result *map[string][]rename.Suggestion,
+) int {
+	// 收集所有文件并按集数排序
+	var allPaths []string
+	for _, paths := range seasonMap {
+		allPaths = append(allPaths, paths...)
+	}
+
+	logger.Info("季度范围处理开始",
+		"startSeason", startSeason,
+		"endSeason", endSeason,
+		"totalFiles", len(allPaths))
+
+	// 按文件名中的集数排序
+	sort.Slice(allPaths, func(i, j int) bool {
+		ei := pathInfoMap[allPaths[i]].Episode
+		ej := pathInfoMap[allPaths[j]].Episode
+		return ei < ej
+	})
+
+	logger.Debug("文件按集数排序完成",
+		"firstFile", allPaths[0],
+		"firstEpisode", pathInfoMap[allPaths[0]].Episode,
+		"lastFile", allPaths[len(allPaths)-1],
+		"lastEpisode", pathInfoMap[allPaths[len(allPaths)-1]].Episode)
+
+	// 获取所有季度的数据
+	type seasonInfo struct {
+		season       int
+		episodeCount int
+		episodes     []tmdb.Episode
+	}
+
+	var seasons []seasonInfo
+	totalEpisodes := 0
+
+	for s := startSeason; s <= endSeason; s++ {
+		seasonDetails, err := rs.tmdbClient.GetSeasonDetails(ctx, tvID, s)
+		if err != nil {
+			logger.Warn("获取季度详情失败", "tvID", tvID, "season", s, "error", err)
+			continue
+		}
+
+		info := seasonInfo{
+			season:       s,
+			episodeCount: len(seasonDetails.Episodes),
+			episodes:     seasonDetails.Episodes,
+		}
+		seasons = append(seasons, info)
+		totalEpisodes += len(seasonDetails.Episodes)
+
+		logger.Info("获取到季度数据",
+			"season", s,
+			"episodeCount", len(seasonDetails.Episodes))
+	}
+
+	if len(seasons) == 0 {
+		logger.Warn("未能获取任何季度数据", "startSeason", startSeason, "endSeason", endSeason)
+		return 0
+	}
+
+	logger.Info("多季度数据获取完成",
+		"seasonCount", len(seasons),
+		"totalEpisodes", totalEpisodes,
+		"totalFiles", len(allPaths))
+
+	// 智能分配:根据集数累加确定每个文件属于哪一季
+	successCount := 0
+	episodeOffset := 0
+
+	for _, si := range seasons {
+		episodeMap := rs.buildEpisodeMap(si.episodes)
+		seasonMatchCount := 0
+
+		for _, path := range allPaths {
+			info := pathInfoMap[path]
+			fileEpisode := info.Episode
+
+			// 判断此文件是否属于当前季度
+			if fileEpisode > episodeOffset && fileEpisode <= episodeOffset+si.episodeCount {
+				// 计算在当前季度中的集数
+				seasonEpisode := fileEpisode - episodeOffset
+
+				if episode, exists := episodeMap[seasonEpisode]; exists {
+					sug := rs.buildBatchTVSuggestion(path, query, info, tvID, year, si.season, seasonEpisode, episode.Name)
+					(*result)[path] = append((*result)[path], sug)
+					successCount++
+					seasonMatchCount++
+					logger.Debug("智能分配集数",
+						"path", path,
+						"fileEpisode", fileEpisode,
+						"assignedSeason", si.season,
+						"seasonEpisode", seasonEpisode,
+						"episodeName", episode.Name)
+				} else {
+					logger.Warn("集数不在episodeMap中",
+						"path", path,
+						"fileEpisode", fileEpisode,
+						"season", si.season,
+						"seasonEpisode", seasonEpisode,
+						"episodeMapSize", len(episodeMap))
+				}
+			}
+		}
+
+		logger.Info("季度处理完成",
+			"season", si.season,
+			"matchCount", seasonMatchCount,
+			"episodeRange", fmt.Sprintf("%d-%d", episodeOffset+1, episodeOffset+si.episodeCount))
+
+		episodeOffset += si.episodeCount
+	}
+
+	logger.Info("季度范围处理完成",
+		"successCount", successCount,
+		"totalFiles", len(allPaths),
+		"failedCount", len(allPaths)-successCount)
+
+	return successCount
 }
 
 // ============ 辅助方法 ============
@@ -282,6 +481,17 @@ func (rs *RenameSuggester) groupPathsByVersion(paths []string, pathInfoMap map[s
 	return pathsByVersion
 }
 
+// groupPathsByParentDir 按父目录分组
+// 用于区分不同的季度目录(如"第1-3季"、"第6季"等)
+func (rs *RenameSuggester) groupPathsByParentDir(paths []string) map[string][]string {
+	dirGroups := make(map[string][]string)
+	for _, path := range paths {
+		parentDir := filepath.Dir(path)
+		dirGroups[parentDir] = append(dirGroups[parentDir], path)
+	}
+	return dirGroups
+}
+
 // groupPathsBySeason 按季度分组
 func (rs *RenameSuggester) groupPathsBySeason(paths []string, pathInfoMap map[string]*MediaInfo) map[int][]string {
 	seasonMap := make(map[int][]string)
@@ -294,9 +504,16 @@ func (rs *RenameSuggester) groupPathsBySeason(paths []string, pathInfoMap map[st
 			detectedSeason = info.Season
 		}
 
+		logger.Debug("Grouping path by season",
+			"path", path,
+			"pathSeason", pathSeason,
+			"infoSeason", info.Season,
+			"detectedSeason", detectedSeason)
+
 		if detectedSeason > 0 {
 			seasonMap[detectedSeason] = append(seasonMap[detectedSeason], path)
 		} else {
+			logger.Warn("Season not detected, defaulting to 1", "path", path)
 			seasonMap[1] = append(seasonMap[1], path)
 		}
 	}

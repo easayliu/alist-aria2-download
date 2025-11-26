@@ -66,6 +66,7 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 			seasonDirIndex = i
 			season = rs.extractSeasonFromDirectory(part)
 			if season > 0 {
+				logger.Debug("Found season directory", "part", part, "season", season, "index", i)
 				break
 			}
 		}
@@ -105,15 +106,33 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 				if s > 0 {
 					season = s
 				}
+				logger.Debug("Found from combined dir", "part", part, "showName", showName, "season", season)
 				return showName, rs.defaultSeason(season)
 			}
 		}
 
 		// 处理中文季度格式
-		if name, s := rs.extractFromChineseFormat(part, showName); name != "" {
-			showName = name
-			season = s
-			return showName, season
+		if name, s := rs.extractFromChineseFormat(part, showName); s > 0 || name != "" {
+			logger.Info("提取中文季度格式",
+				"part", part,
+				"extractedName", name,
+				"extractedSeason", s,
+				"currentShowName", showName)
+
+			if name != "" {
+				showName = name
+			}
+			if s > 0 {
+				season = s
+				logger.Info("Found season from Chinese format", "part", part, "season", s, "showName", name)
+			}
+
+			// 修复:如果找到了季度,且已经有剧名了,直接返回
+			// 或者找到了完整的剧名+季度,也直接返回
+			if s > 0 && showName != "" {
+				logger.Info("Returning with season and showName", "showName", showName, "season", season, "source", "Chinese format")
+				return showName, season
+			}
 		}
 
 		// 处理合集格式
@@ -125,6 +144,9 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 		// 提取季度
 		if season == 0 {
 			season = rs.extractSeasonFromDirectory(part)
+			if season > 0 {
+				logger.Debug("Found season from directory", "part", part, "season", season)
+			}
 		}
 
 		// 跳过质量/格式目录
@@ -144,8 +166,10 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 
 	if len(seasonCandidates) > 0 && season == 0 {
 		season = seasonCandidates[0].season
+		logger.Debug("Selected season from candidates", "season", season)
 	}
 
+	logger.Info("Final extracted TV info", "fullPath", fullPath, "showName", showName, "season", rs.defaultSeason(season))
 	return showName, rs.defaultSeason(season)
 }
 
@@ -228,11 +252,26 @@ func (rs *RenameSuggester) extractFromChineseFormat(part, currentShowName string
 			season = num
 		}
 
+		logger.Info("正则匹配中文季度",
+			"part", part,
+			"seasonStr", seasonStr,
+			"season", season,
+			"currentShowName", currentShowName)
+
 		nameBeforeSeason := strings.Split(part, "第")[0]
 		trimmedName := strings.TrimSpace(nameBeforeSeason)
-		if trimmedName != "" && currentShowName == "" {
-			logger.Debug("Found season in Chinese format", "part", part, "showName", trimmedName, "season", season)
-			return trimmedName, season
+
+		// 如果找到了季度信息,总是返回季度
+		// 剧名只在当前没有剧名时才返回
+		if season > 0 {
+			var showName string
+			if trimmedName != "" && currentShowName == "" {
+				showName = trimmedName
+				logger.Info("Found season and show name in Chinese format", "part", part, "showName", trimmedName, "season", season)
+			} else {
+				logger.Info("Found season in Chinese format (showName already set)", "part", part, "season", season, "trimmedName", trimmedName, "currentShowName", currentShowName)
+			}
+			return showName, season
 		}
 	}
 	return "", 0
