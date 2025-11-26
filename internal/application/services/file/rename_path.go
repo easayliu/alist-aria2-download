@@ -238,6 +238,55 @@ func (rs *RenameSuggester) extractFromChineseFormat(part, currentShowName string
 	return "", 0
 }
 
+// ExtractSeasonRange 提取季度范围信息
+// 支持格式: "第1-3季"、"第1~3季"、"Season 1-3"、"S01-S03"
+// 返回: 剧名、起始季度、结束季度
+func (rs *RenameSuggester) ExtractSeasonRange(path string) (showName string, startSeason, endSeason int) {
+	parts := strings.Split(path, "/")
+
+	// 尝试各种季度范围格式
+	patterns := []struct {
+		regex   *regexp.Regexp
+		desc    string
+		isChNum bool // 是否使用中文数字
+	}{
+		{regexp.MustCompile(`第(\d+)-(\d+)季`), "第X-Y季", false},
+		{regexp.MustCompile(`第(\d+)~(\d+)季`), "第X~Y季", false},
+		{regexp.MustCompile(`第(\d+)至(\d+)季`), "第X至Y季", false},
+		{regexp.MustCompile(`(?i)season\s*(\d+)-(\d+)`), "Season X-Y", false},
+		{regexp.MustCompile(`(?i)s(\d{1,2})-s(\d{1,2})`), "SX-SY", false},
+	}
+
+	for i := len(parts) - 1; i >= 0; i-- {
+		part := parts[i]
+
+		for _, pattern := range patterns {
+			match := pattern.regex.FindStringSubmatch(part)
+			if len(match) > 2 {
+				start, err1 := strconv.Atoi(match[1])
+				end, err2 := strconv.Atoi(match[2])
+
+				if err1 == nil && err2 == nil && start > 0 && end >= start && end <= 20 {
+					// 提取剧名(季度信息之前的部分)
+					name := pattern.regex.ReplaceAllString(part, "")
+					name = strings.TrimSpace(name)
+
+					logger.Info("检测到季度范围",
+						"pathPart", part,
+						"pattern", pattern.desc,
+						"showName", name,
+						"startSeason", start,
+						"endSeason", end)
+
+					return name, start, end
+				}
+			}
+		}
+	}
+
+	return "", 0, 0
+}
+
 // extractFromCollectionFormat 从合集格式提取（如 "重影全3季"）
 func (rs *RenameSuggester) extractFromCollectionFormat(part, currentShowName string) string {
 	if !strings.Contains(part, "全") || !strings.Contains(part, "季") {
