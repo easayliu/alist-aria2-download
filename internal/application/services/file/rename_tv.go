@@ -116,10 +116,10 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 
 		// 按父目录分组(解决混合单季和多季目录的问题)
 		dirGroups := rs.groupPathsByParentDir(versionPaths)
-		logger.Info("按父目录分组", "groupCount", len(dirGroups))
+		logger.Info("Grouping paths by parent directory", "groupCount", len(dirGroups))
 
 		for parentDir, dirPaths := range dirGroups {
-			logger.Info("处理目录分组", "parentDir", parentDir, "fileCount", len(dirPaths))
+			logger.Info("Processing directory group", "parentDir", parentDir, "fileCount", len(dirPaths))
 
 			// 检测季度范围(针对当前目录组)
 			var seasonRangeDetected bool
@@ -128,7 +128,7 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 				_, startSeason, endSeason = rs.ExtractSeasonRange(dirPaths[0])
 				if startSeason > 0 && endSeason > 0 {
 					seasonRangeDetected = true
-					logger.Info("检测到季度范围目录",
+					logger.Info("Detected season range directory",
 						"parentDir", parentDir,
 						"startSeason", startSeason,
 						"endSeason", endSeason,
@@ -146,7 +146,7 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 				seasonMap = map[int][]string{
 					0: dirPaths, // 使用0作为标记,表示需要智能分配
 				}
-				logger.Info("季度范围模式,文件待智能分配", "fileCount", len(dirPaths))
+				logger.Info("Season range mode, files pending smart assignment", "fileCount", len(dirPaths))
 			}
 
 			versionResults, err := rs.batchSearchTVByQuery(ctx, searchQuery, seasonMap, pathInfoMap, seasonRangeDetected, startSeason, endSeason)
@@ -297,7 +297,7 @@ func (rs *RenameSuggester) handleSeasonRange(
 		allPaths = append(allPaths, paths...)
 	}
 
-	logger.Info("季度范围处理开始",
+	logger.Info("Season range processing started",
 		"startSeason", startSeason,
 		"endSeason", endSeason,
 		"totalFiles", len(allPaths))
@@ -309,7 +309,7 @@ func (rs *RenameSuggester) handleSeasonRange(
 		return ei < ej
 	})
 
-	logger.Debug("文件按集数排序完成",
+	logger.Debug("Files sorted by episode number",
 		"firstFile", allPaths[0],
 		"firstEpisode", pathInfoMap[allPaths[0]].Episode,
 		"lastFile", allPaths[len(allPaths)-1],
@@ -328,7 +328,7 @@ func (rs *RenameSuggester) handleSeasonRange(
 	for s := startSeason; s <= endSeason; s++ {
 		seasonDetails, err := rs.tmdbClient.GetSeasonDetails(ctx, tvID, s)
 		if err != nil {
-			logger.Warn("获取季度详情失败", "tvID", tvID, "season", s, "error", err)
+			logger.Warn("Failed to get season details", "tvID", tvID, "season", s, "error", err)
 			continue
 		}
 
@@ -340,17 +340,17 @@ func (rs *RenameSuggester) handleSeasonRange(
 		seasons = append(seasons, info)
 		totalEpisodes += len(seasonDetails.Episodes)
 
-		logger.Info("获取到季度数据",
+		logger.Info("Got season data",
 			"season", s,
 			"episodeCount", len(seasonDetails.Episodes))
 	}
 
 	if len(seasons) == 0 {
-		logger.Warn("未能获取任何季度数据", "startSeason", startSeason, "endSeason", endSeason)
+		logger.Warn("Failed to get any season data", "startSeason", startSeason, "endSeason", endSeason)
 		return 0
 	}
 
-	logger.Info("多季度数据获取完成",
+	logger.Info("Multi-season data retrieval completed",
 		"seasonCount", len(seasons),
 		"totalEpisodes", totalEpisodes,
 		"totalFiles", len(allPaths))
@@ -377,14 +377,14 @@ func (rs *RenameSuggester) handleSeasonRange(
 					(*result)[path] = append((*result)[path], sug)
 					successCount++
 					seasonMatchCount++
-					logger.Debug("智能分配集数",
+					logger.Debug("Smart episode assignment",
 						"path", path,
 						"fileEpisode", fileEpisode,
 						"assignedSeason", si.season,
 						"seasonEpisode", seasonEpisode,
 						"episodeName", episode.Name)
 				} else {
-					logger.Warn("集数不在episodeMap中",
+					logger.Warn("Episode not in episodeMap",
 						"path", path,
 						"fileEpisode", fileEpisode,
 						"season", si.season,
@@ -394,7 +394,7 @@ func (rs *RenameSuggester) handleSeasonRange(
 			}
 		}
 
-		logger.Info("季度处理完成",
+		logger.Info("Season processing completed",
 			"season", si.season,
 			"matchCount", seasonMatchCount,
 			"episodeRange", fmt.Sprintf("%d-%d", episodeOffset+1, episodeOffset+si.episodeCount))
@@ -402,7 +402,7 @@ func (rs *RenameSuggester) handleSeasonRange(
 		episodeOffset += si.episodeCount
 	}
 
-	logger.Info("季度范围处理完成",
+	logger.Info("Season range processing completed",
 		"successCount", successCount,
 		"totalFiles", len(allPaths),
 		"failedCount", len(allPaths)-successCount)

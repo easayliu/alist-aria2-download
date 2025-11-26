@@ -95,7 +95,7 @@ func (m *DirectoryManager) EnsureDirectory(path string) error {
 	}
 
 	// 5. 尝试创建目录
-	logger.Info("Attempting to create directory", "path", path)
+	logger.Debug("Attempting to create directory", "path", path)
 	if err := os.MkdirAll(path, 0755); err != nil {
 		// 创建失败时，检查是否是权限问题
 		if os.IsPermission(err) {
@@ -120,7 +120,7 @@ func (m *DirectoryManager) EnsureDirectory(path string) error {
 	// 7. 更新缓存
 	m.updateCache(path, true)
 
-	logger.Info("Directory created successfully", "path", path)
+	logger.Debug("Directory created successfully", "path", path)
 	return nil
 }
 
@@ -165,7 +165,7 @@ func (m *DirectoryManager) CheckBatchDiskSpace(path string, totalBytes int64) er
 		return nil
 	}
 
-	logger.Info("Checking batch disk space",
+	logger.Debug("Checking batch disk space",
 		"path", path,
 		"totalSize", formatSize(totalBytes))
 

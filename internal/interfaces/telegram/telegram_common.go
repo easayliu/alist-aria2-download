@@ -76,7 +76,7 @@ func (c *Common) DecodeFilePath(encoded string) string {
 		return path
 	}
 
-	logger.Warn("Path token not found", "token", encoded)
+	logger.WarnSafe("Path token not found", "token", encoded)
 	return "/"
 }
 

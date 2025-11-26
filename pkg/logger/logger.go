@@ -288,3 +288,39 @@ func (h *multiHandler) WithGroup(name string) slog.Handler {
 	}
 	return &multiHandler{handlers: handlers}
 }
+
+// DebugSafe 安全的Debug日志 - 自动脱敏敏感信息
+func DebugSafe(msg string, args ...any) {
+	if defaultLogger == nil {
+		initDefault()
+	}
+	sanitizedArgs := SanitizeArgs(args...)
+	defaultLogger.slogger.Debug(msg, sanitizedArgs...)
+}
+
+// InfoSafe 安全的Info日志 - 自动脱敏敏感信息
+func InfoSafe(msg string, args ...any) {
+	if defaultLogger == nil {
+		initDefault()
+	}
+	sanitizedArgs := SanitizeArgs(args...)
+	defaultLogger.slogger.Info(msg, sanitizedArgs...)
+}
+
+// WarnSafe 安全的Warn日志 - 自动脱敏敏感信息
+func WarnSafe(msg string, args ...any) {
+	if defaultLogger == nil {
+		initDefault()
+	}
+	sanitizedArgs := SanitizeArgs(args...)
+	defaultLogger.slogger.Warn(msg, sanitizedArgs...)
+}
+
+// ErrorSafe 安全的Error日志 - 自动脱敏敏感信息
+func ErrorSafe(msg string, args ...any) {
+	if defaultLogger == nil {
+		initDefault()
+	}
+	sanitizedArgs := SanitizeArgs(args...)
+	defaultLogger.slogger.Error(msg, sanitizedArgs...)
+}

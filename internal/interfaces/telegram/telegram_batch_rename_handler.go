@@ -109,9 +109,9 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 			isSpecial := media.IsSpecialContent(fileName)
 
 			if isSpecial {
-				logger.Info("LLM无法处理特殊内容", "filePath", filePath)
+				logger.Info("LLM cannot process special content", "filePath", filePath)
 			} else {
-				logger.Warn("无法获取重命名建议", "filePath", filePath)
+				logger.Warn("Failed to get rename suggestion", "filePath", filePath)
 			}
 
 			if displayCount < maxDisplayItems {

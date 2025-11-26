@@ -55,7 +55,7 @@ func (s *SchedulerService) Start() error {
 	for _, task := range tasks {
 		if task.Enabled {
 			if err := s.scheduleTask(task); err != nil {
-				logger.Error("Failed to schedule task:", task.Name, "error:", err)
+				logger.Error("Failed to schedule task", "task_name", task.Name, "error", err)
 			}
 		}
 	}
@@ -102,7 +102,7 @@ func (s *SchedulerService) CreateTask(task *entities.ScheduledTask) error {
 		}
 	}
 
-	logger.Info("Task created:", task.Name, "ID:", task.ID)
+	logger.Info("Task created", "task_name", task.Name, "task_id", task.ID)
 	return nil
 }
 
@@ -135,7 +135,7 @@ func (s *SchedulerService) UpdateTask(task *entities.ScheduledTask) error {
 		}
 	}
 
-	logger.Info("Task updated:", task.Name, "ID:", task.ID)
+	logger.Info("Task updated", "task_name", task.Name, "task_id", task.ID)
 	return nil
 }
 
@@ -224,7 +224,7 @@ func (s *SchedulerService) executeTask(task *entities.ScheduledTask) {
 
 	resp, err := s.fileService.GetFilesByTimeRange(ctx, req)
 	if err != nil {
-		logger.Error("Failed to fetch files for scheduled task:", task.Name, "error:", err)
+		logger.Error("Failed to fetch files for scheduled task", "task_name", task.Name, "error", err)
 
 		// 发送失败通知
 		failReq := contracts.TaskNotificationRequest{
@@ -314,7 +314,7 @@ func (s *SchedulerService) executeTask(task *entities.ScheduledTask) {
 
 			// 创建下载任务
 			if _, err := s.downloadService.CreateDownload(ctx, downloadReq); err != nil {
-				logger.Error("Failed to create download for file:", file.Name, "error:", err)
+				logger.Error("Failed to create download for file", "file_name", file.Name, "error", err)
 			} else {
 				downloadCount++
 				downloadedSize += file.Size

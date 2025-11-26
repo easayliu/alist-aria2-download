@@ -69,7 +69,7 @@ func main() {
 			if err := telegramClient.SetWebhook(cfg.Telegram.Webhook.URL); err != nil {
 				logger.Error("Failed to set telegram webhook", "error", err)
 			} else {
-				logger.Info("Telegram webhook mode enabled", "url", cfg.Telegram.Webhook.URL)
+				logger.Info("Telegram webhook mode enabled")
 			}
 		} else {
 			// Polling 模式：确保删除 webhook

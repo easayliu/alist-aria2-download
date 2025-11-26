@@ -136,7 +136,7 @@ func (s *AppFileService) GetFileInfo(ctx context.Context, path string) (*contrac
 				internalURL, externalURL := s.getRealDownloadURLs(path)
 				fileResp.InternalURL = internalURL
 				fileResp.ExternalURL = externalURL
-				logger.Debug("File response URLs updated", "internal", internalURL, "external", externalURL)
+				logger.Debug("File response URLs updated")
 			}
 
 			return &fileResp, nil
@@ -231,20 +231,20 @@ func (s *AppFileService) getRealDownloadURLs(filePath string) (internalURL, exte
 		logger.Warn("Failed to get file info, using fallback URL", "path", filePath, "error", err)
 		fallbackInternal := s.generateInternalURL(filePath)
 		fallbackExternal := s.generateExternalURL(filePath)
-		logger.Debug("Using fallback URL", "internal", fallbackInternal, "external", fallbackExternal)
+		logger.Debug("Using fallback URL")
 		return fallbackInternal, fallbackExternal
 	}
 
 	// 使用旧实现的简单逻辑：直接获取raw_url并做域名替换
 	originalURL := fileInfo.Data.RawURL
-	logger.Debug("Got original raw URL", "raw_url", originalURL)
+	logger.Debug("Got original raw URL")
 
 	// 如果raw_url为空，使用回退逻辑
 	if originalURL == "" {
-		logger.Error("Raw URL is empty, this should not happen", "path", filePath, "fileInfo", fileInfo.Data)
+		logger.Error("Raw URL is empty", "path", filePath)
 		fallbackInternal := s.generateInternalURL(filePath)
 		fallbackExternal := s.generateExternalURL(filePath)
-		logger.Debug("Using fallback URL", "internal", fallbackInternal, "external", fallbackExternal)
+		logger.Debug("Using fallback URL")
 		return fallbackInternal, fallbackExternal
 	}
 
@@ -254,19 +254,12 @@ func (s *AppFileService) getRealDownloadURLs(filePath string) (internalURL, exte
 
 	if strings.Contains(originalURL, "fcalist-public") {
 		internalURL = strings.ReplaceAll(originalURL, "fcalist-public", "fcalist-internal")
-		logger.Debug("URL replacement completed",
-			"original", externalURL,
-			"internal", internalURL,
-			"replacement", "fcalist-public -> fcalist-internal")
+		logger.Debug("URL replacement completed", "replacement", "fcalist-public -> fcalist-internal")
 	} else {
-		logger.Debug("No URL replacement needed", "internal", internalURL, "external", externalURL)
+		logger.Debug("No URL replacement needed")
 	}
 
-	logger.Debug("Download URLs obtained",
-		"path", filePath,
-		"internal_url", internalURL,
-		"external_url", externalURL,
-		"url_replaced", strings.Contains(originalURL, "fcalist-public"))
+	logger.Debug("Download URLs obtained", "path", filePath, "url_replaced", strings.Contains(originalURL, "fcalist-public"))
 
 	return internalURL, externalURL
 }
@@ -274,14 +267,14 @@ func (s *AppFileService) getRealDownloadURLs(filePath string) (internalURL, exte
 // generateInternalURL 生成内部下载URL（回退方法）
 func (s *AppFileService) generateInternalURL(path string) string {
 	url := fmt.Sprintf("%s/d%s", s.config.Alist.BaseURL, path)
-	logger.Debug("Generated fallback download URL", "url", url, "path", path)
+	logger.Debug("Generated fallback download URL", "path", path)
 	return url
 }
 
 // generateExternalURL 生成外部访问URL（回退方法）
 func (s *AppFileService) generateExternalURL(path string) string {
 	url := fmt.Sprintf("%s/p%s", s.config.Alist.BaseURL, path)
-	logger.Debug("Generated fallback external URL", "url", url, "path", path)
+	logger.Debug("Generated fallback external URL", "path", path)
 	return url
 }
 

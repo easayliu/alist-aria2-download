@@ -111,13 +111,11 @@ func (e *VariableExtractor) extractShowName(path string) string {
 
 				// 使用增强的跳过检测（包含年份）
 				if pathutil.ShouldSkipDirectoryAdvanced(part) {
-					logger.Debug("Skipping category directory", "dir", part)
 					continue
 				}
 
 				// 跳过季度目录
 				if strutil.IsSeasonDirectory(part) {
-					logger.Debug("Skipping season directory", "dir", part)
 					continue
 				}
 
@@ -142,9 +140,7 @@ func (e *VariableExtractor) extractShowName(path string) string {
 
 // cleanShowName 清理节目名称（使用公共工具函数）
 func (e *VariableExtractor) cleanShowName(name string) string {
-	cleaned := strutil.CleanShowName(name)
-	logger.Debug("Show name cleaned", "original", name, "cleaned", cleaned)
-	return cleaned
+	return strutil.CleanShowName(name)
 }
 
 // extractSeason 提取季度信息（使用公共工具函数）

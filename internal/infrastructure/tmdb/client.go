@@ -86,8 +86,7 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, param
 	logger.Debug("TMDB API Request",
 		"method", method,
 		"endpoint", endpoint,
-		"language", lang,
-		"url", urlStr)
+		"language", lang)
 
 	opts := httputil.DefaultOptions().
 		WithContext(ctx).
@@ -95,7 +94,7 @@ func (c *Client) makeRequest(ctx context.Context, method, endpoint string, param
 
 	err := httputil.DoJSONRequest(method, urlStr, nil, result, opts)
 	if err != nil {
-		logger.Error("TMDB API Request failed", "url", urlStr, "error", err)
+		logger.Error("TMDB API Request failed", "endpoint", endpoint, "error", err)
 	}
 	return err
 }

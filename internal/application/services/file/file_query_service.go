@@ -149,19 +149,19 @@ func (s *FileQueryService) fetchFilesRecursiveWithInfo(path string, startTime, e
 					// 获取文件详细信息（包含下载链接）
 					fileInfo, err := s.alistClient.GetFileInfo(fullPath)
 					if err != nil {
+						logger.Warn("Failed to get file info, skipping",
+							"path", fullPath,
+							"error", err,
+							"file_name", file.Name)
 						continue
 					}
 
 					// 替换URL（只在包含fcalist-public时替换）
 					originalURL := fileInfo.Data.RawURL
-					logger.Debug("Got raw URL", "path", fullPath, "raw_url", originalURL)
-
 					internalURL := originalURL
 					if strings.Contains(originalURL, "fcalist-public") {
 						internalURL = strings.ReplaceAll(originalURL, "fcalist-public", "fcalist-internal")
 						logger.Debug("URL replaced", "original", originalURL, "internal", internalURL)
-					} else {
-						logger.Debug("No URL replacement needed", "url", originalURL)
 					}
 
 					// 判断媒体类型并生成下载路径（这里需要依赖媒体服务）

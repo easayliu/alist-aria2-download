@@ -65,7 +65,7 @@ func (rs *RenameSuggester) SearchAndSuggest(ctx context.Context, fullPath string
 
 		// 如果从路径中成功提取了剧集名,使用它替代从文件名提取的标题
 		if showName != "" {
-			logger.Info("使用从路径提取的剧集名",
+			logger.Info("Using show name extracted from path",
 				"originalTitle", info.Title,
 				"pathShowName", showName,
 				"pathSeason", pathSeason,

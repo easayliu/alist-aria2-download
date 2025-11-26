@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
@@ -122,12 +123,45 @@ func (s *AppFileService) BatchRenameAndMoveFiles(ctx context.Context, tasks []co
 		"maxConcurrent", maxConcurrent)
 
 	var (
-		results   = make([]contracts.RenameResult, len(tasks))
-		wg        sync.WaitGroup
-		sem       = make(chan struct{}, maxConcurrent)
-		oldDirsMu sync.Mutex
-		oldDirs   = make(map[string]struct{}) // 收集所有涉及的源目录
+		results        = make([]contracts.RenameResult, len(tasks))
+		wg             sync.WaitGroup
+		sem            = make(chan struct{}, maxConcurrent)
+		oldDirsMu      sync.Mutex
+		oldDirs        = make(map[string]struct{}) // 收集所有涉及的源目录
+		processedCount int32                       // 原子计数器
+		startTime      = time.Now()
+		lastReportTime = startTime
+		lastProgress   float64
 	)
+
+	// 启动进度报告协程(智能报告:时间+百分比结合)
+	stopProgress := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				current := atomic.LoadInt32(&processedCount)
+				progress := float64(current) / float64(len(tasks)) * 100
+				elapsed := time.Since(startTime)
+
+				// 每10%或每10秒报告一次(取较晚者)
+				if progress-lastProgress >= 10.0 || time.Since(lastReportTime) >= 10*time.Second {
+					logger.Info("Batch rename progress",
+						"processed", current,
+						"total", len(tasks),
+						"progress_pct", fmt.Sprintf("%.1f%%", progress),
+						"elapsed", elapsed.String())
+					lastReportTime = time.Now()
+					lastProgress = progress
+				}
+			case <-stopProgress:
+				return
+			}
+		}
+	}()
 
 	for i, task := range tasks {
 		wg.Add(1)
@@ -135,7 +169,8 @@ func (s *AppFileService) BatchRenameAndMoveFiles(ctx context.Context, tasks []co
 
 		go func(idx int, t contracts.RenameTask) {
 			defer func() {
-				<-sem // 释放信号量
+				atomic.AddInt32(&processedCount, 1) // 更新进度
+				<-sem                                // 释放信号量
 				wg.Done()
 			}()
 
@@ -171,8 +206,10 @@ func (s *AppFileService) BatchRenameAndMoveFiles(ctx context.Context, tasks []co
 	}
 
 	wg.Wait()
+	close(stopProgress) // 停止进度报告
 
 	// 统计结果
+	duration := time.Since(startTime)
 	successCount := 0
 	for _, r := range results {
 		if r.Success {
@@ -180,10 +217,17 @@ func (s *AppFileService) BatchRenameAndMoveFiles(ctx context.Context, tasks []co
 		}
 	}
 
+	// 计算成功率和平均耗时
+	successRate := float64(successCount) / float64(len(tasks)) * 100
+	avgPerFile := duration / time.Duration(len(tasks))
+
 	logger.Info("Batch rename completed",
 		"total", len(tasks),
 		"success", successCount,
-		"failed", len(tasks)-successCount)
+		"failed", len(tasks)-successCount,
+		"success_rate", fmt.Sprintf("%.1f%%", successRate),
+		"duration", duration.String(),
+		"avg_per_file", avgPerFile.String())
 
 	// 批量重命名完成后，统一清理源目录
 	if len(oldDirs) > 0 {

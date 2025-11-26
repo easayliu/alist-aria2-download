@@ -33,7 +33,7 @@ func NewClient(config *Config) (*Client, error) {
 	// 创建速率限制器
 	limiter := ratelimit.NewRateLimiter(config.QPS)
 
-	logger.Info("Creating OpenAI client",
+	logger.Debug("Creating OpenAI client",
 		"base_url", config.BaseURL,
 		"model", config.Model,
 		"qps", config.QPS,
@@ -65,7 +65,7 @@ func (c *Client) ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatRes
 		return nil, fmt.Errorf("序列化请求失败: %w", err)
 	}
 
-	logger.Debug("发送OpenAI Chat请求",
+	logger.Debug("Sending OpenAI chat request",
 		"model", req.Model,
 		"messages_count", len(req.Messages),
 		"temperature", req.Temperature,
@@ -103,7 +103,7 @@ func (c *Client) ChatCompletion(ctx context.Context, req *ChatRequest) (*ChatRes
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 
-	logger.Debug("OpenAI Chat响应成功",
+	logger.Debug("OpenAI chat response success",
 		"id", chatResp.ID,
 		"choices_count", len(chatResp.Choices),
 		"total_tokens", chatResp.Usage.TotalTokens,
@@ -129,7 +129,7 @@ func (c *Client) ChatCompletionStream(ctx context.Context, req *ChatRequest) (*S
 		return nil, fmt.Errorf("序列化请求失败: %w", err)
 	}
 
-	logger.Debug("发送OpenAI流式Chat请求",
+	logger.Debug("Sending OpenAI streaming chat request",
 		"model", req.Model,
 		"messages_count", len(req.Messages),
 	)
@@ -164,7 +164,7 @@ func (c *Client) ChatCompletionStream(ctx context.Context, req *ChatRequest) (*S
 		return nil, c.handleErrorResponse(resp)
 	}
 
-	logger.Debug("OpenAI流式Chat响应已建立连接")
+	logger.Debug("OpenAI streaming chat connection established")
 
 	// 创建流式处理器（注意：调用者负责关闭响应体）
 	handler := NewStreamHandler(resp.Body)

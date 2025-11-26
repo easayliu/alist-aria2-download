@@ -38,7 +38,7 @@ func (mu *MessageUtils) SendMessage(chatID int64, text string) {
 		messages := mu.SplitMessage(text, 4000) // 留一些余量
 		for _, msg := range messages {
 			if err := mu.telegramClient.SendMessage(chatID, msg); err != nil {
-				logger.Error("Failed to send telegram message", "error", err)
+				logger.Error("Failed to send telegram message", "chatID", chatID, "textLength", len(msg), "error", err)
 			}
 		}
 	}
@@ -50,7 +50,7 @@ func (mu *MessageUtils) SendMessageWithAutoDelete(chatID int64, text string, del
 		messages := mu.SplitMessage(text, 4000) // 留一些余量
 		for _, msg := range messages {
 			if err := mu.telegramClient.SendMessageWithAutoDelete(chatID, msg, "", deleteAfterSeconds); err != nil {
-				logger.Error("Failed to send telegram message with auto delete", "error", err)
+				logger.Error("Failed to send telegram message with auto delete", "chatID", chatID, "deleteAfter", deleteAfterSeconds, "error", err)
 			}
 		}
 	}
@@ -62,7 +62,7 @@ func (mu *MessageUtils) SendMessageHTML(chatID int64, text string) {
 		messages := mu.SplitMessage(text, 4000) // 留一些余量
 		for _, msg := range messages {
 			if err := mu.telegramClient.SendMessageWithParseMode(chatID, msg, "HTML"); err != nil {
-				logger.Error("Failed to send telegram HTML message", "error", err)
+				logger.Error("Failed to send telegram HTML message", "chatID", chatID, "textLength", len(msg), "error", err)
 			}
 		}
 	}
@@ -74,7 +74,7 @@ func (mu *MessageUtils) SendMessageHTMLWithAutoDelete(chatID int64, text string,
 		messages := mu.SplitMessage(text, 4000) // 留一些余量
 		for _, msg := range messages {
 			if err := mu.telegramClient.SendMessageWithAutoDelete(chatID, msg, "HTML", deleteAfterSeconds); err != nil {
-				logger.Error("Failed to send telegram HTML message with auto delete", "error", err)
+				logger.Error("Failed to send telegram HTML message with auto delete", "chatID", chatID, "deleteAfter", deleteAfterSeconds, "error", err)
 			}
 		}
 	}
@@ -84,7 +84,7 @@ func (mu *MessageUtils) SendMessageHTMLWithAutoDelete(chatID int64, text string,
 func (mu *MessageUtils) SendMessageMarkdown(chatID int64, text string) {
 	if mu.telegramClient != nil {
 		if err := mu.telegramClient.SendMessageWithParseMode(chatID, text, "Markdown"); err != nil {
-			logger.Error("Failed to send telegram markdown message", "error", err)
+			logger.Error("Failed to send telegram markdown message", "chatID", chatID, "textLength", len(text), "error", err)
 		}
 	}
 }
@@ -100,7 +100,7 @@ func (mu *MessageUtils) SendMessageWithKeyboard(chatID int64, text, parseMode st
 				kb = keyboard
 			}
 			if msgID, err := mu.telegramClient.SendMessageWithKeyboard(chatID, msg, parseMode, kb); err != nil {
-				logger.Error("Failed to send telegram message with keyboard", "error", err)
+				logger.Error("Failed to send telegram message with keyboard", "chatID", chatID, "parseMode", parseMode, "error", err)
 			} else {
 				lastMessageID = msgID
 			}
@@ -116,7 +116,7 @@ func (mu *MessageUtils) SendMessageWithReplyKeyboard(chatID int64, text string) 
 		msg := tgbotapi.NewMessage(chatID, text)
 		msg.ReplyMarkup = mu.GetDefaultReplyKeyboard()
 		if _, err := mu.telegramClient.GetBot().Send(msg); err != nil {
-			logger.Error("Failed to send telegram message with reply keyboard", "error", err)
+			logger.Error("Failed to send telegram message with reply keyboard", "chatID", chatID, "error", err)
 		}
 	}
 }
@@ -184,7 +184,7 @@ func (mu *MessageUtils) EditMessageWithKeyboard(chatID int64, messageID int, tex
 	}
 
 	if _, err := mu.telegramClient.GetBot().Send(editMsg); err != nil {
-		logger.Error("Failed to edit telegram message", "error", err)
+		logger.Error("Failed to edit telegram message", "chatID", chatID, "messageID", messageID, "parseMode", parseMode, "error", err)
 		return false
 	}
 

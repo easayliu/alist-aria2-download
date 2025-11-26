@@ -113,7 +113,7 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 
 		// 处理中文季度格式
 		if name, s := rs.extractFromChineseFormat(part, showName); s > 0 || name != "" {
-			logger.Info("提取中文季度格式",
+			logger.Info("Extracted Chinese season format",
 				"part", part,
 				"extractedName", name,
 				"extractedSeason", s,
@@ -252,7 +252,7 @@ func (rs *RenameSuggester) extractFromChineseFormat(part, currentShowName string
 			season = num
 		}
 
-		logger.Info("正则匹配中文季度",
+		logger.Info("Regex matched Chinese season format",
 			"part", part,
 			"seasonStr", seasonStr,
 			"season", season,
@@ -310,7 +310,7 @@ func (rs *RenameSuggester) ExtractSeasonRange(path string) (showName string, sta
 					name := pattern.regex.ReplaceAllString(part, "")
 					name = strings.TrimSpace(name)
 
-					logger.Info("检测到季度范围",
+					logger.Info("Detected season range",
 						"pathPart", part,
 						"pattern", pattern.desc,
 						"showName", name,

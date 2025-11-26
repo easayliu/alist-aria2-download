@@ -144,7 +144,7 @@ func (bc *BasicCommands) HandleLLMRename(chatID int64, path string, strategy str
 	// 使用批量模式处理单个文件(统一使用TMDB批量API)
 	suggestionsMap, _, err := bc.fileService.GetBatchRenameSuggestionsWithLLM(ctx, []string{path})
 	if err != nil {
-		logger.Error("Failed to get rename suggestion", "path", path, "error", err)
+		logger.Error("Failed to get rename suggestions", "path", path, "error", err)
 
 		// 检查特定错误
 		errorMsg := formatter.FormatError("重命名", err)
