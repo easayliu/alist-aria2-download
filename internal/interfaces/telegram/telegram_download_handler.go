@@ -330,7 +330,7 @@ func (h *DownloadHandler) handleManualDownload(chatID int64, timeArgs []string, 
 			EscapeHTML:      h.controller.messageUtils.EscapeHTML,
 		})
 
-		h.controller.messageUtils.SendMessageHTML(chatID, message)
+		h.controller.messageUtils.SendMessageHTMLWithAutoDelete(chatID, message, 30)
 		return
 	}
 }
@@ -411,7 +411,7 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 	h.deleteManualContext(token)
 	h.controller.messageUtils.ClearInlineKeyboard(chatID, messageID)
 
-	h.controller.messageUtils.SendMessage(chatID, "正在创建下载任务...")
+	h.controller.messageUtils.SendMessageWithAutoDelete(chatID, "正在创建下载任务...", 30)
 
 	req := ctx.Request
 
@@ -508,7 +508,7 @@ func (h *DownloadHandler) HandleManualConfirm(chatID int64, token string, messag
 		EscapeHTML:      h.controller.messageUtils.EscapeHTML,
 	})
 
-	h.controller.messageUtils.SendMessageHTML(chatID, message)
+	h.controller.messageUtils.SendMessageHTMLWithAutoDelete(chatID, message, 30)
 }
 
 // HandleManualCancel 处理手动下载取消

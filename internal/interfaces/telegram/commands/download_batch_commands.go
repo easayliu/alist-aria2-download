@@ -297,5 +297,5 @@ func (dc *DownloadCommands) executeManualDownload(ctx context.Context, chatID in
 		message += fmt.Sprintf("\n\n⚠️ 有 %d 个文件下载失败，请检查日志获取详细信息", batchResponse.FailureCount)
 	}
 
-	dc.messageUtils.SendMessageHTML(chatID, message)
+	dc.messageUtils.SendMessageHTMLWithAutoDelete(chatID, message, 30)
 }
