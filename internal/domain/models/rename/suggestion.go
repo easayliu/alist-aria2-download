@@ -32,6 +32,10 @@ type Suggestion struct {
 
 	// ========== 调试信息（不序列化到API）==========
 	RawResponse string `json:"-"` // LLM原始响应（调试用）
+
+	// ========== 跳过标记 ==========
+	Skipped    bool   `json:"skipped,omitempty"`     // 是否跳过（已符合标准格式）
+	SkipReason string `json:"skip_reason,omitempty"` // 跳过原因
 }
 
 // MediaType 媒体类型

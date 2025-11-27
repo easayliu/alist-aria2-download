@@ -2,6 +2,8 @@ package file
 
 import (
 	"context"
+	"path/filepath"
+	"regexp"
 
 	"github.com/easayliu/alist-aria2-download/internal/domain/models/rename"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/tmdb"
@@ -97,4 +99,36 @@ func (rs *RenameSuggester) SearchAndSuggest(ctx context.Context, fullPath string
 		return rs.suggestTVName(ctx, fullPath, info)
 	}
 	return rs.suggestMovieName(ctx, fullPath, info)
+}
+
+// embyTVPattern Emby TV 剧集标准格式正则
+// 格式：剧名 - S01E01 - 标题.ext 或 剧名 - S01E01.ext
+// 支持 1-2 位季度号和 1-3 位集数号（如 S01E100）
+var embyTVPattern = regexp.MustCompile(`^.+\s-\sS\d{1,2}E\d{1,3}(\s-\s.+)?\.\w+$`)
+
+// embyMoviePattern Emby 电影标准格式正则
+// 格式：电影名 (年份).ext
+var embyMoviePattern = regexp.MustCompile(`^.+\s\(\d{4}\)\.\w+$`)
+
+// IsAlreadyEmbyTVFormat 检查文件名是否已符合 Emby TV 标准格式
+func (rs *RenameSuggester) IsAlreadyEmbyTVFormat(filename string) bool {
+	return embyTVPattern.MatchString(filename)
+}
+
+// IsAlreadyEmbyMovieFormat 检查文件名是否已符合 Emby 电影标准格式
+func (rs *RenameSuggester) IsAlreadyEmbyMovieFormat(filename string) bool {
+	return embyMoviePattern.MatchString(filename)
+}
+
+// BuildSkippedSuggestion 构建跳过的建议
+func (rs *RenameSuggester) BuildSkippedSuggestion(fullPath string, reason string) rename.Suggestion {
+	filename := filepath.Base(fullPath)
+	return rename.Suggestion{
+		OriginalPath: fullPath,
+		NewName:      filename,
+		NewPath:      fullPath,
+		Skipped:      true,
+		SkipReason:   reason,
+		Confidence:   1.0,
+	}
 }

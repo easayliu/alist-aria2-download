@@ -3,6 +3,7 @@ package file
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strconv"
 
 	"github.com/easayliu/alist-aria2-download/internal/domain/models/rename"
@@ -95,8 +96,21 @@ func (rs *RenameSuggester) BatchSuggestMovieNames(ctx context.Context, paths []s
 	}
 
 	result := make(map[string][]rename.Suggestion)
+	skippedCount := 0
 
 	for _, path := range paths {
+		filename := filepath.Base(path)
+
+		// 预过滤：跳过已符合 Emby 标准格式的文件
+		if rs.IsAlreadyEmbyMovieFormat(filename) {
+			logger.Info("电影文件已符合 Emby 标准格式，跳过",
+				"path", path,
+				"filename", filename)
+			result[path] = []rename.Suggestion{rs.BuildSkippedSuggestion(path, "已符合 Emby 标准格式")}
+			skippedCount++
+			continue
+		}
+
 		info := rs.ParseFileName(path)
 
 		if info.MediaType != tmdb.MediaTypeMovie {
@@ -111,6 +125,33 @@ func (rs *RenameSuggester) BatchSuggestMovieNames(ctx context.Context, paths []s
 		}
 
 		result[path] = suggestions
+	}
+
+	if skippedCount > 0 {
+		logger.Info("批量电影重命名预过滤完成",
+			"totalFiles", len(paths),
+			"skipped", skippedCount,
+			"processed", len(result)-skippedCount)
+	}
+
+	// 检查是否有任何非跳过的结果
+	hasNonSkippedResult := false
+	for _, suggestions := range result {
+		for _, sug := range suggestions {
+			if !sug.Skipped {
+				hasNonSkippedResult = true
+				break
+			}
+		}
+		if hasNonSkippedResult {
+			break
+		}
+	}
+
+	// 如果所有文件都被跳过（已符合标准），返回成功
+	if len(result) > 0 && !hasNonSkippedResult {
+		logger.Info("所有电影文件已符合标准格式，无需处理", "totalFiles", len(paths))
+		return result, nil
 	}
 
 	if len(result) == 0 {

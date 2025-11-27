@@ -236,7 +236,19 @@ func (h *CallbackHandler) HandleCallbackQuery(update *tgbotapi.Update) {
 
 	if strings.HasPrefix(data, "download_dir:") {
 		dirPath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "download_dir:"))
-		h.controller.fileHandler.HandleDownloadDirectory(chatID, dirPath)
+		h.controller.fileHandler.HandleDownloadDirectoryConfirm(chatID, dirPath, callback.Message.MessageID)
+		return
+	}
+
+	if strings.HasPrefix(data, "download_dir_confirm:") {
+		dirPath := h.controller.common.DecodeFilePath(strings.TrimPrefix(data, "download_dir_confirm:"))
+		h.controller.fileHandler.HandleDownloadDirectoryExecute(chatID, dirPath, callback.Message.MessageID)
+		return
+	}
+
+	if data == "download_dir_cancel" {
+		// 直接删除确认消息
+		h.controller.messageUtils.DeleteMessage(chatID, callback.Message.MessageID)
 		return
 	}
 

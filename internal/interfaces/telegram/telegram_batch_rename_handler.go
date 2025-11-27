@@ -12,14 +12,12 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func (h *FileHandler) HandleFileRename(chatID int64, filePath string) {
-	h.controller.basicCommands.HandleRename(chatID, fmt.Sprintf("/rename %s", filePath))
-}
-
+// HandleBatchRename 处理批量重命名
 func (h *FileHandler) HandleBatchRename(chatID int64, dirPath string) {
 	h.HandleBatchRenameWithEdit(chatID, dirPath, 0)
 }
 
+// HandleBatchRenameWithEdit 处理批量重命名（支持消息编辑）
 func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, messageID int) {
 	ctx := context.Background()
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
@@ -99,6 +97,7 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 	const maxDisplayItems = MaxDisplayItems
 	displayCount := 0
 	successCount := 0
+	skippedCount := 0
 	detailsMessage := ""
 
 	for i, filePath := range videoFiles {
@@ -134,6 +133,16 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 		}
 
 		selected := suggestions[0]
+
+		// 跳过已符合标准格式的文件（不显示在预览中）
+		if selected.Skipped {
+			skippedCount++
+			logger.Info("文件已符合标准格式，跳过显示",
+				"filePath", filePath,
+				"reason", selected.SkipReason)
+			continue
+		}
+
 		if displayCount < maxDisplayItems {
 			detailsMessage += fmt.Sprintf("%d. <code>%s</code>\n   → <code>%s</code>\n\n", i+1, h.controller.messageUtils.EscapeHTML(filePath), h.controller.messageUtils.EscapeHTML(selected.NewPath))
 			displayCount++
@@ -148,7 +157,11 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 	}
 
 	if successCount == 0 {
-		message += "\n❌ 所有文件都无法获取重命名建议"
+		if skippedCount > 0 {
+			message += fmt.Sprintf("\n✅ 所有 %d 个文件已符合标准格式，无需重命名", skippedCount)
+		} else {
+			message += "\n❌ 所有文件都无法获取重命名建议"
+		}
 		if messageID > 0 {
 			h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, message, "HTML", nil)
 			h.controller.messageUtils.DeleteMessageAfterDelay(chatID, messageID, 30)
@@ -158,7 +171,13 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 		return
 	}
 
-	message += fmt.Sprintf("✅ 成功: %d/%d\n\n", successCount, len(videoFiles))
+	// 显示统计信息
+	statsLine := fmt.Sprintf("✅ 需重命名: %d", successCount)
+	if skippedCount > 0 {
+		statsLine += fmt.Sprintf(" | ⏭️ 已标准化: %d", skippedCount)
+	}
+	statsLine += fmt.Sprintf(" | 📊 总计: %d\n\n", len(videoFiles))
+	message += statsLine
 	message += detailsMessage
 
 	if len(videoFiles) > maxDisplayItems {
@@ -181,6 +200,7 @@ func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, me
 	}
 }
 
+// HandleBatchRenameConfirm 确认执行批量重命名
 func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, messageID int) {
 	ctx := context.Background()
 	formatter := h.controller.messageUtils.GetFormatter().(*utils.MessageFormatter)
@@ -217,13 +237,19 @@ func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, mes
 
 	// 构建重命名任务列表
 	var tasks []contracts.RenameTask
-	taskIndexMap := make(map[int]int) // 记录任务索引到videoFiles索引的映射
-	skippedFiles := make([]int, 0)    // 记录跳过的文件索引
+	taskIndexMap := make(map[int]int)    // 记录任务索引到videoFiles索引的映射
+	skippedFiles := make([]int, 0)       // 记录跳过的文件索引（无建议）
+	alreadyStandardFiles := make([]int, 0) // 记录已符合标准的文件索引
 
 	for i, filePath := range videoFiles {
 		suggestions, found := suggestionsMap[filePath]
 		if !found || len(suggestions) == 0 {
 			skippedFiles = append(skippedFiles, i)
+			continue
+		}
+		// 跳过已符合标准格式的文件
+		if suggestions[0].Skipped {
+			alreadyStandardFiles = append(alreadyStandardFiles, i)
 			continue
 		}
 		taskIndexMap[len(tasks)] = i
@@ -240,9 +266,10 @@ func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, mes
 	const maxDisplayItems = MaxDisplayItems
 	displayCount := 0
 	successCount := 0
-	failCount := len(skippedFiles) // 跳过的文件计入失败
+	failCount := len(skippedFiles)                      // 无建议的文件计入失败
+	alreadyStandardCount := len(alreadyStandardFiles)   // 已符合标准的文件单独统计
 
-	// 显示跳过的文件
+	// 显示跳过的文件（无建议）
 	for _, idx := range skippedFiles {
 		if displayCount < maxDisplayItems {
 			filePath := videoFiles[idx]
@@ -293,14 +320,27 @@ func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, mes
 		results += fmt.Sprintf("\n... 还有 %d 个文件未显示\n", len(videoFiles)-maxDisplayItems)
 	}
 
-	results += fmt.Sprintf("\n<b>统计</b>\n✅ 成功: %d\n❌ 失败: %d\n📊 总计: %d", successCount, failCount, len(videoFiles))
+	// 构建统计信息
+	statsText := fmt.Sprintf("\n<b>统计</b>\n✅ 成功: %d", successCount)
+	if alreadyStandardCount > 0 {
+		statsText += fmt.Sprintf("\n⏭️ 已标准化: %d", alreadyStandardCount)
+	}
+	if failCount > 0 {
+		statsText += fmt.Sprintf("\n❌ 失败: %d", failCount)
+	}
+	statsText += fmt.Sprintf("\n📊 总计: %d", len(videoFiles))
+	results += statsText
 
 	h.controller.messageUtils.EditMessageWithKeyboard(chatID, messageID, results, "HTML", nil)
 	h.controller.messageUtils.DeleteMessageAfterDelay(chatID, messageID, 30)
 }
 
+// collectVideoFilesRecursive 递归收集视频文件
+// dirPath: 目录路径
+// currentDepth: 当前递归深度
+// maxDepth: 最大递归深度
 func (h *FileHandler) collectVideoFilesRecursive(dirPath string, currentDepth, maxDepth int) ([]string, error) {
-	videoFiles := []string{}
+	var videoFiles []string
 
 	files, err := h.listFilesSimple(dirPath, 1, 100)
 	if err != nil {
@@ -317,7 +357,7 @@ func (h *FileHandler) collectVideoFilesRecursive(dirPath string, currentDepth, m
 		} else if currentDepth < maxDepth {
 			subFiles, err := h.collectVideoFilesRecursive(fullPath, currentDepth+1, maxDepth)
 			if err != nil {
-				logger.Warn("Failed to collect files from subdirectory", "path", fullPath, "error", err)
+				logger.Warn("递归收集子目录失败", "path", fullPath, "error", err)
 				continue
 			}
 			videoFiles = append(videoFiles, subFiles...)

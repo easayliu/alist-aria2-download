@@ -89,21 +89,46 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 		return make(map[string][]rename.Suggestion), nil
 	}
 
-	// 预解析所有文件
-	pathInfoMap := rs.parseAllPaths(paths)
+	result := make(map[string][]rename.Suggestion)
+
+	// 预过滤：跳过已符合 Emby 标准格式的文件
+	var pathsToProcess []string
+	for _, path := range paths {
+		filename := filepath.Base(path)
+		if rs.IsAlreadyEmbyTVFormat(filename) {
+			logger.Info("文件已符合 Emby 标准格式，跳过",
+				"path", path,
+				"filename", filename)
+			result[path] = []rename.Suggestion{rs.BuildSkippedSuggestion(path, "已符合 Emby 标准格式")}
+		} else {
+			pathsToProcess = append(pathsToProcess, path)
+		}
+	}
+
+	// 如果所有文件都已标准化，直接返回
+	if len(pathsToProcess) == 0 {
+		logger.Info("所有文件已符合标准格式，无需处理", "totalFiles", len(paths))
+		return result, nil
+	}
+
+	logger.Info("批量重命名预过滤完成",
+		"totalFiles", len(paths),
+		"skipped", len(paths)-len(pathsToProcess),
+		"toProcess", len(pathsToProcess))
+
+	// 预解析需要处理的文件
+	pathInfoMap := rs.parseAllPaths(pathsToProcess)
 
 	// 提取剧集名
-	showName := rs.extractShowNameFromPaths(paths, pathInfoMap)
+	showName := rs.extractShowNameFromPaths(pathsToProcess, pathInfoMap)
 	if showName == "" {
 		return nil, fmt.Errorf("无法从路径中提取节目名称")
 	}
 
-	logger.Info("Batch rename: extracted show name", "showName", showName, "referencePath", paths[0])
+	logger.Info("Batch rename: extracted show name", "showName", showName, "referencePath", pathsToProcess[0])
 
-	// 按版本分组
-	pathsByVersion := rs.groupPathsByVersion(paths, pathInfoMap)
-
-	result := make(map[string][]rename.Suggestion)
+	// 按版本分组（仅处理未标准化的文件）
+	pathsByVersion := rs.groupPathsByVersion(pathsToProcess, pathInfoMap)
 
 	for version, versionPaths := range pathsByVersion {
 		searchQuery := showName
@@ -161,7 +186,22 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 		}
 	}
 
-	if len(result) == 0 {
+	// 检查是否有任何非跳过的结果
+	hasNonSkippedResult := false
+	for _, suggestions := range result {
+		for _, sug := range suggestions {
+			if !sug.Skipped {
+				hasNonSkippedResult = true
+				break
+			}
+		}
+		if hasNonSkippedResult {
+			break
+		}
+	}
+
+	// 如果没有非跳过的结果，且原始请求中有需要处理的文件，则返回错误
+	if !hasNonSkippedResult && len(pathsToProcess) > 0 {
 		return nil, fmt.Errorf("TV series '%s' not found in TMDB database", showName)
 	}
 
@@ -204,16 +244,47 @@ func (rs *RenameSuggester) batchSearchTVByQuery(
 
 	logger.Info("TMDB search returned results", "query", query, "resultCount", len(resp.Results))
 
+	// 尝试从文件名提取英文名称作为备选搜索词
+	var alternativeQuery string
+	for _, paths := range seasonMap {
+		if len(paths) > 0 {
+			if info, exists := pathInfoMap[paths[0]]; exists {
+				alternativeQuery = rs.extractEnglishTitleFromFileName(info.OriginalName)
+				if alternativeQuery != "" && alternativeQuery != query {
+					logger.Info("Extracted alternative query from filename",
+						"originalQuery", query,
+						"alternativeQuery", alternativeQuery)
+				}
+			}
+			break
+		}
+	}
+
 	result := make(map[string][]rename.Suggestion)
 
 	for _, tvResult := range resp.Results {
-		// 检查 name 或 original_name 是否匹配（处理简繁体差异）
+		// 检查 name 或 original_name 是否匹配
+		// 优先使用路径提取的名称(query)匹配，失败则尝试文件名提取的英文名称(alternativeQuery)
 		nameMatch := rs.matchOriginalName(query, tvResult.Name)
 		originalNameMatch := rs.matchOriginalName(query, tvResult.OriginalName)
+
+		// 如果路径名匹配失败，尝试用文件名中的英文名称匹配
+		if !nameMatch && !originalNameMatch && alternativeQuery != "" {
+			nameMatch = rs.matchOriginalName(alternativeQuery, tvResult.Name)
+			originalNameMatch = rs.matchOriginalName(alternativeQuery, tvResult.OriginalName)
+			if nameMatch || originalNameMatch {
+				logger.Info("Matched using alternative query from filename",
+					"originalQuery", query,
+					"alternativeQuery", alternativeQuery,
+					"name", tvResult.Name,
+					"originalName", tvResult.OriginalName)
+			}
+		}
 
 		if !nameMatch && !originalNameMatch {
 			logger.Debug("Skipping result: neither name nor original_name matches",
 				"query", query,
+				"alternativeQuery", alternativeQuery,
 				"name", tvResult.Name,
 				"originalName", tvResult.OriginalName)
 			continue
@@ -411,6 +482,48 @@ func (rs *RenameSuggester) handleSeasonRange(
 }
 
 // ============ 辅助方法 ============
+
+// extractEnglishTitleFromFileName 从文件名中提取英文标题
+// 例如: "Stranger.Things.S05E01.2025.2160p..." -> "Stranger Things"
+func (rs *RenameSuggester) extractEnglishTitleFromFileName(fileName string) string {
+	// 移除扩展名
+	nameWithoutExt := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+
+	// 查找 SxxExx 的位置，取其之前的部分
+	seasonEpisodeRegex := regexp.MustCompile(`[._\s][Ss]\d+[Ee]\d+`)
+	loc := seasonEpisodeRegex.FindStringIndex(nameWithoutExt)
+	if loc != nil {
+		nameWithoutExt = nameWithoutExt[:loc[0]]
+	}
+
+	// 替换分隔符为空格
+	cleanRegex := regexp.MustCompile(`[._\-]+`)
+	cleaned := cleanRegex.ReplaceAllString(nameWithoutExt, " ")
+
+	// 移除年份
+	yearRegex := regexp.MustCompile(`\s+(19|20)\d{2}\s*$`)
+	cleaned = yearRegex.ReplaceAllString(cleaned, "")
+
+	// 移除常见的质量/格式标记
+	removePatterns := []string{
+		`(?i)\s+\d{3,4}p\s*$`,
+		`(?i)\s+(UHD|FHD|4K|2K|HQ)\s*$`,
+		`(?i)\s+(BluRay|WEB-?DL|WEBRip|HDRip)\s*$`,
+	}
+	for _, pattern := range removePatterns {
+		re := regexp.MustCompile(pattern)
+		cleaned = re.ReplaceAllString(cleaned, "")
+	}
+
+	result := strings.TrimSpace(cleaned)
+
+	// 只返回看起来像英文名的结果（包含英文字母且长度合理）
+	if len(result) >= 2 && regexp.MustCompile(`[A-Za-z]`).MatchString(result) {
+		return result
+	}
+
+	return ""
+}
 
 // matchOriginalName 检查原始名称是否匹配
 func (rs *RenameSuggester) matchOriginalName(query, originalName string) bool {

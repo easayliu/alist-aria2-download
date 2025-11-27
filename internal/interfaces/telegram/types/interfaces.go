@@ -42,6 +42,10 @@ type MessageSender interface {
 	EditMessageWithKeyboard(chatID int64, messageID int, text, parseMode string, keyboard *tgbotapi.InlineKeyboardMarkup) bool
 	ClearInlineKeyboard(chatID int64, messageID int)
 
+	// Message deletion
+	DeleteMessage(chatID int64, messageID int)
+	DeleteMessageAfterDelay(chatID int64, messageID int, delaySeconds int)
+
 	// Utility methods
 	EscapeHTML(text string) string
 	FormatFileSize(size int64) string
