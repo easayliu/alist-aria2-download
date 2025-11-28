@@ -1,3 +1,5 @@
+// Package commands handles Telegram bot command processing.
+// It provides handlers for user commands like /start, /help, /download, /list, and /rename.
 package commands
 
 import (
@@ -13,6 +15,32 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+// safeMapString safely extracts a string value from a map
+func safeMapString(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// safeSubMap safely extracts a sub-map from a map
+func safeSubMap(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	if v, ok := m[key]; ok {
+		if sub, ok := v.(map[string]any); ok {
+			return sub
+		}
+	}
+	return nil
+}
 
 // BasicCommands handles basic commands
 type BasicCommands struct {
@@ -150,18 +178,18 @@ func (bc *BasicCommands) HandleStatus(chatID int64) {
 		return
 	}
 
-	aria2Info := status["aria2"].(map[string]any)
-	telegramInfo := status["telegram"].(map[string]any)
-	serverInfo := status["server"].(map[string]any)
+	aria2Info := safeSubMap(status, "aria2")
+	telegramInfo := safeSubMap(status, "telegram")
+	serverInfo := safeSubMap(status, "server")
 
 	// Use unified formatter
 	formatter := bc.messageUtils.GetFormatter().(*utils.MessageFormatter)
 	message := formatter.FormatSimpleSystemStatus(utils.SimpleSystemStatusData{
-		TelegramStatus: telegramInfo["status"].(string),
-		Aria2Status:    aria2Info["status"].(string),
-		Aria2Version:   aria2Info["version"].(string),
-		ServerPort:     serverInfo["port"].(string),
-		ServerMode:     serverInfo["mode"].(string),
+		TelegramStatus: safeMapString(telegramInfo, "status"),
+		Aria2Status:    safeMapString(aria2Info, "status"),
+		Aria2Version:   safeMapString(aria2Info, "version"),
+		ServerPort:     safeMapString(serverInfo, "port"),
+		ServerMode:     safeMapString(serverInfo, "mode"),
 	})
 
 	bc.messageUtils.SendMessageHTML(chatID, message)

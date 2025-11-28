@@ -1,3 +1,5 @@
+// Package callbacks handles Telegram inline keyboard callback queries.
+// It provides handlers for menu navigation and user interactions.
 package callbacks
 
 import (
@@ -10,6 +12,26 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+// safeMapString safely extracts a string value from a map
+func safeMapString(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// safeSubMap safely extracts a sub-map from a map
+func safeSubMap(m map[string]interface{}, key string) map[string]interface{} {
+	if v, ok := m[key]; ok {
+		if sub, ok := v.(map[string]interface{}); ok {
+			return sub
+		}
+	}
+	return nil
+}
 
 type MenuCallbacks struct {
 	downloadService contracts.DownloadService
@@ -50,16 +72,16 @@ func (mc *MenuCallbacks) HandleStatusWithEdit(chatID int64, messageID int) {
 		return
 	}
 
-	aria2Info := status["aria2"].(map[string]interface{})
-	telegramInfo := status["telegram"].(map[string]interface{})
-	serverInfo := status["server"].(map[string]interface{})
+	aria2Info := safeSubMap(status, "aria2")
+	telegramInfo := safeSubMap(status, "telegram")
+	serverInfo := safeSubMap(status, "server")
 
 	message := "<b>系统状态</b>\n\n" +
 		"<b>服务状态:</b>\n" +
-		"• Telegram: " + telegramInfo["status"].(string) + "\n" +
-		"• Aria2: " + aria2Info["status"].(string) + " (" + aria2Info["version"].(string) + ")\n" +
-		"• 服务器: " + serverInfo["mode"].(string) + " 模式\n" +
-		"• 端口: " + serverInfo["port"].(string)
+		"• Telegram: " + safeMapString(telegramInfo, "status") + "\n" +
+		"• Aria2: " + safeMapString(aria2Info, "status") + " (" + safeMapString(aria2Info, "version") + ")\n" +
+		"• 服务器: " + safeMapString(serverInfo, "mode") + " 模式\n" +
+		"• 端口: " + safeMapString(serverInfo, "port")
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -81,16 +103,16 @@ func (mc *MenuCallbacks) HandleSystemStatusWithEdit(chatID int64, messageID int)
 		message = "<b>系统状态</b>\n\n" +
 			"⚠️ 获取系统状态失败: " + err.Error()
 	} else {
-		aria2Info := status["aria2"].(map[string]interface{})
-		telegramInfo := status["telegram"].(map[string]interface{})
-		serverInfo := status["server"].(map[string]interface{})
+		aria2Info := safeSubMap(status, "aria2")
+		telegramInfo := safeSubMap(status, "telegram")
+		serverInfo := safeSubMap(status, "server")
 
 		message = "<b>系统状态</b>\n\n" +
 			"<b>服务状态:</b>\n" +
-			"• 服务器: " + serverInfo["mode"].(string) + " 模式\n" +
-			"• 端口: " + serverInfo["port"].(string) + "\n" +
-			"• Telegram: " + telegramInfo["status"].(string) + "\n" +
-			"• Aria2: " + aria2Info["status"].(string) + " (" + aria2Info["version"].(string) + ")\n\n" +
+			"• 服务器: " + safeMapString(serverInfo, "mode") + " 模式\n" +
+			"• 端口: " + safeMapString(serverInfo, "port") + "\n" +
+			"• Telegram: " + safeMapString(telegramInfo, "status") + "\n" +
+			"• Aria2: " + safeMapString(aria2Info, "status") + " (" + safeMapString(aria2Info, "version") + ")\n\n" +
 			"<b>配置信息:</b>\n" +
 			"• Alist地址: " + mc.config.Alist.BaseURL + "\n" +
 			"• 下载目录: " + mc.config.Aria2.DownloadDir + "\n\n" +

@@ -1,3 +1,5 @@
+// Package utils provides utility functions for Telegram message handling.
+// It includes message sending, formatting, splitting, and keyboard generation.
 package utils
 
 import (

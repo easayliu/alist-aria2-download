@@ -17,6 +17,17 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
+// ControllerConfig holds configuration for creating a TelegramController.
+// Using a config struct instead of multiple parameters improves readability and maintainability.
+type ControllerConfig struct {
+	Config              *config.Config
+	NotificationService *services.NotificationService
+	FileService         *services.FileService
+	SchedulerService    *services.SchedulerService
+	Container           *services.ServiceContainer
+	TelegramClient      *telegramInfra.Client
+}
+
 // TelegramController is the refactored main Telegram controller
 // Responsible for request routing and dependency management
 type TelegramController struct {
@@ -51,17 +62,17 @@ type TelegramController struct {
 	common          *Common
 }
 
-// NewTelegramController creates a new Telegram controller instance
-// Implements API First architecture by obtaining contract interfaces through ServiceContainer
-func NewTelegramController(cfg *config.Config, notificationService *services.NotificationService, fileService *services.FileService, schedulerService *services.SchedulerService, container *services.ServiceContainer, telegramClient *telegramInfra.Client) *TelegramController {
+// NewTelegramController creates a new Telegram controller instance.
+// Implements API First architecture by obtaining contract interfaces through ServiceContainer.
+func NewTelegramController(cfg ControllerConfig) *TelegramController {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	controller := &TelegramController{
-		telegramClient:      telegramClient,
-		notificationService: notificationService,
-		schedulerService:    schedulerService,
-		container:           container,
-		config:              cfg,
+		telegramClient:      cfg.TelegramClient,
+		notificationService: cfg.NotificationService,
+		schedulerService:    cfg.SchedulerService,
+		container:           cfg.Container,
+		config:              cfg.Config,
 		ctx:                 ctx,
 		cancel:              cancel,
 	}

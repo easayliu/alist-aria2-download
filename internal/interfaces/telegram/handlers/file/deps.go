@@ -6,8 +6,8 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
 )
 
-// Deps 定义 FileHandler 的依赖接口
-type Deps interface {
+// FileDeps 定义 FileHandler 的依赖接口
+type FileDeps interface {
 	GetMessageUtils() types.MessageSender
 	GetFileService() contracts.FileService
 	GetConfig() *config.Config

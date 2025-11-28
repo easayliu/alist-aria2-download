@@ -125,7 +125,11 @@ func (tc *TaskCommands) HandleAddTask(chatID int64, userID int64, command string
 
 	// Last two parameters are always hoursAgo and videoOnly
 	videoOnly = parts[len(parts)-1] == "true"
-	hoursAgo, _ = strconv.Atoi(parts[len(parts)-2])
+	var err error
+	hoursAgo, err = strconv.Atoi(parts[len(parts)-2])
+	if err != nil {
+		hoursAgo = 24 // default to 24 hours
+	}
 
 	// Check if third-to-last parameter is a path (starts with /) or a number (if number, path not provided)
 	if len(parts) >= 6 && strings.HasPrefix(parts[len(parts)-3], "/") {

@@ -12,6 +12,14 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/domain/models/rename"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/tmdb"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
+	"github.com/easayliu/alist-aria2-download/pkg/utils/media"
+)
+
+// 跳过原因常量
+const (
+	skipReasonEmbyFormat      = "已符合 Emby 标准格式"
+	skipReasonSpecialContent  = "特殊内容（先导片/加更/花絮等），无法匹配标准剧集"
+	skipReasonEpisodeNotFound = "无法从文件名中识别剧集编号"
 )
 
 // suggestTVName 为TV剧集生成重命名建议
@@ -91,23 +99,30 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 
 	result := make(map[string][]rename.Suggestion)
 
-	// 预过滤：跳过已符合 Emby 标准格式的文件
+	// 预过滤：跳过已符合 Emby 标准格式的文件和特殊内容
 	var pathsToProcess []string
 	for _, path := range paths {
 		filename := filepath.Base(path)
+		filenameWithoutExt := strings.TrimSuffix(filename, filepath.Ext(filename))
+
 		if rs.IsAlreadyEmbyTVFormat(filename) {
 			logger.Info("文件已符合 Emby 标准格式，跳过",
 				"path", path,
 				"filename", filename)
-			result[path] = []rename.Suggestion{rs.BuildSkippedSuggestion(path, "已符合 Emby 标准格式")}
+			result[path] = []rename.Suggestion{rs.BuildSkippedSuggestion(path, skipReasonEmbyFormat)}
+		} else if media.IsSpecialContent(filenameWithoutExt) {
+			logger.Info("特殊内容文件，跳过重命名",
+				"path", path,
+				"filename", filename)
+			result[path] = []rename.Suggestion{rs.BuildSkippedSuggestion(path, skipReasonSpecialContent)}
 		} else {
 			pathsToProcess = append(pathsToProcess, path)
 		}
 	}
 
-	// 如果所有文件都已标准化，直接返回
+	// 如果所有文件都已被跳过（符合标准或特殊内容），直接返回
 	if len(pathsToProcess) == 0 {
-		logger.Info("所有文件已符合标准格式，无需处理", "totalFiles", len(paths))
+		logger.Info("所有文件已被跳过，无需进一步处理", "totalFiles", len(paths))
 		return result, nil
 	}
 
@@ -344,6 +359,7 @@ func (rs *RenameSuggester) handleRegularSeasons(
 				successCount++
 			} else {
 				logger.Warn("Episode not found in episodeMap", "path", path, "matchedEpisode", matchedEpisode, "season", season)
+				(*result)[path] = []rename.Suggestion{rs.BuildSkippedSuggestion(path, skipReasonEpisodeNotFound)}
 			}
 		}
 	}
@@ -477,6 +493,13 @@ func (rs *RenameSuggester) handleSeasonRange(
 		"successCount", successCount,
 		"totalFiles", len(allPaths),
 		"failedCount", len(allPaths)-successCount)
+
+	// 为未匹配的文件添加跳过建议
+	for _, path := range allPaths {
+		if _, exists := (*result)[path]; !exists {
+			(*result)[path] = []rename.Suggestion{rs.BuildSkippedSuggestion(path, skipReasonEpisodeNotFound)}
+		}
+	}
 
 	return successCount
 }

@@ -1,3 +1,5 @@
+// Package task provides handlers for scheduled task management.
+// It handles task listing, creation, deletion, and manual execution.
 package task
 
 import (
@@ -9,11 +11,11 @@ import (
 
 // Handler handles task management related functions
 type Handler struct {
-	deps Deps
+	deps TaskDeps
 }
 
 // NewHandler creates a new task handler
-func NewHandler(deps Deps) *Handler {
+func NewHandler(deps TaskDeps) *Handler {
 	return &Handler{
 		deps: deps,
 	}

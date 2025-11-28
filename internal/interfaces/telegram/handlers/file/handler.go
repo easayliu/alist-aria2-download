@@ -1,3 +1,5 @@
+// Package file provides handlers for file browsing and management operations.
+// It handles file listing, downloading, renaming, and deletion via Telegram.
 package file
 
 import (
@@ -9,11 +11,11 @@ import (
 
 // Handler 文件浏览处理器
 type Handler struct {
-	deps Deps
+	deps FileDeps
 }
 
 // NewHandler 创建文件处理器
-func NewHandler(deps Deps) *Handler {
+func NewHandler(deps FileDeps) *Handler {
 	return &Handler{
 		deps: deps,
 	}

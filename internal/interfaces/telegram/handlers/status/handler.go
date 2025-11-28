@@ -1,3 +1,5 @@
+// Package status provides handlers for system status and health check operations.
+// It displays download status, Alist connectivity, and system information.
 package status
 
 import (
@@ -13,11 +15,11 @@ import (
 
 // Handler handles status query related functions
 type Handler struct {
-	deps Deps
+	deps StatusDeps
 }
 
 // NewHandler creates a new status handler
-func NewHandler(deps Deps) *Handler {
+func NewHandler(deps StatusDeps) *Handler {
 	return &Handler{
 		deps: deps,
 	}

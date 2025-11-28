@@ -23,7 +23,7 @@ func NewDownloadHandler(controller *TelegramController) *DownloadHandler {
 }
 
 // ================================
-// 实现 downloadhandler.Deps 接口
+// 实现 downloadhandler.DownloadDeps 接口
 // ================================
 
 func (h *DownloadHandler) GetMessageUtils() types.MessageSender {

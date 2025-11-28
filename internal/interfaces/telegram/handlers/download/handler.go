@@ -1,3 +1,5 @@
+// Package download provides handlers for download-related Telegram operations.
+// It handles download preview, confirmation, and batch download management.
 package download
 
 import (
@@ -42,7 +44,7 @@ type TimeParseResult struct {
 
 // Handler handles download-related functions
 type Handler struct {
-	deps Deps
+	deps DownloadDeps
 
 	// Manual download context management
 	manualMutex    sync.Mutex
@@ -50,7 +52,7 @@ type Handler struct {
 }
 
 // NewHandler creates a new download handler
-func NewHandler(deps Deps) *Handler {
+func NewHandler(deps DownloadDeps) *Handler {
 	return &Handler{
 		deps:           deps,
 		manualContexts: make(map[string]*ManualDownloadContext),

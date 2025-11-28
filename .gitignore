@@ -67,3 +67,5 @@ build/
 
 
 server
+.claude/
+CLAUDE.md

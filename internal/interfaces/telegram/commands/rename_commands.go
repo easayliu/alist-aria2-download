@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
+	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/utils"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -96,7 +97,7 @@ func (bc *BasicCommands) HandleRename(chatID int64, command string) {
 
 	buttons := make([][]tgbotapi.InlineKeyboardButton, 0)
 	for i, s := range suggestions {
-		if i >= MaxSuggestions {
+		if i >= types.MaxSuggestions {
 			break
 		}
 
@@ -106,9 +107,9 @@ func (bc *BasicCommands) HandleRename(chatID int64, command string) {
 		}
 
 		confidenceStr := ""
-		if s.Confidence >= HighConfidence {
+		if s.Confidence >= types.HighConfidence {
 			confidenceStr = "⭐⭐⭐"
-		} else if s.Confidence >= MediumConfidence {
+		} else if s.Confidence >= types.MediumConfidence {
 			confidenceStr = "⭐⭐"
 		} else {
 			confidenceStr = "⭐"
@@ -200,9 +201,9 @@ func (bc *BasicCommands) HandleLLMRename(chatID int64, path string, strategy str
 	} else {
 		// 显示置信度星级
 		confidenceStr := ""
-		if result.Confidence >= HighConfidence {
+		if result.Confidence >= types.HighConfidence {
 			confidenceStr = "⭐⭐⭐"
-		} else if result.Confidence >= MediumConfidence {
+		} else if result.Confidence >= types.MediumConfidence {
 			confidenceStr = "⭐⭐"
 		} else {
 			confidenceStr = "⭐"

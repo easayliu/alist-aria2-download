@@ -1,3 +1,5 @@
+// Package telegram provides Telegram bot integration for file management and download operations.
+// It handles webhook/polling updates, command routing, callback processing, and message formatting.
 package telegram
 
 import (
@@ -7,14 +9,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TelegramHandler is a compatibility wrapper
-// Maintains the exact same public interface as legacy version to ensure compatibility
+// TelegramHandler is a compatibility wrapper.
+// Maintains the exact same public interface as legacy version to ensure compatibility.
 type TelegramHandler struct {
 	controller *TelegramController
 }
 
+// NewTelegramHandler creates a new Telegram handler with the given configuration.
 func NewTelegramHandler(cfg *config.Config, notificationService *services.NotificationService, fileService *services.FileService, schedulerService *services.SchedulerService, container *services.ServiceContainer, telegramClient *telegramInfra.Client) *TelegramHandler {
-	controller := NewTelegramController(cfg, notificationService, fileService, schedulerService, container, telegramClient)
+	controller := NewTelegramController(ControllerConfig{
+		Config:              cfg,
+		NotificationService: notificationService,
+		FileService:         fileService,
+		SchedulerService:    schedulerService,
+		Container:           container,
+		TelegramClient:      telegramClient,
+	})
 	return &TelegramHandler{
 		controller: controller,
 	}

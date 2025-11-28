@@ -1,8 +1,6 @@
 package telegram
 
 import (
-	"context"
-
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/config"
 	filehandler "github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/handlers/file"
@@ -27,7 +25,7 @@ func NewFileHandler(controller *TelegramController) *FileHandler {
 }
 
 // ================================
-// 实现 filehandler.Deps 接口
+// 实现 filehandler.FileDeps 接口
 // ================================
 
 func (h *FileHandler) GetMessageUtils() types.MessageSender {
@@ -158,41 +156,24 @@ func (h *FileHandler) HandleFileRename(chatID int64, filePath string) {
 	h.handler.HandleFileRename(chatID, filePath)
 }
 
-// ================================
-// 辅助方法（供批量重命名使用）
-// ================================
-
-// listFilesSimple 简单列出文件
-func (h *FileHandler) listFilesSimple(path string, page, perPage int) ([]contracts.FileResponse, error) {
-	req := contracts.FileListRequest{
-		Path:     path,
-		Page:     page,
-		PageSize: perPage,
-	}
-
-	ctx := context.Background()
-	resp, err := h.controller.fileService.ListFiles(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	// 合并文件和目录
-	var allItems []contracts.FileResponse
-	allItems = append(allItems, resp.Directories...)
-	allItems = append(allItems, resp.Files...)
-
-	return allItems, nil
+func (h *FileHandler) HandleRenameApply(chatID int64, callbackData string, messageID int) {
+	h.handler.HandleRenameApply(chatID, callbackData, messageID)
 }
 
-// buildFullPath 构建完整路径
-func (h *FileHandler) buildFullPath(file contracts.FileResponse, basePath string) string {
-	if file.Path != "" {
-		return file.Path
-	}
-	if basePath == "/" {
-		return "/" + file.Name
-	}
-	return basePath + "/" + file.Name
+// ================================
+// 代理方法 - 批量重命名
+// ================================
+
+func (h *FileHandler) HandleBatchRename(chatID int64, dirPath string) {
+	h.handler.HandleBatchRename(chatID, dirPath)
+}
+
+func (h *FileHandler) HandleBatchRenameWithEdit(chatID int64, dirPath string, messageID int) {
+	h.handler.HandleBatchRenameWithEdit(chatID, dirPath, messageID)
+}
+
+func (h *FileHandler) HandleBatchRenameConfirm(chatID int64, dirPath string, messageID int) {
+	h.handler.HandleBatchRenameConfirm(chatID, dirPath, messageID)
 }
 
 // ================================

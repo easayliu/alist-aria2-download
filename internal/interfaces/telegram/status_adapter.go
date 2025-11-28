@@ -23,7 +23,7 @@ func NewStatusHandler(controller *TelegramController) *StatusHandler {
 }
 
 // ================================
-// 实现 statushandler.Deps 接口
+// 实现 statushandler.StatusDeps 接口
 // ================================
 
 func (h *StatusHandler) GetMessageUtils() types.MessageSender {

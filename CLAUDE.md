@@ -12,3 +12,4 @@
 - 重复任务积极调用agent
 - 必须保持代码的易读、简洁
 - commit信息不能携带claude
+- commit 前调用 go-style skill 检查变更文件

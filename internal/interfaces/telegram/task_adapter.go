@@ -22,7 +22,7 @@ func NewTaskHandler(controller *TelegramController) *TaskHandler {
 }
 
 // ================================
-// 实现 taskhandler.Deps 接口
+// 实现 taskhandler.TaskDeps 接口
 // ================================
 
 func (h *TaskHandler) GetMessageUtils() types.MessageSender {
