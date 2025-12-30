@@ -104,9 +104,32 @@ func (h *Handler) HandleBatchRenameWithEdit(chatID int64, dirPath string, messag
 	const maxDisplayItems = types.MaxDisplayItems
 	displayCount := 0
 	successCount := 0
-	skippedCount := 0      // 已符合标准格式的文件数
+	skippedCount := 0       // 已符合标准格式的文件数
 	unprocessableCount := 0 // 无法处理的文件数（特殊内容/无法识别）
+	conflictCount := 0      // 目标路径冲突的文件数
 	detailsMessage := ""
+
+	// 检测目标路径冲突
+	targetPathMap := make(map[string]int) // 目标路径 -> 第一个文件的索引
+	conflictFiles := make(map[int]string) // 冲突文件索引 -> 冲突的目标路径
+
+	for i, filePath := range videoFiles {
+		suggestions, found := suggestionsMap[filePath]
+		if !found || len(suggestions) == 0 || suggestions[0].Skipped {
+			continue
+		}
+		targetPath := suggestions[0].NewPath
+		if existingIdx, exists := targetPathMap[targetPath]; exists {
+			// 发现冲突
+			conflictFiles[i] = targetPath
+			logger.Warn("目标路径冲突",
+				"targetPath", targetPath,
+				"file1", videoFiles[existingIdx],
+				"file2", filePath)
+		} else {
+			targetPathMap[targetPath] = i
+		}
+	}
 
 	for i, filePath := range videoFiles {
 		suggestions, found := suggestionsMap[filePath]
@@ -169,6 +192,18 @@ func (h *Handler) HandleBatchRenameWithEdit(chatID int64, dirPath string, messag
 			continue
 		}
 
+		// 检查是否为冲突文件
+		if _, isConflict := conflictFiles[i]; isConflict {
+			conflictCount++
+			if displayCount < maxDisplayItems {
+				detailsMessage += fmt.Sprintf("%d. ⚠️ <code>%s</code>\n   目标文件冲突，将跳过\n\n",
+					i+1,
+					msgUtils.EscapeHTML(filepath.Base(filePath)))
+				displayCount++
+			}
+			continue
+		}
+
 		if displayCount < maxDisplayItems {
 			detailsMessage += fmt.Sprintf("%d. <code>%s</code>\n   → <code>%s</code>\n\n", i+1, msgUtils.EscapeHTML(filePath), msgUtils.EscapeHTML(selected.NewPath))
 			displayCount++
@@ -210,6 +245,9 @@ func (h *Handler) HandleBatchRenameWithEdit(chatID int64, dirPath string, messag
 	}
 	if unprocessableCount > 0 {
 		statsLine += fmt.Sprintf(" | ⚠️ 无法处理: %d", unprocessableCount)
+	}
+	if conflictCount > 0 {
+		statsLine += fmt.Sprintf(" | 🔀 冲突跳过: %d", conflictCount)
 	}
 	statsLine += fmt.Sprintf(" | 📊 总计: %d\n\n", len(videoFiles))
 	message += statsLine
@@ -272,11 +310,32 @@ func (h *Handler) HandleBatchRenameConfirm(chatID int64, dirPath string, message
 		return
 	}
 
+	// 检测目标路径冲突
+	targetPathMap := make(map[string]int) // 目标路径 -> 第一个文件的索引
+	conflictFiles := make(map[int]bool)   // 冲突文件索引
+
+	for i, filePath := range videoFiles {
+		suggestions, found := suggestionsMap[filePath]
+		if !found || len(suggestions) == 0 || suggestions[0].Skipped {
+			continue
+		}
+		targetPath := suggestions[0].NewPath
+		if _, exists := targetPathMap[targetPath]; exists {
+			conflictFiles[i] = true
+			logger.Warn("目标路径冲突，跳过文件",
+				"targetPath", targetPath,
+				"filePath", filePath)
+		} else {
+			targetPathMap[targetPath] = i
+		}
+	}
+
 	// 构建重命名任务列表
 	var tasks []contracts.RenameTask
 	taskIndexMap := make(map[int]int)      // 记录任务索引到videoFiles索引的映射
 	skippedFiles := make([]int, 0)         // 记录跳过的文件索引（无建议）
 	alreadyStandardFiles := make([]int, 0) // 记录已符合标准的文件索引
+	conflictSkippedFiles := make([]int, 0) // 记录因冲突跳过的文件索引
 
 	for i, filePath := range videoFiles {
 		suggestions, found := suggestionsMap[filePath]
@@ -287,6 +346,11 @@ func (h *Handler) HandleBatchRenameConfirm(chatID int64, dirPath string, message
 		// 跳过已符合标准格式的文件
 		if suggestions[0].Skipped {
 			alreadyStandardFiles = append(alreadyStandardFiles, i)
+			continue
+		}
+		// 跳过冲突的文件
+		if conflictFiles[i] {
+			conflictSkippedFiles = append(conflictSkippedFiles, i)
 			continue
 		}
 		taskIndexMap[len(tasks)] = i
@@ -303,8 +367,20 @@ func (h *Handler) HandleBatchRenameConfirm(chatID int64, dirPath string, message
 	const maxDisplayItems = types.MaxDisplayItems
 	displayCount := 0
 	successCount := 0
-	failCount := len(skippedFiles)                    // 无建议的文件计入失败
-	alreadyStandardCount := len(alreadyStandardFiles) // 已符合标准的文件单独统计
+	failCount := len(skippedFiles)                     // 无建议的文件计入失败
+	alreadyStandardCount := len(alreadyStandardFiles)  // 已符合标准的文件单独统计
+	conflictSkippedCount := len(conflictSkippedFiles)  // 因冲突跳过的文件数
+
+	// 显示因冲突跳过的文件
+	for _, idx := range conflictSkippedFiles {
+		if displayCount < maxDisplayItems {
+			filePath := videoFiles[idx]
+			results += fmt.Sprintf("%d. 🔀 <code>%s</code>\n   目标文件冲突，已跳过\n\n",
+				idx+1,
+				msgUtils.EscapeHTML(filepath.Base(filePath)))
+			displayCount++
+		}
+	}
 
 	// 显示跳过的文件（无建议）
 	for _, idx := range skippedFiles {
@@ -361,6 +437,9 @@ func (h *Handler) HandleBatchRenameConfirm(chatID int64, dirPath string, message
 	statsText := fmt.Sprintf("\n<b>统计</b>\n✅ 成功: %d", successCount)
 	if alreadyStandardCount > 0 {
 		statsText += fmt.Sprintf("\n⏭️ 已标准化: %d", alreadyStandardCount)
+	}
+	if conflictSkippedCount > 0 {
+		statsText += fmt.Sprintf("\n🔀 冲突跳过: %d", conflictSkippedCount)
 	}
 	if failCount > 0 {
 		statsText += fmt.Sprintf("\n❌ 失败: %d", failCount)

@@ -47,7 +47,8 @@ type MediaInfo struct {
 	Year         int
 	Season       int
 	Episode      int
-	Part         string
+	BaseEpisode  int    // 原始期数（未经分集转换，如"第2期"中的2）
+	Part         string // 分集标记（上/中/下）
 	Extension    string
 	AirDate      string
 	Version      string

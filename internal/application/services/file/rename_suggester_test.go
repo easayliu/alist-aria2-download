@@ -139,6 +139,168 @@ func TestParseFileName_ShouldNotBeUsedAsFallback(t *testing.T) {
 	}
 }
 
+// TestCalculateEpisodeNumber 测试分集集数计算
+func TestCalculateEpisodeNumber(t *testing.T) {
+	rs := &RenameSuggester{
+		tmdbClient: nil,
+	}
+
+	tests := []struct {
+		name            string
+		baseNum         int
+		part            string
+		partsPerEpisode int
+		expected        int
+	}{
+		// 2集模式（上/下）测试
+		{"第1期上-2集模式", 1, "上", 2, 1},
+		{"第1期下-2集模式", 1, "下", 2, 2},
+		{"第2期上-2集模式", 2, "上", 2, 3},
+		{"第2期下-2集模式", 2, "下", 2, 4},
+		{"第3期上-2集模式", 3, "上", 2, 5},
+		{"第3期下-2集模式", 3, "下", 2, 6},
+
+		// 3集模式（上/中/下）测试
+		{"第1期上-3集模式", 1, "上", 3, 1},
+		{"第1期中-3集模式", 1, "中", 3, 2},
+		{"第1期下-3集模式", 1, "下", 3, 3},
+		{"第2期上-3集模式", 2, "上", 3, 4},
+		{"第2期中-3集模式", 2, "中", 3, 5},
+		{"第2期下-3集模式", 2, "下", 3, 6},
+
+		// 无分集标记
+		{"第1期无标记", 1, "", 2, 1},
+		{"第2期无标记", 2, "", 2, 2},
+		{"第5期无标记", 5, "", 0, 5},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := rs.calculateEpisodeNumber(tt.baseNum, tt.part, tt.partsPerEpisode)
+			if result != tt.expected {
+				t.Errorf("calculateEpisodeNumber(%d, %q, %d) = %d, want %d",
+					tt.baseNum, tt.part, tt.partsPerEpisode, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestDetectPartsPerEpisode 测试分集模式检测
+func TestDetectPartsPerEpisode(t *testing.T) {
+	rs := &RenameSuggester{
+		tmdbClient: nil,
+	}
+
+	tests := []struct {
+		name     string
+		infos    map[string]*MediaInfo
+		expected int
+	}{
+		{
+			name: "检测2集模式（上/下）",
+			infos: map[string]*MediaInfo{
+				"file1": {Part: "上"},
+				"file2": {Part: "下"},
+				"file3": {Part: "上"},
+				"file4": {Part: "下"},
+			},
+			expected: 2,
+		},
+		{
+			name: "检测3集模式（上/中/下）",
+			infos: map[string]*MediaInfo{
+				"file1": {Part: "上"},
+				"file2": {Part: "中"},
+				"file3": {Part: "下"},
+			},
+			expected: 3,
+		},
+		{
+			name: "无分集标记",
+			infos: map[string]*MediaInfo{
+				"file1": {Part: ""},
+				"file2": {Part: ""},
+			},
+			expected: 0,
+		},
+		{
+			name: "混合情况下检测到中则为3集",
+			infos: map[string]*MediaInfo{
+				"file1": {Part: "上"},
+				"file2": {Part: ""},
+				"file3": {Part: "中"},
+				"file4": {Part: "下"},
+			},
+			expected: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := rs.detectPartsPerEpisode(tt.infos)
+			if result != tt.expected {
+				t.Errorf("detectPartsPerEpisode() = %d, want %d", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestRecalculateEpisodesWithPartMode 测试集数重新计算
+func TestRecalculateEpisodesWithPartMode(t *testing.T) {
+	rs := &RenameSuggester{
+		tmdbClient: nil,
+	}
+
+	// 测试2集模式
+	t.Run("2集模式重新计算", func(t *testing.T) {
+		infos := map[string]*MediaInfo{
+			"file1": {BaseEpisode: 1, Part: "上", Episode: 1},
+			"file2": {BaseEpisode: 1, Part: "下", Episode: 1}, // 原来错误地计算为1
+			"file3": {BaseEpisode: 2, Part: "上", Episode: 2}, // 原来错误地计算为2
+			"file4": {BaseEpisode: 2, Part: "下", Episode: 2}, // 原来错误地计算为2
+		}
+
+		rs.recalculateEpisodesWithPartMode(infos, 2)
+
+		expectations := map[string]int{
+			"file1": 1,
+			"file2": 2,
+			"file3": 3,
+			"file4": 4,
+		}
+
+		for path, expected := range expectations {
+			if infos[path].Episode != expected {
+				t.Errorf("file %s: Episode = %d, want %d", path, infos[path].Episode, expected)
+			}
+		}
+	})
+
+	// 测试3集模式
+	t.Run("3集模式重新计算", func(t *testing.T) {
+		infos := map[string]*MediaInfo{
+			"file1": {BaseEpisode: 1, Part: "上", Episode: 1},
+			"file2": {BaseEpisode: 1, Part: "中", Episode: 1},
+			"file3": {BaseEpisode: 1, Part: "下", Episode: 1},
+			"file4": {BaseEpisode: 2, Part: "上", Episode: 2},
+		}
+
+		rs.recalculateEpisodesWithPartMode(infos, 3)
+
+		expectations := map[string]int{
+			"file1": 1,
+			"file2": 2,
+			"file3": 3,
+			"file4": 4,
+		}
+
+		for path, expected := range expectations {
+			if infos[path].Episode != expected {
+				t.Errorf("file %s: Episode = %d, want %d", path, infos[path].Episode, expected)
+			}
+		}
+	})
+}
 
 // TestBuildEmbyPath 测试Emby标准路径生成
 func TestBuildEmbyPath(t *testing.T) {

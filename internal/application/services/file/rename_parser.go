@@ -56,10 +56,16 @@ func (rs *RenameSuggester) ParseFileName(fullPath string) *MediaInfo {
 		info.Episode = rs.extractEpisodeNumber(nameWithoutExt)
 
 		if info.Episode == 0 {
-			episode, part := rs.extractEpisodeAndPart(nameWithoutExt)
-			if episode > 0 {
-				info.Episode = episode
+			baseEpisode, part := rs.extractEpisodeAndPart(nameWithoutExt)
+			if baseEpisode > 0 {
+				info.BaseEpisode = baseEpisode
 				info.Part = part
+				// 如果有分集标记，暂时使用原始期数，后续批量处理时会根据实际模式重新计算
+				if part != "" {
+					info.Episode = baseEpisode
+				} else {
+					info.Episode = baseEpisode
+				}
 			} else {
 				info.Episode = rs.extractNumericEpisode(nameWithoutExt)
 			}
@@ -119,6 +125,8 @@ func (rs *RenameSuggester) extractNumericEpisode(fileName string) int {
 }
 
 // extractEpisodeAndPart 提取中文格式的集数和分集
+// 返回：原始期数（baseNum）和分集标记（part）
+// 注意：返回的是原始期数，不进行分集转换，转换在批量处理时根据实际模式进行
 func (rs *RenameSuggester) extractEpisodeAndPart(fileName string) (int, string) {
 	if media.IsSpecialContent(fileName) {
 		logger.Info("Special content detected, skipping match", "fileName", fileName)
@@ -132,8 +140,8 @@ func (rs *RenameSuggester) extractEpisodeAndPart(fileName string) (int, string) 
 			if len(match) > 2 && match[2] != "" {
 				part = match[2]
 			}
-			episode := rs.calculateEpisodeNumber(baseNum, part)
-			return episode, part
+			// 直接返回原始期数，不进行转换
+			return baseNum, part
 		}
 	}
 
@@ -144,8 +152,8 @@ func (rs *RenameSuggester) extractEpisodeAndPart(fileName string) (int, string) 
 			if len(match) > 2 && match[2] != "" {
 				part = match[2]
 			}
-			episode := rs.calculateEpisodeNumber(baseNum, part)
-			return episode, part
+			// 直接返回原始期数，不进行转换
+			return baseNum, part
 		}
 	}
 
@@ -153,9 +161,15 @@ func (rs *RenameSuggester) extractEpisodeAndPart(fileName string) (int, string) 
 }
 
 // calculateEpisodeNumber 计算带分集的实际集数
-func (rs *RenameSuggester) calculateEpisodeNumber(baseNum int, part string) int {
+// partsPerEpisode: 每期的分集数量（2=上下模式，3=上中下模式）
+func (rs *RenameSuggester) calculateEpisodeNumber(baseNum int, part string, partsPerEpisode int) int {
 	if part == "" {
 		return baseNum
+	}
+
+	// 默认使用2集模式（上/下）
+	if partsPerEpisode <= 0 {
+		partsPerEpisode = 2
 	}
 
 	partOffset := 0
@@ -163,12 +177,18 @@ func (rs *RenameSuggester) calculateEpisodeNumber(baseNum int, part string) int 
 	case "上":
 		partOffset = 0
 	case "中":
-		partOffset = 1
+		// 只有在3集模式下"中"才有效
+		if partsPerEpisode >= 3 {
+			partOffset = 1
+		} else {
+			partOffset = 0
+		}
 	case "下":
-		partOffset = 2
+		// 在2集模式下"下"是第2集，在3集模式下是第3集
+		partOffset = partsPerEpisode - 1
 	}
 
-	return (baseNum-1)*3 + partOffset + 1
+	return (baseNum-1)*partsPerEpisode + partOffset + 1
 }
 
 // extractAirDate 提取播出日期

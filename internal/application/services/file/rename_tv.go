@@ -134,6 +134,12 @@ func (rs *RenameSuggester) BatchSuggestTVNames(ctx context.Context, paths []stri
 	// 预解析需要处理的文件
 	pathInfoMap := rs.parseAllPaths(pathsToProcess)
 
+	// 检测分集模式并重新计算集数
+	partsPerEpisode := rs.detectPartsPerEpisode(pathInfoMap)
+	if partsPerEpisode > 0 {
+		rs.recalculateEpisodesWithPartMode(pathInfoMap, partsPerEpisode)
+	}
+
 	// 提取剧集名
 	showName := rs.extractShowNameFromPaths(pathsToProcess, pathInfoMap)
 	if showName == "" {
@@ -583,6 +589,53 @@ func (rs *RenameSuggester) parseAllPaths(paths []string) map[string]*MediaInfo {
 	return pathInfoMap
 }
 
+// detectPartsPerEpisode 检测分集模式（2集：上/下，3集：上/中/下）
+// 通过扫描所有文件的 Part 字段，如果存在"中"则为3集模式，否则为2集模式
+func (rs *RenameSuggester) detectPartsPerEpisode(pathInfoMap map[string]*MediaInfo) int {
+	for _, info := range pathInfoMap {
+		if info.Part == "中" {
+			logger.Info("Detected 3-part mode (上/中/下)", "file", info.OriginalName)
+			return 3
+		}
+	}
+	// 检查是否有分集标记
+	hasPart := false
+	for _, info := range pathInfoMap {
+		if info.Part != "" {
+			hasPart = true
+			break
+		}
+	}
+	if hasPart {
+		logger.Info("Detected 2-part mode (上/下)")
+		return 2
+	}
+	// 无分集标记，返回0表示不需要分集计算
+	return 0
+}
+
+// recalculateEpisodesWithPartMode 根据检测到的分集模式重新计算集数
+func (rs *RenameSuggester) recalculateEpisodesWithPartMode(pathInfoMap map[string]*MediaInfo, partsPerEpisode int) {
+	if partsPerEpisode <= 0 {
+		return
+	}
+	for path, info := range pathInfoMap {
+		if info.BaseEpisode > 0 && info.Part != "" {
+			oldEpisode := info.Episode
+			info.Episode = rs.calculateEpisodeNumber(info.BaseEpisode, info.Part, partsPerEpisode)
+			if oldEpisode != info.Episode {
+				logger.Info("Recalculated episode number",
+					"path", path,
+					"baseEpisode", info.BaseEpisode,
+					"part", info.Part,
+					"partsPerEpisode", partsPerEpisode,
+					"oldEpisode", oldEpisode,
+					"newEpisode", info.Episode)
+			}
+		}
+	}
+}
+
 // extractShowNameFromPaths 从路径中提取剧集名
 func (rs *RenameSuggester) extractShowNameFromPaths(paths []string, pathInfoMap map[string]*MediaInfo) string {
 	// 找到第一个TV路径
@@ -757,12 +810,62 @@ func (rs *RenameSuggester) buildBatchTVSuggestion(path, query string, info *Medi
 	return sug
 }
 
-// matchEpisodeByAirDate 根据播出日期匹配集数
-func (rs *RenameSuggester) matchEpisodeByAirDate(info *MediaInfo, episodes []tmdb.Episode, logPrefix string) (int, string) {
-	if info.AirDate == "" {
-		return info.Episode, ""
+// matchEpisode 智能匹配集数
+// 匹配优先级：1. 期数+分集直接匹配 2. 播出日期匹配 3. 回退到解析的集数
+func (rs *RenameSuggester) matchEpisode(info *MediaInfo, episodes []tmdb.Episode, logPrefix string) (int, string) {
+	// 策略1：如果有期数和分集信息，直接在集名中查找匹配
+	if info.BaseEpisode > 0 && info.Part != "" {
+		if ep := rs.findEpisodeByBaseAndPart(episodes, info.BaseEpisode, info.Part); ep != nil {
+			logger.Info(logPrefix+"matched by base episode and part",
+				"baseEpisode", info.BaseEpisode, "part", info.Part,
+				"episode", ep.EpisodeNumber, "episodeName", ep.Name)
+			return ep.EpisodeNumber, ep.Name
+		}
 	}
 
+	// 策略2：使用播出日期匹配
+	if info.AirDate != "" {
+		if ep, name := rs.matchByAirDate(info, episodes, logPrefix); ep > 0 {
+			return ep, name
+		}
+	}
+
+	// 策略3：回退到解析的集数
+	if info.Episode > 0 && info.Episode <= len(episodes) {
+		ep := episodes[info.Episode-1]
+		logger.Info(logPrefix+"fallback to parsed episode",
+			"episode", ep.EpisodeNumber, "episodeName", ep.Name)
+		return ep.EpisodeNumber, ep.Name
+	}
+
+	return info.Episode, ""
+}
+
+// findEpisodeByBaseAndPart 根据期数和分集标记直接查找集数
+func (rs *RenameSuggester) findEpisodeByBaseAndPart(episodes []tmdb.Episode, baseEpisode int, part string) *tmdb.Episode {
+	for i := range episodes {
+		epNum, epPart := rs.extractEpisodeInfo(episodes[i].Name)
+		if epNum == baseEpisode && epPart == part {
+			return &episodes[i]
+		}
+	}
+	return nil
+}
+
+// extractEpisodeInfo 从集名中提取期数和分集标记
+func (rs *RenameSuggester) extractEpisodeInfo(episodeName string) (int, string) {
+	// 匹配 "第X期上/中/下" 格式
+	partRegex := regexp.MustCompile(`第(\d+)期([上中下])`)
+	if match := partRegex.FindStringSubmatch(episodeName); len(match) > 2 {
+		if epNum, err := strconv.Atoi(match[1]); err == nil {
+			return epNum, match[2]
+		}
+	}
+	return 0, ""
+}
+
+// matchByAirDate 根据播出日期匹配
+func (rs *RenameSuggester) matchByAirDate(info *MediaInfo, episodes []tmdb.Episode, logPrefix string) (int, string) {
 	var sameDateEpisodes []tmdb.Episode
 	for _, ep := range episodes {
 		if ep.AirDate == info.AirDate {
@@ -771,31 +874,39 @@ func (rs *RenameSuggester) matchEpisodeByAirDate(info *MediaInfo, episodes []tmd
 	}
 
 	if len(sameDateEpisodes) == 0 {
-		return info.Episode, ""
+		return 0, ""
 	}
 
-	selectedEpisode := sameDateEpisodes[0]
+	// 单集匹配
+	if len(sameDateEpisodes) == 1 {
+		ep := sameDateEpisodes[0]
+		logger.Info(logPrefix+"matched by air date",
+			"airDate", info.AirDate, "episode", ep.EpisodeNumber, "episodeName", ep.Name)
+		return ep.EpisodeNumber, ep.Name
+	}
 
-	if info.Part != "" && len(sameDateEpisodes) > 1 {
+	// 多集同天播出，使用 Part 选择
+	if info.Part != "" {
 		partIndex := rs.getPartIndex(info.Part, len(sameDateEpisodes))
 		if partIndex < len(sameDateEpisodes) {
-			selectedEpisode = sameDateEpisodes[partIndex]
-			logger.Info(logPrefix+"matched episode by air date and part",
+			ep := sameDateEpisodes[partIndex]
+			logger.Info(logPrefix+"matched by air date and part",
 				"airDate", info.AirDate, "part", info.Part,
-				"totalEpisodes", len(sameDateEpisodes), "partIndex", partIndex,
-				"episode", selectedEpisode.EpisodeNumber, "episodeName", selectedEpisode.Name)
-		}
-	} else {
-		if len(sameDateEpisodes) > 1 && info.Part == "" {
-			logger.Warn(logPrefix+"multiple episodes on same air date without part specified, selecting first episode",
-				"airDate", info.AirDate, "episodeCount", len(sameDateEpisodes), "selectedEpisode", selectedEpisode.EpisodeNumber)
-		} else {
-			logger.Info(logPrefix+"matched episode by air date",
-				"airDate", info.AirDate, "episode", selectedEpisode.EpisodeNumber, "episodeName", selectedEpisode.Name)
+				"episode", ep.EpisodeNumber, "episodeName", ep.Name)
+			return ep.EpisodeNumber, ep.Name
 		}
 	}
 
-	return selectedEpisode.EpisodeNumber, selectedEpisode.Name
+	// 无法确定，返回第一集并警告
+	ep := sameDateEpisodes[0]
+	logger.Warn(logPrefix+"multiple episodes on same date, selecting first",
+		"airDate", info.AirDate, "count", len(sameDateEpisodes), "episode", ep.EpisodeNumber)
+	return ep.EpisodeNumber, ep.Name
+}
+
+// matchEpisodeByAirDate 保留旧接口，调用新的 matchEpisode
+func (rs *RenameSuggester) matchEpisodeByAirDate(info *MediaInfo, episodes []tmdb.Episode, logPrefix string) (int, string) {
+	return rs.matchEpisode(info, episodes, logPrefix)
 }
 
 // getPartIndex 获取分集索引
