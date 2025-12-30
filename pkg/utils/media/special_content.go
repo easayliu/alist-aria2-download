@@ -56,3 +56,21 @@ var SpecialContentKeywords = []string{
 	"vlog", "behind", "making",
 	"trailer", "preview", "bonus", "extra", "special",
 }
+
+// SpinOffKeywords 衍生节目关键词（这些节目应该加后缀区分，而非跳过）
+var SpinOffKeywords = []string{
+	"跑男来了",    // 奔跑吧衍生
+	"密室大逃脱加更", // 密室大逃脱衍生
+	"来了加更版",   // 通用加更版
+}
+
+// DetectSpinOff 检测文件名中的衍生节目名称
+// 返回衍生节目名称，如果不是衍生节目返回空字符串
+func DetectSpinOff(fileName string) string {
+	for _, keyword := range SpinOffKeywords {
+		if strings.Contains(fileName, keyword) {
+			return keyword
+		}
+	}
+	return ""
+}

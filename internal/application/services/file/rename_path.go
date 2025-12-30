@@ -176,12 +176,12 @@ func (rs *RenameSuggester) extractTVInfoFromPath(fullPath string) (showName stri
 // shouldSkipPathPart 判断是否应该跳过该路径部分
 func (rs *RenameSuggester) shouldSkipPathPart(part string) bool {
 	skipParts := map[string]bool{
-		"":         true,
-		"data":     true,
-		"来自：分享":   true,
-		"tvs":      true,
-		"剧集":       true,
-		"电视剧":      true,
+		"":      true,
+		"data":  true,
+		"来自：分享": true,
+		"tvs":   true,
+		"剧集":    true,
+		"电视剧":   true,
 	}
 	return skipParts[part]
 }
@@ -344,7 +344,10 @@ func (rs *RenameSuggester) extractFromCollectionFormat(part, currentShowName str
 }
 
 // collectCandidates 收集候选剧集名
-func (rs *RenameSuggester) collectCandidates(part string, candidates *[]string, seasonCandidates *[]struct{ name string; season int }) {
+func (rs *RenameSuggester) collectCandidates(part string, candidates *[]string, seasonCandidates *[]struct {
+	name   string
+	season int
+}) {
 	if strutil.IsSeasonDirectory(part) || strings.Contains(part, "全") || rs.isQualityOrFormatDir(part) {
 		return
 	}
@@ -356,7 +359,10 @@ func (rs *RenameSuggester) collectCandidates(part string, candidates *[]string, 
 
 	seasonNum := rs.extractSeasonFromDirName(part)
 	if seasonNum > 0 {
-		*seasonCandidates = append(*seasonCandidates, struct{ name string; season int }{cleaned, seasonNum})
+		*seasonCandidates = append(*seasonCandidates, struct {
+			name   string
+			season int
+		}{cleaned, seasonNum})
 		logger.Debug("Found season candidate", "part", part, "cleaned", cleaned, "season", seasonNum)
 	} else {
 		*candidates = append(*candidates, cleaned)

@@ -25,6 +25,7 @@ func (rs *RenameSuggester) ParseFileName(fullPath string) *MediaInfo {
 
 	info.AirDate = rs.extractAirDate(nameWithoutExt)
 	info.Version = rs.extractVersion(nameWithoutExt)
+	info.SpinOff = media.DetectSpinOff(nameWithoutExt)
 
 	// 提取年份时，先移除分辨率标记避免误匹配（如2160p被识别为年份）
 	nameForYear := regexp.MustCompile(`(?i)\d{3,4}[pP]`).ReplaceAllString(nameWithoutExt, "")

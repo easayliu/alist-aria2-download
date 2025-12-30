@@ -52,8 +52,8 @@ func (rs *RenameSuggester) searchTVByQuery(ctx context.Context, fullPath string,
 	suggestions := make([]rename.Suggestion, 0, len(resp.Results))
 	for i, result := range resp.Results {
 		// 检查 name 或 original_name 是否匹配（处理简繁体差异）
-		nameMatch := rs.matchOriginalName(query, result.Name)
-		originalNameMatch := rs.matchOriginalName(query, result.OriginalName)
+		nameMatch := rs.matchContains(query, result.Name)
+		originalNameMatch := rs.matchContains(query, result.OriginalName)
 
 		if !nameMatch && !originalNameMatch {
 			logger.Debug("Skipping result: neither name nor original_name matches",
@@ -283,50 +283,21 @@ func (rs *RenameSuggester) batchSearchTVByQuery(
 
 	result := make(map[string][]rename.Suggestion)
 
-	for _, tvResult := range resp.Results {
-		// 检查 name 或 original_name 是否匹配
-		// 优先使用路径提取的名称(query)匹配，失败则尝试文件名提取的英文名称(alternativeQuery)
-		nameMatch := rs.matchOriginalName(query, tvResult.Name)
-		originalNameMatch := rs.matchOriginalName(query, tvResult.OriginalName)
+	// 单次遍历，按匹配分数排序选择最佳结果
+	bestMatch := rs.findBestMatch(resp.Results, query, alternativeQuery)
+	if bestMatch == nil {
+		logger.Info("Batch search completed", "query", query, "matchedFiles", 0, "totalInputFiles", totalFiles)
+		return result, nil
+	}
 
-		// 如果路径名匹配失败，尝试用文件名中的英文名称匹配
-		if !nameMatch && !originalNameMatch && alternativeQuery != "" {
-			nameMatch = rs.matchOriginalName(alternativeQuery, tvResult.Name)
-			originalNameMatch = rs.matchOriginalName(alternativeQuery, tvResult.OriginalName)
-			if nameMatch || originalNameMatch {
-				logger.Info("Matched using alternative query from filename",
-					"originalQuery", query,
-					"alternativeQuery", alternativeQuery,
-					"name", tvResult.Name,
-					"originalName", tvResult.OriginalName)
-			}
-		}
+	logger.Info("Matched TV show", "query", query, "tvID", bestMatch.ID, "name", bestMatch.Name,
+		"originalName", bestMatch.OriginalName, "matchType", bestMatch.matchType)
 
-		if !nameMatch && !originalNameMatch {
-			logger.Debug("Skipping result: neither name nor original_name matches",
-				"query", query,
-				"alternativeQuery", alternativeQuery,
-				"name", tvResult.Name,
-				"originalName", tvResult.OriginalName)
-			continue
-		}
-
-		logger.Info("Matched TV show", "query", query, "tvID", tvResult.ID, "name", tvResult.Name, "originalName", tvResult.OriginalName, "nameMatch", nameMatch, "originalNameMatch", originalNameMatch)
-
-		year := rs.extractYear(tvResult.FirstAirDate)
-		var successCount int
-
-		// 如果检测到季度范围,使用智能分配模式
-		if seasonRangeDetected && startSeason > 0 && endSeason > 0 {
-			successCount = rs.handleSeasonRange(ctx, tvResult.ID, query, year, startSeason, endSeason, seasonMap, pathInfoMap, &result)
-		} else {
-			// 原有逻辑:按现有seasonMap处理
-			successCount = rs.handleRegularSeasons(ctx, tvResult.ID, query, year, seasonMap, pathInfoMap, &result)
-		}
-
-		if successCount > 0 {
-			break
-		}
+	year := rs.extractYear(bestMatch.FirstAirDate)
+	if seasonRangeDetected && startSeason > 0 && endSeason > 0 {
+		rs.handleSeasonRange(ctx, bestMatch.ID, query, year, startSeason, endSeason, seasonMap, pathInfoMap, &result)
+	} else {
+		rs.handleRegularSeasons(ctx, bestMatch.ID, query, year, seasonMap, pathInfoMap, &result)
 	}
 
 	logger.Info("Batch search completed", "query", query, "matchedFiles", len(result), "totalInputFiles", totalFiles)
@@ -554,11 +525,60 @@ func (rs *RenameSuggester) extractEnglishTitleFromFileName(fileName string) stri
 	return ""
 }
 
-// matchOriginalName 检查原始名称是否匹配
-func (rs *RenameSuggester) matchOriginalName(query, originalName string) bool {
-	queryLower := strings.ToLower(strings.TrimSpace(query))
-	originalNameLower := strings.ToLower(strings.TrimSpace(originalName))
-	return originalNameLower == queryLower
+// tvMatchResult 包装 TMDB 搜索结果和匹配类型
+type tvMatchResult struct {
+	tmdb.TVResult
+	matchType string // "exact" 或 "contains"
+}
+
+// findBestMatch 从搜索结果中找到最佳匹配（优先精确匹配）
+func (rs *RenameSuggester) findBestMatch(results []tmdb.TVResult, query, altQuery string) *tvMatchResult {
+	var exactMatch, containsMatch *tvMatchResult
+
+	for i := range results {
+		r := &results[i]
+		// 检查精确匹配
+		if rs.matchExact(query, r.Name) || rs.matchExact(query, r.OriginalName) ||
+			(altQuery != "" && (rs.matchExact(altQuery, r.Name) || rs.matchExact(altQuery, r.OriginalName))) {
+			exactMatch = &tvMatchResult{*r, "exact"}
+			break // 精确匹配直接返回
+		}
+		// 记录第一个包含匹配
+		if containsMatch == nil {
+			if rs.matchContains(query, r.Name) || rs.matchContains(query, r.OriginalName) ||
+				(altQuery != "" && (rs.matchContains(altQuery, r.Name) || rs.matchContains(altQuery, r.OriginalName))) {
+				containsMatch = &tvMatchResult{*r, "contains"}
+			}
+		}
+	}
+
+	if exactMatch != nil {
+		return exactMatch
+	}
+	return containsMatch
+}
+
+// matchExact 精确匹配（规范化后完全相等）
+func (rs *RenameSuggester) matchExact(query, name string) bool {
+	return rs.normalize(query) == rs.normalize(name)
+}
+
+// matchContains 包含匹配
+func (rs *RenameSuggester) matchContains(query, name string) bool {
+	q, n := rs.normalize(query), rs.normalize(name)
+	if q == n {
+		return true
+	}
+	return (len(n) >= 2 && strings.Contains(q, n)) || (len(q) >= 2 && strings.Contains(n, q))
+}
+
+// normalize 规范化名称（统一标点和空格）
+func (rs *RenameSuggester) normalize(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	for _, ch := range []string{"·", "：", ":", "."} {
+		s = strings.ReplaceAll(s, ch, " ")
+	}
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // extractYear 从日期字符串提取年份
@@ -788,6 +808,10 @@ func (rs *RenameSuggester) buildBatchTVSuggestion(path, query string, info *Medi
 	newName := fmt.Sprintf("%s - S%02dE%02d", query, season, matchedEpisode)
 	if episodeName != "" {
 		newName += fmt.Sprintf(" - %s", episodeName)
+	}
+	// 衍生节目加后缀区分
+	if info.SpinOff != "" {
+		newName += fmt.Sprintf(" [%s]", info.SpinOff)
 	}
 	newName += info.Extension
 

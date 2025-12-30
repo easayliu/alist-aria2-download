@@ -52,6 +52,7 @@ type MediaInfo struct {
 	Extension    string
 	AirDate      string
 	Version      string
+	SpinOff      string // 衍生节目名称（如"跑男来了"）
 	// 缓存字段：避免重复解析路径
 	pathShowName   string // 从路径提取的剧名
 	pathSeason     int    // 从路径提取的季度
