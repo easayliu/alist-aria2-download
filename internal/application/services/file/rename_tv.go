@@ -263,8 +263,6 @@ func (rs *RenameSuggester) batchSearchTVByQuery(
 		}
 	}
 
-	logger.Info("TMDB search returned results", "query", query, "resultCount", len(resp.Results))
-
 	// 尝试从文件名提取英文名称作为备选搜索词
 	var alternativeQuery string
 	for _, paths := range seasonMap {
@@ -280,6 +278,18 @@ func (rs *RenameSuggester) batchSearchTVByQuery(
 			break
 		}
 	}
+
+	// 如果原搜索无结果且有备选英文名，用英文名重新搜索
+	if len(resp.Results) == 0 && alternativeQuery != "" && alternativeQuery != query {
+		logger.Info("Retrying search with alternative query", "alternativeQuery", alternativeQuery)
+		altResp, altErr := rs.tmdbClient.SearchTV(ctx, alternativeQuery, 0)
+		if altErr == nil && len(altResp.Results) > 0 {
+			resp = altResp
+			logger.Info("Alternative search succeeded", "alternativeQuery", alternativeQuery, "resultCount", len(resp.Results))
+		}
+	}
+
+	logger.Info("TMDB search returned results", "query", query, "resultCount", len(resp.Results))
 
 	result := make(map[string][]rename.Suggestion)
 
@@ -532,6 +542,7 @@ type tvMatchResult struct {
 }
 
 // findBestMatch 从搜索结果中找到最佳匹配（优先精确匹配）
+// 匹配优先级：精确匹配 > 包含匹配 > 唯一结果信任（TMDB已通过翻译名/别名关联）
 func (rs *RenameSuggester) findBestMatch(results []tmdb.TVResult, query, altQuery string) *tvMatchResult {
 	var exactMatch, containsMatch *tvMatchResult
 
@@ -555,7 +566,18 @@ func (rs *RenameSuggester) findBestMatch(results []tmdb.TVResult, query, altQuer
 	if exactMatch != nil {
 		return exactMatch
 	}
-	return containsMatch
+	if containsMatch != nil {
+		return containsMatch
+	}
+
+	// 当搜索返回唯一结果时，信任TMDB的相关性匹配（处理翻译名/别名情况，如"同乐者"->Pluribus）
+	if len(results) == 1 {
+		logger.Info("Trusting TMDB single result", "query", query, "matchedName", results[0].Name,
+			"originalName", results[0].OriginalName)
+		return &tvMatchResult{results[0], "trusted"}
+	}
+
+	return nil
 }
 
 // matchExact 精确匹配（规范化后完全相等）
