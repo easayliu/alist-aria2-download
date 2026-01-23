@@ -47,3 +47,21 @@ func BuildMediaStats(tvCount, movieCount, otherCount int) gin.H {
 		"other": otherCount,
 	}
 }
+
+// SanitizeFileName 清理文件名中的非法字符
+// 替换 Windows/Linux 文件系统不允许的字符: ? * < > " | : / \
+func SanitizeFileName(name string) string {
+	// 非法字符及其替换字符的映射
+	replacer := strings.NewReplacer(
+		"?", "",
+		"*", "",
+		"<", "",
+		">", "",
+		"\"", "",
+		"|", "",
+		":", "：", // 英文冒号替换为中文冒号
+		"/", "",
+		"\\", "",
+	)
+	return replacer.Replace(name)
+}

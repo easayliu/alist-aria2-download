@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
 	"github.com/easayliu/alist-aria2-download/internal/interfaces/telegram/types"
@@ -278,6 +279,7 @@ func (h *Handler) HandleBatchRenameConfirm(chatID int64, dirPath string, message
 	ctx := context.Background()
 	msgUtils := h.deps.GetMessageUtils()
 	formatter := msgUtils.GetFormatter().(*utils.MessageFormatter)
+	startTime := time.Now()
 
 	msgUtils.EditMessageWithKeyboard(chatID, messageID, "正在执行批量重命名...", "HTML", nil)
 
@@ -367,9 +369,9 @@ func (h *Handler) HandleBatchRenameConfirm(chatID int64, dirPath string, message
 	const maxDisplayItems = types.MaxDisplayItems
 	displayCount := 0
 	successCount := 0
-	failCount := len(skippedFiles)                     // 无建议的文件计入失败
-	alreadyStandardCount := len(alreadyStandardFiles)  // 已符合标准的文件单独统计
-	conflictSkippedCount := len(conflictSkippedFiles)  // 因冲突跳过的文件数
+	failCount := len(skippedFiles)                    // 无建议的文件计入失败
+	alreadyStandardCount := len(alreadyStandardFiles) // 已符合标准的文件单独统计
+	conflictSkippedCount := len(conflictSkippedFiles) // 因冲突跳过的文件数
 
 	// 显示因冲突跳过的文件
 	for _, idx := range conflictSkippedFiles {
@@ -449,6 +451,59 @@ func (h *Handler) HandleBatchRenameConfirm(chatID int64, dirPath string, message
 
 	msgUtils.EditMessageWithKeyboard(chatID, messageID, results, "HTML", nil)
 	msgUtils.DeleteMessageAfterDelay(chatID, messageID, 30)
+
+	// 发送重命名完成通知
+	h.sendRenameNotification(ctx, dirPath, usedLLM, len(videoFiles), successCount, failCount,
+		alreadyStandardCount, conflictSkippedCount, renameResults, skippedFiles, videoFiles, startTime)
+}
+
+// sendRenameNotification 发送重命名完成通知
+func (h *Handler) sendRenameNotification(
+	ctx context.Context,
+	dirPath string,
+	usedLLM bool,
+	totalCount, successCount, failedCount, skippedCount, conflictCount int,
+	renameResults []contracts.RenameResult,
+	skippedFileIndices []int,
+	videoFiles []string,
+	startTime time.Time,
+) {
+	notificationSvc := h.deps.GetNotificationService()
+	if notificationSvc == nil {
+		return
+	}
+
+	// 收集失败文件列表（最多5个）
+	var failedFiles []string
+	for _, result := range renameResults {
+		if !result.Success && len(failedFiles) < 5 {
+			failedFiles = append(failedFiles, filepath.Base(result.OldPath))
+		}
+	}
+	for _, idx := range skippedFileIndices {
+		if idx < len(videoFiles) && len(failedFiles) < 5 {
+			failedFiles = append(failedFiles, filepath.Base(videoFiles[idx]))
+		}
+	}
+
+	// 计算耗时
+	duration := time.Since(startTime).Round(time.Second).String()
+
+	req := contracts.RenameNotificationRequest{
+		DirPath:       dirPath,
+		TotalCount:    totalCount,
+		SuccessCount:  successCount,
+		FailedCount:   failedCount,
+		SkippedCount:  skippedCount,
+		ConflictCount: conflictCount,
+		UseLLM:        usedLLM,
+		FailedFiles:   failedFiles,
+		Duration:      duration,
+	}
+
+	if err := notificationSvc.NotifyRenameComplete(ctx, req); err != nil {
+		logger.Warn("发送重命名通知失败", "error", err)
+	}
 }
 
 // ================================

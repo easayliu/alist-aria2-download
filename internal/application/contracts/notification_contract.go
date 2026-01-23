@@ -117,6 +117,20 @@ type SystemNotificationRequest struct {
 	Metrics   map[string]interface{} `json:"metrics,omitempty"`
 }
 
+// RenameNotificationRequest 重命名通知请求
+type RenameNotificationRequest struct {
+	DirPath       string                 `json:"dir_path"`               // 目录路径
+	TotalCount    int                    `json:"total_count"`            // 总文件数
+	SuccessCount  int                    `json:"success_count"`          // 成功数
+	FailedCount   int                    `json:"failed_count"`           // 失败数
+	SkippedCount  int                    `json:"skipped_count"`          // 跳过数(已标准化)
+	ConflictCount int                    `json:"conflict_count"`         // 冲突数
+	UseLLM        bool                   `json:"use_llm"`                // 是否使用LLM
+	FailedFiles   []string               `json:"failed_files,omitempty"` // 失败文件列表(最多5个)
+	Duration      string                 `json:"duration,omitempty"`     // 耗时
+	Extra         map[string]interface{} `json:"extra,omitempty"`
+}
+
 // NotificationTemplate 通知模板
 type NotificationTemplate struct {
 	Name        string              `json:"name"`
@@ -153,6 +167,7 @@ type NotificationService interface {
 	NotifyTaskComplete(ctx context.Context, req TaskNotificationRequest) error
 	NotifyTaskFailed(ctx context.Context, req TaskNotificationRequest) error
 	NotifySystemEvent(ctx context.Context, req SystemNotificationRequest) error
+	NotifyRenameComplete(ctx context.Context, req RenameNotificationRequest) error
 
 	// 模板管理
 	GetTemplate(ctx context.Context, name string, channel NotificationChannel) (*NotificationTemplate, error)

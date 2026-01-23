@@ -13,6 +13,7 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/tmdb"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
 	"github.com/easayliu/alist-aria2-download/pkg/utils/media"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 )
 
 // 跳过原因常量
@@ -797,7 +798,7 @@ func (rs *RenameSuggester) buildEpisodeMap(episodes []tmdb.Episode) map[int]*tmd
 func (rs *RenameSuggester) buildTVSuggestion(fullPath, query string, info *MediaInfo, tmdbID, year, matchedEpisode int, episodes []tmdb.Episode, confidence float64) rename.Suggestion {
 	var episodeName string
 	if len(episodes) > 0 && matchedEpisode > 0 && matchedEpisode <= len(episodes) {
-		episodeName = episodes[matchedEpisode-1].Name
+		episodeName = strutil.SanitizeFileName(episodes[matchedEpisode-1].Name)
 	}
 
 	newName := fmt.Sprintf("%s - S%02dE%02d", query, info.Season, matchedEpisode)
@@ -829,7 +830,7 @@ func (rs *RenameSuggester) buildTVSuggestion(fullPath, query string, info *Media
 func (rs *RenameSuggester) buildBatchTVSuggestion(path, query string, info *MediaInfo, tmdbID, year, season, matchedEpisode int, episodeName string) rename.Suggestion {
 	newName := fmt.Sprintf("%s - S%02dE%02d", query, season, matchedEpisode)
 	if episodeName != "" {
-		newName += fmt.Sprintf(" - %s", episodeName)
+		newName += fmt.Sprintf(" - %s", strutil.SanitizeFileName(episodeName))
 	}
 	// 衍生节目加后缀区分
 	if info.SpinOff != "" {

@@ -1246,3 +1246,213 @@ func (mf *MessageFormatter) FormatError(action string, err error) string {
 func (mf *MessageFormatter) FormatSimpleError(message string) string {
 	return fmt.Sprintf("❌ %s", message)
 }
+
+// RenameResultData 重命名结果数据
+type RenameResultData struct {
+	UseLLM             bool
+	TotalCount         int
+	SuccessCount       int
+	FailedCount        int
+	SkippedCount       int // 已标准化
+	ConflictCount      int // 冲突跳过
+	UnprocessableCount int // 无法处理
+	SuccessItems       []RenameResultItem
+	FailedItems        []RenameResultItem
+	MaxDisplayItems    int
+}
+
+// RenameResultItem 单个重命名结果项
+type RenameResultItem struct {
+	Index      int
+	OldPath    string
+	NewPath    string
+	Error      string
+	IsConflict bool
+}
+
+// FormatRenameResult 格式化重命名结果
+func (mf *MessageFormatter) FormatRenameResult(data RenameResultData) string {
+	var lines []string
+
+	// 标题
+	emoji := "✅"
+	title := "批量重命名完成"
+	if data.FailedCount > 0 {
+		if data.SuccessCount > 0 {
+			emoji = "⚠️"
+			title = "批量重命名部分完成"
+		} else {
+			emoji = "❌"
+			title = "批量重命名失败"
+		}
+	}
+	lines = append(lines, mf.FormatTitle(emoji, title))
+	lines = append(lines, "")
+
+	// 重命名方式
+	if data.UseLLM {
+		lines = append(lines, "🤖 使用LLM智能重命名")
+	} else {
+		lines = append(lines, "🎬 使用TMDB重命名")
+	}
+	lines = append(lines, "")
+
+	// 详细结果
+	displayCount := 0
+	maxDisplay := data.MaxDisplayItems
+	if maxDisplay <= 0 {
+		maxDisplay = 10
+	}
+
+	// 成功项
+	for _, item := range data.SuccessItems {
+		if displayCount >= maxDisplay {
+			break
+		}
+		oldName := mf.wrapLongText(item.OldPath, mf.maxWidth-5)
+		newName := mf.wrapLongText(item.NewPath, mf.maxWidth-5)
+		lines = append(lines, fmt.Sprintf("%d. ✅ <code>%s</code>", item.Index, oldName))
+		lines = append(lines, fmt.Sprintf("   → <code>%s</code>", newName))
+		lines = append(lines, "")
+		displayCount++
+	}
+
+	// 失败项
+	for _, item := range data.FailedItems {
+		if displayCount >= maxDisplay {
+			break
+		}
+		oldName := mf.wrapLongText(item.OldPath, mf.maxWidth-5)
+		if item.IsConflict {
+			lines = append(lines, fmt.Sprintf("%d. 🔀 <code>%s</code>", item.Index, oldName))
+			lines = append(lines, "   目标文件冲突，已跳过")
+		} else {
+			lines = append(lines, fmt.Sprintf("%d. ❌ <code>%s</code>", item.Index, oldName))
+			if item.Error != "" {
+				errMsg := mf.wrapLongText(item.Error, mf.maxWidth-8)
+				lines = append(lines, fmt.Sprintf("   失败: %s", errMsg))
+			}
+		}
+		lines = append(lines, "")
+		displayCount++
+	}
+
+	// 省略提示
+	totalItems := len(data.SuccessItems) + len(data.FailedItems)
+	if totalItems > maxDisplay {
+		lines = append(lines, fmt.Sprintf("... 还有 %d 个文件未显示", totalItems-maxDisplay))
+		lines = append(lines, "")
+	}
+
+	// 统计信息
+	lines = append(lines, mf.FormatSection("统计"))
+	lines = append(lines, mf.FormatListItem("✅", fmt.Sprintf("成功: %d", data.SuccessCount)))
+	if data.SkippedCount > 0 {
+		lines = append(lines, mf.FormatListItem("⏭️", fmt.Sprintf("已标准化: %d", data.SkippedCount)))
+	}
+	if data.ConflictCount > 0 {
+		lines = append(lines, mf.FormatListItem("🔀", fmt.Sprintf("冲突跳过: %d", data.ConflictCount)))
+	}
+	if data.UnprocessableCount > 0 {
+		lines = append(lines, mf.FormatListItem("⚠️", fmt.Sprintf("无法处理: %d", data.UnprocessableCount)))
+	}
+	if data.FailedCount > 0 {
+		lines = append(lines, mf.FormatListItem("❌", fmt.Sprintf("失败: %d", data.FailedCount)))
+	}
+	lines = append(lines, mf.FormatListItem("📊", fmt.Sprintf("总计: %d", data.TotalCount)))
+
+	return strings.Join(lines, "\n")
+}
+
+// FormatRenamePreview 格式化重命名预览
+type RenamePreviewData struct {
+	UseLLM             bool
+	TotalCount         int
+	SuccessCount       int // 需要重命名
+	SkippedCount       int // 已标准化
+	UnprocessableCount int // 无法处理
+	ConflictCount      int // 冲突
+	PreviewItems       []RenamePreviewItem
+	MaxDisplayItems    int
+}
+
+// RenamePreviewItem 单个预览项
+type RenamePreviewItem struct {
+	Index      int
+	OldPath    string
+	NewPath    string
+	Status     string // "rename", "skip", "conflict", "error"
+	SkipReason string
+}
+
+// FormatRenamePreview 格式化重命名预览
+func (mf *MessageFormatter) FormatRenamePreview(data RenamePreviewData) string {
+	var lines []string
+
+	// 标题
+	lines = append(lines, mf.FormatTitle("📝", "批量重命名预览"))
+	lines = append(lines, "")
+
+	// 重命名方式
+	if data.UseLLM {
+		lines = append(lines, "🤖 使用LLM智能重命名")
+	} else {
+		lines = append(lines, "🎬 使用TMDB重命名")
+	}
+	lines = append(lines, "")
+
+	// 统计概要
+	statsLine := fmt.Sprintf("✅ 需重命名: %d", data.SuccessCount)
+	if data.SkippedCount > 0 {
+		statsLine += fmt.Sprintf(" | ⏭️ 已标准化: %d", data.SkippedCount)
+	}
+	if data.UnprocessableCount > 0 {
+		statsLine += fmt.Sprintf(" | ⚠️ 无法处理: %d", data.UnprocessableCount)
+	}
+	if data.ConflictCount > 0 {
+		statsLine += fmt.Sprintf(" | 🔀 冲突: %d", data.ConflictCount)
+	}
+	statsLine += fmt.Sprintf(" | 📊 总计: %d", data.TotalCount)
+	lines = append(lines, statsLine)
+	lines = append(lines, "")
+
+	// 预览列表
+	maxDisplay := data.MaxDisplayItems
+	if maxDisplay <= 0 {
+		maxDisplay = 10
+	}
+
+	for i, item := range data.PreviewItems {
+		if i >= maxDisplay {
+			break
+		}
+		switch item.Status {
+		case "rename":
+			oldName := mf.wrapLongText(item.OldPath, mf.maxWidth-5)
+			newName := mf.wrapLongText(item.NewPath, mf.maxWidth-5)
+			lines = append(lines, fmt.Sprintf("%d. <code>%s</code>", item.Index, oldName))
+			lines = append(lines, fmt.Sprintf("   → <code>%s</code>", newName))
+		case "conflict":
+			oldName := mf.wrapLongText(item.OldPath, mf.maxWidth-5)
+			lines = append(lines, fmt.Sprintf("%d. ⚠️ <code>%s</code>", item.Index, oldName))
+			lines = append(lines, "   目标文件冲突，将跳过")
+		case "error":
+			oldName := mf.wrapLongText(item.OldPath, mf.maxWidth-5)
+			lines = append(lines, fmt.Sprintf("%d. ⚠️ <code>%s</code>", item.Index, oldName))
+			if item.SkipReason != "" {
+				lines = append(lines, fmt.Sprintf("   %s", item.SkipReason))
+			}
+		}
+		lines = append(lines, "")
+	}
+
+	// 省略提示
+	if len(data.PreviewItems) > maxDisplay {
+		lines = append(lines, fmt.Sprintf("... 还有 %d 个文件未显示", len(data.PreviewItems)-maxDisplay))
+		lines = append(lines, "")
+	}
+
+	lines = append(lines, "是否确认批量重命名？")
+
+	return strings.Join(lines, "\n")
+}

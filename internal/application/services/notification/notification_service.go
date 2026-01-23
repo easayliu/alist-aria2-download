@@ -3,6 +3,8 @@ package notification
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/easayliu/alist-aria2-download/internal/application/contracts"
@@ -323,6 +325,93 @@ func (s *AppNotificationService) NotifySystemEvent(ctx context.Context, req cont
 	return err
 }
 
+// NotifyRenameComplete 重命名完成通知
+func (s *AppNotificationService) NotifyRenameComplete(ctx context.Context, req contracts.RenameNotificationRequest) error {
+	if !s.config.Telegram.Enabled {
+		return nil // 静默跳过
+	}
+
+	// 确定图标和标题
+	var icon, title string
+	var level contracts.NotificationLevel
+	if req.FailedCount == 0 && req.ConflictCount == 0 {
+		icon = "✅"
+		title = "批量重命名完成"
+		level = contracts.NotificationLevelSuccess
+	} else if req.SuccessCount > 0 {
+		icon = "⚠️"
+		title = "批量重命名部分完成"
+		level = contracts.NotificationLevelWarning
+	} else {
+		icon = "❌"
+		title = "批量重命名失败"
+		level = contracts.NotificationLevelError
+	}
+
+	// 构建消息
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("<b>%s %s</b>\n\n", icon, title))
+
+	// 重命名方式
+	if req.UseLLM {
+		sb.WriteString("🤖 <b>方式:</b> LLM智能重命名\n")
+	} else {
+		sb.WriteString("🎬 <b>方式:</b> TMDB重命名\n")
+	}
+
+	// 目录路径（截断显示）
+	dirPath := req.DirPath
+	if len(dirPath) > 40 {
+		dirPath = "..." + dirPath[len(dirPath)-37:]
+	}
+	sb.WriteString(fmt.Sprintf("<b>目录:</b> <code>%s</code>\n\n", escapeHTML(dirPath)))
+
+	// 统计信息
+	sb.WriteString("<b>📊 统计</b>\n")
+	sb.WriteString(fmt.Sprintf("• 成功: %d\n", req.SuccessCount))
+	if req.SkippedCount > 0 {
+		sb.WriteString(fmt.Sprintf("• 已标准化: %d\n", req.SkippedCount))
+	}
+	if req.ConflictCount > 0 {
+		sb.WriteString(fmt.Sprintf("• 冲突跳过: %d\n", req.ConflictCount))
+	}
+	if req.FailedCount > 0 {
+		sb.WriteString(fmt.Sprintf("• 失败: %d\n", req.FailedCount))
+	}
+	sb.WriteString(fmt.Sprintf("• 总计: %d\n", req.TotalCount))
+
+	// 失败文件列表（最多显示5个）
+	if len(req.FailedFiles) > 0 {
+		sb.WriteString("\n<b>❌ 失败文件</b>\n")
+		for i, f := range req.FailedFiles {
+			if i >= 5 {
+				sb.WriteString(fmt.Sprintf("... 还有 %d 个\n", len(req.FailedFiles)-5))
+				break
+			}
+			// 截断文件名
+			if len(f) > 35 {
+				f = f[:32] + "..."
+			}
+			sb.WriteString(fmt.Sprintf("• <code>%s</code>\n", escapeHTML(f)))
+		}
+	}
+
+	// 耗时
+	if req.Duration != "" {
+		sb.WriteString(fmt.Sprintf("\n<b>⏱️ 耗时:</b> %s", req.Duration))
+	}
+
+	notificationReq := contracts.NotificationRequest{
+		Channel: contracts.ChannelTelegram,
+		Level:   level,
+		Title:   title,
+		Message: sb.String(),
+	}
+
+	_, err := s.SendNotification(ctx, notificationReq)
+	return err
+}
+
 // GetTemplate 获取模板（简化实现）
 func (s *AppNotificationService) GetTemplate(ctx context.Context, name string, channel contracts.NotificationChannel) (*contracts.NotificationTemplate, error) {
 	// 简化实现：返回基础模板
@@ -458,8 +547,11 @@ func parseInt64(s string) int64 {
 	if s == "" {
 		return 0
 	}
-	// 简化实现
-	return 0
+	v, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return v
 }
 
 // formatFileSize 格式化文件大小
@@ -484,7 +576,13 @@ func formatFileSize(size int64) string {
 }
 
 // escapeHTML 转义HTML字符
+// 遵循 Telegram Bot API HTML 格式规范，仅需转义 4 个字符: & < > "
 func escapeHTML(s string) string {
-	// 简化实现
-	return s
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		"\"", "&quot;",
+	)
+	return replacer.Replace(s)
 }

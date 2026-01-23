@@ -10,6 +10,7 @@ import (
 type FileDeps interface {
 	GetMessageUtils() types.MessageSender
 	GetFileService() contracts.FileService
+	GetNotificationService() contracts.NotificationService
 	GetConfig() *config.Config
 	EncodeFilePath(path string) string
 	DecodeFilePath(encoded string) string

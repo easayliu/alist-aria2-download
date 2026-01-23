@@ -36,6 +36,10 @@ func (h *FileHandler) GetFileService() contracts.FileService {
 	return h.controller.fileService
 }
 
+func (h *FileHandler) GetNotificationService() contracts.NotificationService {
+	return h.controller.container.GetNotificationService()
+}
+
 func (h *FileHandler) GetConfig() *config.Config {
 	return h.controller.config
 }

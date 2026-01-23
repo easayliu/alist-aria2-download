@@ -9,6 +9,7 @@ import (
 	"github.com/easayliu/alist-aria2-download/internal/domain/models/rename"
 	"github.com/easayliu/alist-aria2-download/internal/infrastructure/tmdb"
 	"github.com/easayliu/alist-aria2-download/pkg/logger"
+	strutil "github.com/easayliu/alist-aria2-download/pkg/utils/string"
 )
 
 // suggestMovieName 为电影生成重命名建议
@@ -39,8 +40,9 @@ func (rs *RenameSuggester) suggestMovieName(ctx context.Context, fullPath string
 		details, err := rs.tmdbClient.GetMovieDetails(ctx, result.ID)
 		if err != nil {
 			logger.Warn("Failed to get movie details", "movieID", result.ID, "title", result.Title, "error", err)
-			newName := fmt.Sprintf("%s (%d)%s", result.Title, year, info.Extension)
-			newPath := rs.buildMoviePath(fullPath, result.Title, year, newName)
+			sanitizedTitle := strutil.SanitizeFileName(result.Title)
+			newName := fmt.Sprintf("%s (%d)%s", sanitizedTitle, year, info.Extension)
+			newPath := rs.buildMoviePath(fullPath, sanitizedTitle, year, newName)
 
 			suggestions = append(suggestions, rename.Suggestion{
 				NewName:    newName,
@@ -59,6 +61,7 @@ func (rs *RenameSuggester) suggestMovieName(ctx context.Context, fullPath string
 		if details.OriginalTitle != "" && details.OriginalLanguage != "en" {
 			title = details.OriginalTitle
 		}
+		title = strutil.SanitizeFileName(title)
 
 		newName := fmt.Sprintf("%s (%d)%s", title, year, info.Extension)
 		newPath := rs.buildMoviePath(fullPath, title, year, newName)
